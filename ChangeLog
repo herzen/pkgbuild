@@ -1,3 +1,9 @@
+2005-01-25  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: fix solaris release checking
+
+	* rpm_spec.pm.in: fix solaris release checking
+
 2004-12-22  Laszlo Peter  <laca@sun.com>
 
 	Initial release on pkgbuild.sourceforge.net.  Old ChangeLog

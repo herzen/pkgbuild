@@ -50,7 +50,7 @@ sub init () {
     $os_rel = `uname -r`;
     chomp ($os_rel);
     if ($os eq 'sunos') {
-	if ($os_rel >= 5) {
+	if ($os_rel =~ /^5\./) {
 	    $os = 'solaris';
 	}
     }
