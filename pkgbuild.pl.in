@@ -1,0 +1,624 @@
+#!@PERL@
+
+#use strict;
+use warnings;
+use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling);
+use rpm_spec;
+
+my $myname = "pkgbuild";
+my $myversion = "@PKGBUILD_VERSION";
+my $debug_level = 0;
+my $verbose = 1;
+my $build_command;
+my $check_deps = 1;
+
+my $mydir;
+my @spec_names = ();
+
+my $arch;
+my $os;
+my $os_rel;
+
+sub init () {
+    $arch = `uname -p`;
+    chomp ($arch);
+    if ($arch eq "unknown") {
+	$arch = `uname -m`;
+	chomp ($arch);
+	if ($arch eq 'i585') {
+	    $arch = 'i386';
+	} elsif ($arch eq 'i686') {
+	    $arch = 'i386';
+	}
+    }
+
+    $os = `uname -s`;
+    chomp ($os);
+    $os = lc($os);
+    $os_rel = `uname -r`;
+    chomp ($os_rel);
+    if ($os eq 'sunos') {
+	if ($os_rel >= 5) {
+	    $os = 'solaris';
+	}
+    }
+}
+
+sub process_options {
+    
+    GetOptions ('debug=n'   => \$debug_level,
+		'help'      => \&usage,
+		'version'   => \&print_version,
+		'b=s'       => \$build_command,
+		'ba'        => sub { $build_command = 'a' },
+		'build=s'   => \$build_command,
+		'deps!'     => \$check_deps,
+		'v+'        => \$verbose,
+		'rcfile=s'  => sub { print "--rcfile option not implemented\n" },
+		'<>' => \&process_args);
+}
+
+sub process_args () {
+    my $arg = shift;
+
+    if ($arg =~ /^-/) {
+	print ("Unknown option: $arg\n");
+	exit 1;
+    }
+    if (not defined $mydir) {
+	$mydir = $arg;
+	chdir ($arg);
+    } else {
+	push (@spec_names, $arg);
+    }
+}
+
+sub print_version () {
+    print "$myname version $myversion\n";
+}
+
+sub usage () {
+    print_version();
+    print <<_EOF_;
+Copyright (C) 2003 - Sun Microsystems, Inc.
+This may be freely redistributed under the terms of the GNU GPL
+ 
+Usage:
+   --help                  - print this message
+   --version               - print the version of rpm being used
+   all modes support the following arguments:
+      --rcfile <file>      - use <file> instead of /etc/rpmrc and \$HOME/.rpmrc
+     -v                    - be a little more verbose
+     -vv                   - be incredibly verbose (for debugging)
+    -b<stage> <spec>
+    -t<stage> <tarball>    - build package, where <stage> is one of:
+          p                - prep (unpack sources and apply patches)
+          l                - list check (do some cursory checks on %files)
+          c                - compile (prep and compile)
+          i                - install (prep, compile, install)
+          b                - binary package (prep, compile, install, package)
+          a                - bin/src package (prep, compile, install, package)
+      --short-circuit      - skip straight to specified stage (only for c,i)
+      --clean              - remove build tree when done
+      --rmsource           - remove sources and spec file when done
+      --sign               - generate PGP/GPG signature
+      --buildroot <dir>    - use <dir> as the build root
+      --target=<platform>+ - build the packages for the build targets
+                             platform1...platformN.
+      --nobuild            - do not execute any stages
+      --timecheck <secs>   - set the time check to <secs> seconds (0 disables)
+ 
+    --rebuild <src_pkg>    - install source package, build binary package and
+                             remove spec file, sources, patches, and icons.
+    --rmsource <spec>      - remove sources and spec file
+    --recompile <src_pkg>  - like --rebuild, but don't build any package
+_EOF_
+# '
+    exit(1);
+}
+
+sub message (@) {
+    my @messages = @_;
+
+    foreach my $msg (@messages) {
+	print "$myname: $msg\n";
+    }
+}
+
+sub fatal (@) {
+    message (@_);
+    exit 1;
+}
+
+sub check_dep ($) {
+    my $dep = shift;
+
+    my $pkg = $dep;
+    $pkg =~ s/ .*$//;
+
+    if (not defined ($pkg)) {
+	return 1;
+    }
+# TODO: version checking!
+    if ($os eq "linux") {
+	`rpm -q $pkg`;
+	if ($? != 0) {
+	    return 0;
+	}
+    } elsif ($os eq "solaris") {
+	`/usr/bin/pkginfo -q $pkg`;
+	if ($? != 0) {
+	    return 0;
+	}
+    } else {
+	print "WARNING: I don't know how to verify dependency $pkg ".
+	    "on this OS.\n";
+    }
+
+    return 1;
+}
+
+sub check_build_requires ($) {
+    my $spec = shift;
+
+    my @packages = $spec->get_packages ();
+
+    foreach my $pkg (@packages) {
+	my @reqs = $pkg->get_array ("buildrequires");
+	foreach my $req (@reqs) {
+	    check_dep ($req) or
+		message ("error: $req is required to build " .
+		$spec), return 0;
+	}
+	@reqs = $pkg->get_array ("requires");
+	foreach my $req (@reqs) {
+	    check_dep ($req) or
+		message ("error: $req is required to build " .
+		$spec), return 0;
+	}
+	@reqs = $pkg->get_array ("prereq");
+	foreach my $req (@reqs) {
+	    check_dep ($req) or
+		message ("error: $req is required to build " .
+		$spec), return 0;
+	}
+    }
+
+    return 1;
+}
+
+sub get_script_header ($) {
+    my $spec = shift;
+
+    my $script = "#!/bin/bash\n\n" .
+	"set -e\n\n" .
+	$spec->eval ("RPM_SOURCE_DIR=\"%{_sourcedir}\"") . "\n" .
+	$spec->eval ("RPM_BUILD_DIR=\"%{_builddir}\"") . "\n" .
+	$spec->eval ("RPM_OPT_FLAGS=\"%{optflags}\"") . "\n" .
+	"RPM_ARCH=\"$arch\"\n" .
+	"RPM_OS=\"$os\"\n" .
+	"RPM_OS_REL=\"$os_rel\"\n" .
+	"export RPM_SOURCE_DIR RPM_BUILD_DIR RPM_OPT_FLAGS RPM_ARCH RPM_OS\n" .
+	"RPM_DOC_DIR=\"/usr/share/doc/packages/" . $spec . "\"\n" .
+        "export RPM_DOC_DIR\n" .
+	"RPM_PACKAGE_NAME=\"" . $spec . "\"\n" .
+	"RPM_PACKAGE_VERSION=\"" . $spec->get_value_of ('version') . "\"\n" .
+	"RPM_PACKAGE_RELEASE=\"" . $spec->get_value_of ('release') . "\"\n" .
+	"export RPM_PACKAGE_NAME RPM_PACKAGE_VERSION RPM_PACKAGE_RELEASE\n" .
+	$spec->eval ("RPM_BUILD_ROOT=\"%buildroot\"") . "\n" .
+	"export RPM_BUILD_ROOT\n\n" .
+	"set -x\n" .
+	"uname -a\n\n";
+
+    return $script;
+}
+
+my $file_id = 0;
+sub open_tempfile ($) {
+    my $spec = shift;
+
+    my $tempdir = $spec->get_value_of('tempdir');
+    if (not defined $tempdir) {
+	$tempdir = "/tmp";
+    }
+    my $the_file_id = ++$file_id;
+    my $fhandle = "TEMP_FILE" . $the_file_id;
+    my $fname = "pkgbuild-tmp-$the_file_id.$$";
+    open $fhandle, ">$tempdir/$fname" or
+	fatal ("failed to create temporary file $tempdir/$fname");
+    return ($fhandle, "$tempdir/$fname");
+}
+
+sub do_block ($$) {
+    my $spec = shift;
+    my $block_name = shift;
+
+    my $fhandle;
+    my $script_name;
+    ($fhandle, $script_name) = open_tempfile ($spec);
+    my $script = get_script_header ($spec);
+
+    print $fhandle "$script";
+    $script = $spec->get_block ($block_name);
+    print $fhandle $spec->eval ("cd %{_builddir}\n\n");
+    print $fhandle $script if $script;
+    print $fhandle "exit 0\n";
+
+    close $fhandle;
+    my $retval;
+
+    system ("/bin/bash $script_name");
+    $retval = $?;
+    unlink $script_name;
+
+    return (not $retval);
+}
+
+sub make_pkginfo ($$) {
+    my $spec = shift;
+    my $package = shift;
+
+    my $fhandle = "pkginfo" . ++$file_id;
+
+    my $pkginfodir = $spec->eval ("%_topdir") . "/PKGMAPS/pkginfo";
+    my $fname = $package . ".pkginfo";
+    open $fhandle, ">$pkginfodir/$fname" or
+	fatal ("failed to create file $pkginfodir/$fname");
+
+    print $fhandle "PKG=" . $package . "\n";
+    print $fhandle "NAME=" . $package->get_tag ('summary') . "\n";
+    print $fhandle "DESC=" . $package->get_tag ('summary') . "\n";
+    print $fhandle "ARCH=$arch\n";
+
+    my $prodname = $package->get_tag ('SUNW_ProdName');
+    print $fhandle "SUNW_PRODNAME=$prodname\n" if $prodname;
+
+    my $prodvers = $package->get_tag ('SUNW_ProdVers');
+    print $fhandle "SUNW_PRODNAME=$prodvers\n" if $prodvers;
+
+    my $basedir = $package->get_tag ('SUNW_BaseDir');
+    if (not defined ($basedir)) {
+	$basedir = "/";
+    }
+
+    if ($basedir eq "/usr") {
+	print $fhandle "SUNW_PKGTYPE=usr\n";
+    } elsif ($basedir eq "/") {
+	print $fhandle "SUNW_PKGTYPE=root\n";
+    }
+
+    my $pkgvers = $package->get_tag ('SUNW_PkgVers');
+    print $fhandle "SUNW_PKGVERS=$pkgvers\n" if $pkgvers;
+
+    my $category = $package->get_tag ('SUNW_Category');
+    if (not defined ($category)) {
+	$category = "application";
+    }
+    print $fhandle "CATEGORY=$category\n";
+
+    my $vendor = $package->get_tag ('Vendor');
+    print $fhandle "VENDOR=$vendor\n" if $vendor;
+
+    my $hotline = $package->get_tag ('SUNW_HotLine');
+    print $fhandle "HOTLINE=$hotline\n" if $hotline;
+
+    print $fhandle "EMAIL=\n";
+
+    my $maxinst = $package->get_tag ('SUNW_MaxInst');
+    print $fhandle "MAXINST=$maxinst\n" if $maxinst;
+
+    my $version = $package->get_tag ('Version');
+    my $rev = $package->get_tag ('SUNW_Rev');
+    if (not defined $rev) {
+	$rev = `date +%Y.%m.%d.%H.%M`;
+    } else {
+	$rev = "$rev." . `date +%Y.%m.%d.%H.%M`;
+    }
+    chomp ($rev);
+    print $fhandle "VERSION=$version,REV=$rev\n";
+    
+    print $fhandle "BASEDIR=$basedir\n";
+
+    print $fhandle "CLASSES=none\n";
+
+    close $fhandle;
+    return "i pkginfo=$pkginfodir/$fname\n";
+}
+
+sub make_depend ($$) {
+    my $spec = shift;
+    my $package = shift;
+
+    my @deps = $package->get_array ("requires");
+# FIXME: merge with prereq
+    if (not @deps) {
+	return "";
+    }
+
+    my $fhandle = "pkginfo" . ++$file_id;
+
+    my $pkgdependdir = $spec->eval ("%_topdir") . "/PKGMAPS/depend";
+    my $fname = $package . ".depend";
+    open $fhandle, ">$pkgdependdir/$fname" or
+	fatal ("failed to create file $pkgdependdir/$fname");
+
+    foreach my $dep (@deps) {
+	if (not defined ($dep)) {
+	    next;
+	}
+	my $pkgname = `/usr/bin/pkginfo $dep 2>/dev/null | cut -c34-`;
+	if ($? != 0) {
+	    message ("warning: could not find out the description of "
+		     . "package $dep", "omitting from depend file");
+	    next;
+	}
+	chomp ($pkgname);
+	print $fhandle "P $dep $pkgname\n"; 
+    }
+
+    close $fhandle;
+    return "i depend=$pkgdependdir/$fname\n";
+}
+
+sub make_scripts ($$) {
+    my $spec = shift;
+    my $package = shift;
+
+    my $retstr = "";
+    my $scriptdir = $spec->eval ("%_topdir") . "/PKGMAPS/scripts";
+
+    my $pre = $package->get_block ("pre");
+    if (defined ($pre)) {
+	my $fhandle = "script" . ++$file_id;
+	my $fname = $package . ".preinstall";
+	open $fhandle, ">$scriptdir/$fname" or
+	    fatal ("failed to create file $scriptdir/$fname");
+	print $fhandle "#!/bin/sh\n\n";
+	print $fhandle "$pre\n";
+	close $fhandle;
+	$retstr = $retstr . "i preinstall=$scriptdir/$fname\n";
+    }
+
+    my $post = $package->get_block ("post");
+    if (defined ($post)) {
+	my $fhandle = "script" . ++$file_id;
+	my $fname = $package . ".postinstall";
+	open $fhandle, ">$scriptdir/$fname" or
+	    fatal ("failed to create file $scriptdir/$fname");
+	print $fhandle "#!/bin/sh\n\n";
+	print $fhandle "$post\n";
+	close $fhandle;
+	$retstr = $retstr . "i postinstall=$scriptdir/$fname\n";
+    }
+
+    my $preun = $package->get_block ("preun");
+    if (defined ($post)) {
+	my $fhandle = "script" . ++$file_id;
+	my $fname = $package . ".preremove";
+	open $fhandle, ">$scriptdir/$fname" or
+	    fatal ("failed to create file $scriptdir/$fname");
+	print $fhandle "#!/bin/sh\n\n";
+	print $fhandle "$preun\n";
+	$retstr = $retstr . "i preremove=$scriptdir/$fname\n";
+    }
+
+    my $postun = $package->get_block ("postun");
+    if (defined ($postun)) {
+	my $fhandle = "script" . ++$file_id;
+	my $fname = $package . ".postremove";
+	open $fhandle, ">$scriptdir/$fname" or
+	    fatal ("failed to create file $scriptdir/$fname");
+	print $fhandle "#!/bin/sh\n\n";
+	print $fhandle "$postun\n";
+	$retstr = $retstr . "i postremove=$scriptdir/$fname\n";
+    }
+
+    return $retstr;
+}
+
+sub get_file_mode ($) {
+    my $fname = shift;
+
+    $mode = (stat($fname))[2];
+    return sprintf("%04o", $mode & 07777);
+}
+
+sub get_file_type ($) {
+    my $fname = shift;
+
+    if (-f $fname) {
+	return "f";
+    } elsif (-d $fname) {
+	return "d";
+    } elsif (-l $fname) {
+	return "s";
+    } elsif (-p $fname) {
+	return "p";
+    } elsif (-b $fname) {
+	return "b";
+    } elsif (-c $fname) {
+	return "c";
+    }
+}
+
+sub get_proto_line ($$$$$) {
+    my $fname = shift;
+    my $basedir = shift;
+    my $def_mode = shift;
+    my $def_user = shift;
+    my $def_grp = shift;
+
+    my $mode = $def_mode;
+    my $user = $def_user;
+    my $group = $def_grp;
+
+    my $type = get_file_type ($fname);
+    $basedir = "$basedir/";
+    $basedir =~ s/\/\/*/\//g;
+    $basedir = substr ("$basedir", 1);
+
+    if (index ($fname, $basedir) != 0) {
+	fatal ("file $fname is not under basedir $basedir");
+    }
+
+    my $relpath = substr ($fname, length ($basedir));
+    my $protoline;
+
+    if ($def_mode eq "-") {
+	$mode = get_file_mode ($fname);
+    }
+    if ($def_user eq "-") {
+	$user = getpwuid ((stat($fname))[4]);
+    }
+    if ($def_grp eq "-") {
+	$group = getgrgid ((stat($fname))[5]);
+    }
+
+    if ($type eq 'f') {
+	$protoline = "$type none $relpath=$basedir$relpath $mode $user $group";
+    } elsif ($type eq 'd') {
+	$protoline = "$type none $relpath $mode $user $group";
+    } elsif ($type eq 's') {
+	my $linkpoint = readlink ($fname);
+	$protoline = "$type none $relpath=$linkpoint";
+    } elsif ($type =~ /(c|b)/) {
+	fatal ('devices special files not implemented');
+    }
+
+    return $protoline;
+}
+
+sub list_all_files ($) {
+    my $dirname = shift;
+
+    my $find_output = `find $dirname -print | grep -v "^$dirname\$"`;
+    my @file_list = split /\n/, $find_output;
+
+    return @file_list;
+}
+
+sub get_proto_hash ($) {
+    my $package = shift;
+
+    my @files = $package->get_files ();
+    my %file_info = ();
+
+    my $cwd = `pwd`;
+    chomp ($cwd);
+    my $buildroot = $package->eval ("%buildroot");
+    my $basedir = $package->get_tag ("sunw_basedir");
+    if (not defined ($basedir) or ($basedir eq "")) {
+	$basedir = "/";
+    }
+
+    chdir ($buildroot);
+
+    foreach my $file (@files) {
+	next if not $file;
+	my @file_list = glob (substr ("$file", 1));
+	if (not @file_list) {
+	    fatal ("File not found by glob: $buildroot$file");
+	}
+	my @attribs = $file->get_attributes ();
+	foreach my $fname (@file_list) {
+	    if (-d $fname) {
+		if ($file->is_recursive()) {
+		    my @files_in_dir = list_all_files ($fname);
+		    @file_list = (@file_list, @files_in_dir);
+		}
+	    }
+	    if (not defined ($file_info{$fname})) {
+		$file_info{$fname} = get_proto_line ($fname, 
+						     $basedir,
+						     $attribs[0],
+						     $attribs[1],
+						     $attribs[2]);
+	    }
+	}
+    }
+
+    chdir ($cwd);
+
+    return %file_info;
+}
+
+sub make_solaris_pkg ($$) {
+    my $spec = shift;
+    my $package = shift;
+
+    my $pkginfo_proto = make_pkginfo ($spec, $package);
+    my $dep_proto = make_depend ($spec, $package);
+    my $scr_proto = make_scripts ($spec, $package);
+
+    my %files = get_proto_hash ($package);
+
+    my $fhandle = "proto" . ++$file_id;
+
+    my $protodir = $spec->eval ("%_topdir") . "/PKGMAPS/proto";
+    my $fname = $package . ".proto";
+    open $fhandle, ">$protodir/$fname" or
+	fatal ("failed to create file $protodir/$fname");
+
+    print $fhandle $pkginfo_proto;
+    print $fhandle $dep_proto;
+    print $fhandle $scr_proto;
+    foreach my $fname (keys %files) {
+	next if not $fname;
+	print $fhandle $files{$fname};
+	print $fhandle "\n";
+    }
+    close ($fhandle);
+
+    my $pkgdir = $spec->eval ("%_topdir") . "/PKGS";
+    my $buildroot = $package->eval ("%buildroot");
+    system ("/usr/bin/pkgmk -o -r $buildroot -d $pkgdir -f $protodir/$fname");
+
+    return (not $?);
+}
+
+sub make_packages ($) {
+    my $spec = shift;
+
+    if ($os ne 'solaris') {
+	return 1;
+    }
+
+    my @packages = $spec->get_packages ();
+
+    foreach my $pkg (@packages) {
+	make_solaris_pkg ($spec, $pkg);
+    }
+    
+    
+    return 1;
+}
+
+sub main () {
+    process_options ();
+    init ();
+
+    if (not defined $build_command or $build_command ne "a") {
+	print "Only the -ba command currently is implemented.\n";
+    }
+
+    if (not @spec_names) {
+	fatal ("no spec files given for build");
+    }
+
+    foreach my $spec_name (@spec_names) {
+	my $spec = new rpm_spec ($spec_name);
+	if (not defined $spec) {
+	    fatal ("File is not a regular file: $spec_name");
+	}
+	if ($check_deps) {
+	    check_build_requires ($spec) or exit (1);
+	}
+	do_block ($spec, 'prep') or exit (1);
+	do_block ($spec, 'build') or exit (1);
+	do_block ($spec, 'install') or exit (1);
+	make_packages ($spec) or exit (1);
+	do_block ($spec, 'clean') or exit (1);
+    }
+}
+
+main();

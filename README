@@ -1,0 +1,3 @@
+pkgbuild is a perl script for building Solaris packages from RPM spec
+files. It supports some extensions to the original spec format.
+Documentation to come soon...

@@ -1,0 +1,29 @@
+dnl Process this file with autoconf to create configure.
+AC_INIT(pkgbuild.pl.in)
+PKGBUILD_VERSION=0.1.0
+AC_SUBST(PKGBUILD_VERSION)
+
+AM_INIT_AUTOMAKE(pkgbuild, $PKGBUILD_VERSION)
+
+AC_PATH_PROG(PERL, perl)
+if test -z "$PERL"; then
+   AC_MSG_ERROR([perl not found, you need perl to use pkgbuild])
+fi
+
+if test -z "`$PERL -v | fgrep 'v5.' 2> /dev/null`" -a -z "`$PERL -v | fgrep 'version 5.' 2> /dev/null`"; then
+   AC_MSG_ERROR([perl 5.x required for pkgbuild])
+fi
+AC_SUBST(PERL)
+
+AC_ARG_WITH(topdir, [  --with-topdir=dir          set %topdir to dir. [default: /usr/src/packages]], TOPDIR="$with_topdir", TOPDIR="/usr/src/packages")
+AC_SUBST(TOPDIR)
+
+AC_ARG_ENABLE(sticky-dirs, [  --disable-sticky-dirs      add a sticky bit to the directories under %topdir], enable_sticky_dirs=yes, enable_sticky_dirs=no)
+AM_CONDITIONAL(ENABLE_STICKY_DIRS, test x$enable_sticky_dirs=xyes)
+
+AC_OUTPUT([
+Makefile
+pkgbuild
+pkgbuild.pl
+rpm_spec.pm
+])

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+origwd=`pwd`;
+mydir=$(cd $(dirname $0); pwd);
+pkgbuild_dir="$mydir/../lib/pkgbuild-@PKGBUILD_VERSION@"
+
+cd $pkgbuild_dir || exit 1
+exec ./pkgbuild.pl "$origwd" "${@}"
