@@ -1,3 +1,8 @@
+2004-01-27  Laca  <laca@sun.com>
+
+	Lots of changes. Fixes + support for stuff needed by the
+	build-gnome2 script.
+	
 2003-11-24  Laca  <laca@sun.com>
 
 	Initial import into CVS
