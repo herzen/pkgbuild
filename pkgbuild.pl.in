@@ -359,6 +359,8 @@ sub check_dep ($$) {
 	if (defined $subpkg) {
 	    my $subpkg_version = $subpkg->get_tag ("version");
 	    my $subpkg_release = $subpkg->get_tag ("release");
+	    my $subpkg_serial = $subpkg->get_tag ("serial");
+	    my $subpkg_rev = $subpkg->get_tag ("rev");
 
 	    if (compare_version ($ref_vers, $ref_rev, $ref_serial,
 				 $rel_op, 
@@ -486,7 +488,7 @@ sub do_block ($$) {
     print $fhandle "$script";
     $script = $spec->get_block ($block_name);
     print $fhandle $spec->eval ("cd %{_builddir}\n\n");
-    print $fhandle $script if $script;
+    print $fhandle "$script\n" if $script;
     print $fhandle "exit 0\n";
 
     close $fhandle;
@@ -728,7 +730,7 @@ sub get_proto_line ($$$$$) {
     my $relpath = substr ($fname, length ($basedir));
     my $protoline;
 
-    if ($def_mode eq "-") {
+    if ($def_mode eq "-" and $type ne 's') {
 	$mode = get_file_mode ($fname);
     }
     if ($def_user eq "-") {
@@ -791,22 +793,28 @@ sub get_proto_hash ($) {
 
     foreach my $file (@files) {
 	next if not $file;
-	my @file_list = glob (substr ("$file", 1));
+	my $fn = "$file";
+	$fn =~ s/^\/+//;
+	my @file_list = glob ($fn);
 	if (not @file_list) {
 	    message ("File not found by glob: $buildroot$file");
 	    $has_errors = 1;
 	}
 	my @attribs = $file->get_attributes ();
+	my @rec_list = ();
 	foreach my $fname (@file_list) {
-	    if (defined ($file_info{$fname})) {
-		message ("File listed twice: $fname");
-		$has_errors = 1;
-	    }
 	    if (-d $fname) {
 		if ($file->is_recursive()) {
 		    my @files_in_dir = list_all_files ($fname);
-		    @file_list = (@file_list, @files_in_dir);
+		    @rec_list = (@rec_list, @files_in_dir);
 		}
+	    }
+	}
+	@file_list = (@file_list, @rec_list);
+	foreach my $fname (@file_list) {
+	    if (defined ($file_info{$fname}) and not -d $fname) {
+		message ("File listed twice: $fname");
+		$has_errors = 1;
 	    }
 	    if (not defined ($file_info{$fname})) {
 		my $pline = get_proto_line ($fname, 

@@ -1,3 +1,10 @@
+2004-03-23  Laca  <laca@sun.com>
+
+	Version 0.4.0:
+
+	- major rewrite of the "%" expression parsing and evaluating
+	  code to properly implement %{?foo:bar}
+
 2004-03-09  Laca  <laca@sun.com>
 
 	Version 0.3.6:
