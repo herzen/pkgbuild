@@ -825,7 +825,7 @@ sub make_scripts ($$) {
 	    my $err = $package->get_error ();
 	    return undef if defined $err;
 	    if ( -f "/usr/sadm/install/scripts/i.$class_name" ) {
-		$retstr = $retstr . "i i.$class_name\n";
+		$retstr = $retstr . "i i.$class_name=/usr/sadm/install/scripts/i.$class_name\n";
 	    }
 	} else {
 	    open $fhandle, ">$scriptdir/i.$class_name" or
@@ -839,7 +839,7 @@ sub make_scripts ($$) {
 	    my $err = $package->get_error ();
 	    return undef if defined $err;
 	    if ( -f "/usr/sadm/install/scripts/r.$class_name" ) {
-		$retstr = $retstr . "i r.$class_name\n";
+		$retstr = $retstr . "i r.$class_name=/usr/sadm/install/scripts/r.$class_name\n";
 	    }
 	} else {
 	    open $fhandle, ">$scriptdir/r.$class_name" or
