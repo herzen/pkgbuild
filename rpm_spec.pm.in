@@ -1590,7 +1590,7 @@ sub _process_macro ($$$$$$) {
 		$macro_expansion = $macro_expansion . "cd $dirname\n";
 	    } else {
 		if (not defined ($macro_opts{'T'})) {
-		    my $srcname = $self->get_value_of("SOURCE$num");
+		    my $srcname = $self->eval ("%SOURCE$num");
 		    my $uncompress;
 		    my $unpack;
 		    ($uncompress, $unpack) = 
