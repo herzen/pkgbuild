@@ -1,3 +1,14 @@
+2004-02-25  Laca  <laca@sun.com>
+
+	Version 0.3.4. bug fixes:
+
+	- escape the '.*' passed to pkginfo to find all instances of the
+	  given package, otherwise it may be expanded by the shell
+
+	- implement %{S:n} and %{P:n}
+
+	- handle non-existant patches/sources in %SOURCEn and %PATCHn
+
 2004-02-23  Laca  <laca@sun.com>
 
 	Version 0.3.3. Lots of bug fixes.

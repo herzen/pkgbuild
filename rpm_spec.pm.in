@@ -175,6 +175,10 @@ sub eval ($$) {
     if ($str =~ /^#/) {
 	return $str;
     }
+
+    $str =~ s/\%{S:([0-9]+)}/%{SOURCE$1}/g;
+    $str =~ s/\%{P:([0-9]+)}/%{PATCH$1}/g;
+
     my $repeat_deref = 1;
     while ($repeat_deref) {
 	$repeat_deref = 0;
@@ -1294,13 +1298,15 @@ sub get_value_of ($$) {
     my $package_ref = $self->{_packages}[0];
     if (defined ($package_ref) and $package_ref->tag_is_defined ($lcname)) {
 	return $package_ref->get_tag ($lcname);
-    } elsif ($lcname =~ /^source([0-9]*)$/) {
-	my $num = $1;
+    } elsif ($name =~ /^(SOURCE|PATCH)([0-9]*)$/) {
+	my $num = $2;
+	my $source_or_patch = lc($1);
 	if (not defined ($num)) {
 	    $num = 0;
 	}
-	my @values = $package_ref->get_array ('source');
+	my @values = $package_ref->get_array ($source_or_patch);
 	my $val = $values[$num];
+	return undef unless defined $val;
 	$val =~ s/^.*\/([^\/]*)/$1/;
 	return "%{_sourcedir}/$val";
     } else {

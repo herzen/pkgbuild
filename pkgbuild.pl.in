@@ -214,7 +214,7 @@ sub get_versions_installed ($) {
 	}
 	return \@retlist;
     } elsif ($os eq "solaris") {
-	my $pkglist=`/usr/bin/pkginfo -l $pkg.* 2>&1 | grep VERSION: | cut -f2- -d:`;
+	my $pkglist=`/usr/bin/pkginfo -l '$pkg.*' 2>&1 | grep VERSION: | cut -f2- -d:`;
 	if ($? != 0) {
 	    return \@retlist;
 	}
@@ -340,7 +340,7 @@ sub check_dep ($$) {
 		}
 	    }
 	} elsif ($os eq "solaris") {
-	    `/usr/bin/pkginfo -q $pkg.*`;
+	    `/usr/bin/pkginfo -q '$pkg.*'`;
 	    if ($? != 0) {
 		return 0;
 	    }
@@ -584,7 +584,7 @@ sub make_depend ($$) {
 	    print $fhandle "P $dep " . $subpkg->get_tag ("summary") . "\n";
 	    next;
 	}
-	my $pkgname = `/usr/bin/pkginfo $dep.* 2>/dev/null | head -1`;
+	my $pkgname = `/usr/bin/pkginfo '$dep.*' 2>/dev/null | head -1`;
 	$pkgname =~ s/^\S*\s*$dep\s*(\S.*)$/$1/;
 	if ($? != 0) {
 	    message ("warning: could not find out the description of "
