@@ -37,10 +37,14 @@ make DESTDIR=$RPM_BUILD_ROOT install
 rm -rf $RPM_BUILD_ROOT
 
 %files
-%{_bindir}
-%{_libdir}
+%dir %attr (0755, root, bin) %{_bindir}
+%{_bindir}/*
+%dir %attr (0755, root, bin) %{_libdir}
+%{_libdir}/*
 %{pkgbuild_topdir}
 
 %changelog
+* Fri Mar 05 2004 - <laca@sun.com>
+- fix %files
 * Wed Jan 07 2004 - <laszlo.peter@sun.com>
 - initial version of the spec file

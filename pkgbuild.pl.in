@@ -243,6 +243,9 @@ sub compare_version ($$$$$$$) {
     my $rev2 = shift;
     my $serial2 = shift;
 
+    return 1;
+
+# FIXME: this is unfinished!
     if ($op =~ /S$/) {
 	if (not defined ($serial1) or not defined ($serial2)) {
 	    return 0;
@@ -281,6 +284,7 @@ sub check_dep ($$) {
     if (not defined ($dep)) {
 	return 1;
     }
+
     my $pkg = $dep;
     $pkg =~ s/\s+.*$//;
     if (not defined ($pkg)) {
@@ -352,6 +356,17 @@ sub check_dep ($$) {
     }
 
     if (defined ($ref_vers)) {
+	if (defined $subpkg) {
+	    my $subpkg_version = $subpkg->get_tag ("version");
+	    my $subpkg_release = $subpkg->get_tag ("release");
+
+	    if (compare_version ($ref_vers, $ref_rev, $ref_serial,
+				 $rel_op, 
+				 $subpkg_version, $subpkg_rev, 
+				 $subpkg_serial)) {
+		return 1;
+	    }
+	}
 
 	my $version_list_ref = get_versions_installed ($pkg);
 	if (not @$version_list_ref) {
@@ -359,7 +374,7 @@ sub check_dep ($$) {
 	}
 
 	if ($op =~ /S$/) {
-	    
+#FIXME	    
 	}
 	foreach $vers_ref (@$version_list_ref) {
 	    my ($version, $rev, $serial) = @$vers_ref;

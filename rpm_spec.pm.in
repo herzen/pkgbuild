@@ -98,6 +98,8 @@ sub new ($;$$) {
 	$self->{_defines} = {%$parent_def_ref};
 	delete ($self->{_defines}->{_build_src_dir_name});
     } else {
+	$self->{_defines}->{_pkgbuild} = "pkgbuild";
+	$self->{_defines}->{_pkgbuild_version} = "@PKGBUILD_VERSION@";
 	$self->{_defines}->{_target} = "i386";
 	$self->{_defines}->{_sysconfdir} = "/etc";
 	$self->{_defines}->{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
@@ -172,6 +174,7 @@ sub eval ($$) {
     if (not defined ($str)) {
 	return undef;
     }
+
     if ($str =~ /^#/) {
 	return $str;
     }
@@ -182,9 +185,30 @@ sub eval ($$) {
     my $repeat_deref = 1;
     while ($repeat_deref) {
 	$repeat_deref = 0;
+	if ($str =~ /\%{\?([^:]*):(.*)}/) {
+            $name = $1;
+	    $def = $2;
+            $repeat_deref = 1;
+	    $val = $self->get_value_of ($name);
+	    if (not defined ($val)) {
+		$str =~ s/\%{\?([^:]*):(.*)}//;
+            } else {
+                $str =~ s/\%{\?([^:]*):(.*)}/$2/;
+            }
+        }
+    }
+    if ($str =~ /\%{\?(.*)/) {
+	$self->{error} = "unterminated %{?$1";
+	return "";
+    }
+
+    $repeat_deref = 1;
+    while ($repeat_deref) {
+	$repeat_deref = 0;
 	if ($str =~ /\%(?:{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)}|([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*))/) {
 	    $name = $1;
 	    $def = $2;
+	    $repeat_deref = 1;	    
 
 	    if (not defined $name) {
 		$name = $3;
@@ -208,7 +232,6 @@ sub eval ($$) {
 		$str =~ s/\%$name.$def([^a-zA-Z0-9_])/$val/g;
 		$str =~ s/\%$name.$def$/$val/g;
 	    }
-	    $repeat_deref = 1;	    
 	}
     }
 
@@ -219,6 +242,7 @@ sub eval ($$) {
 	    $name = $1;
 	    my $pkg = $2;
 	    $def = $3;
+	    $repeat_deref = 1;	    
 
 	    if (not defined $name) {
 		$name = $4;
@@ -248,7 +272,6 @@ sub eval ($$) {
 		$str =~ s/\%$name.$def([^a-zA-Z0-9_])/$val/g;
 		$str =~ s/\%$name.$def$/$val/g;
 	    }
-	    $repeat_deref = 1;	    
 	}
     }
 
@@ -257,6 +280,7 @@ sub eval ($$) {
 	$repeat_deref = 0;
 	if ($str =~ /\%(?:{([a-zA-Z_][a-zA-Z0-9_]*)}|([a-zA-Z_][a-zA-Z0-9_]*))/) {
 	    $def = $1;
+	    $repeat_deref = 1;
 
 	    if (not defined $def) {
 		$def = $2;
@@ -273,7 +297,6 @@ sub eval ($$) {
 		$str =~ s/\%$def([^a-zA-Z0-9_])/$val$1/g;
 		$str =~ s/\%$def$/$val/g;
 	    }
-	    $repeat_deref = 1;
 	}
 
     }
@@ -472,6 +495,7 @@ sub _process_tag ($$$) {
     my $line = shift;
 
     my @unique_tags = ("name", "version", "release",
+		       "epoch",
 		       "copyright", "license",
 		       "distribution", "icon",
 		       "url", "group",
@@ -482,7 +506,7 @@ sub _process_tag ($$$) {
 		       "sunw_category", "sunw_hotline", 
 		       "sunw_maxinst", "vendor", "sunw_rev",
 		       "sunw_copyright",
-		       "buildroot", "buildarchitectures",
+		       "buildroot", "buildarchitectures", "buildarch",
 		       "excludearch", "exclusivearch",
 		       "excludeos", "exclusiveos", "prefix",
 		       "summary", "version", "sunw_basedir",
@@ -490,9 +514,10 @@ sub _process_tag ($$$) {
 		       "sunw_category", "sunw_hotline",
 		       "sunw_maxinst", "vendor", "docdir",
 		       "sunw_copyright");
-    my @multi_tags = ("buildrequires", "requires", "obsoletes",
-		      "prereq", "provides");
+    my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
+		      "prereq", "provides", "buildprereq");
     my @ord_tags = ( "source", "patch" );
+    my @localised_tags = ("summary");
     my $lcline = lc($line);
     chomp ($line);
     $lcline =~ s/^\s*//;
@@ -530,6 +555,18 @@ sub _process_tag ($$$) {
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
 	    $package_ref->set_ord_tag ($tagname, $num, $value);
+	    return 1;
+	}
+    }
+
+    foreach my $tag (@localised_tags) {
+	if ($lcline =~ /^$tag\(([^)]*)\)\s*:\s*/) {
+	    my $locale = $1;
+	    $line =~ /^\s*[a-zA-Z0-9()@_-]*\s*:\s*(.*\S)\s*$/;
+	    $value = $1;
+	    $tagname = $tag;
+	    $tagname =~ s/^([a-z_]*).*$/$1/;
+	    $package_ref->set_tag ("$tagname::$locale", $self->eval ($value));
 	    return 1;
 	}
     }
@@ -699,7 +736,7 @@ sub _process_macro ($$$$$$) {
 	}
 	my $scriptlet;
 
-	if ($macro =~ /^(pre|post|preun|postun|verifyscript)$/) {
+	if ($macro =~ /^(pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun)$/) {
 	    $pkg_ref = $$spec_used->find_package_by_name ($package);
 	    if (not defined($pkg_ref)) {
 		print "WARNING: subpackage not found: $name.$package\n";
@@ -914,13 +951,13 @@ sub _process_block ($$$;$$) {
 	    $self->_process_macro (undef, undef, $1, $block_name, $line);
 	} elsif ($lcline =~ /^\s*%(patch[0-9]*)/) {
 	    $self->_process_macro (undef, undef, $1, $block_name, $line);
-	} elsif ($lcline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.(prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript)/) {
+	} elsif ($lcline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.(prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun)/) {
 	    if (defined ($self->{_specs_used}->{$1})) {
 		$self->_process_macro ($1, undef, $2, $block_name, $line);
 	    } else {
 		print "WARNING: undefined macro in $line\n";
 	    }
-	} elsif ($lcline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_-]*)\.(prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript)/) {
+	} elsif ($lcline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_-]*)\.(prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun)/) {
 	    if (defined ($self->{_specs_used}->{$1})) {
 		$self->_process_macro ($1, $2, $3, $block_name, $line);
 	    } else {
@@ -1009,7 +1046,7 @@ sub _process_files ($$$;$) {
 					     ($package_name))) {
 		return (0);
 	    }
-	} elsif ($line =~ /^\s*%defattr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*\)\s*$/) {
+	} elsif ($line =~ /^\s*%defattr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*$/) {
 	    @defattr = ($1, $2, $3);
 	} elsif ($lcline =~ /^\s*%doc/) {
 	    $is_doc = 1;
@@ -1022,7 +1059,7 @@ sub _process_files ($$$;$) {
 	    $lcline =~ s/^\s*%config\s*//;
 	    $line =~ s/^\s*%config\s*//;
 	    next;	    
-	} elsif ($lcline =~ /^\s*%attr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*\)\s*/) {
+	} elsif ($lcline =~ /^\s*%attr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*/) {
 	    @this_attr = ($1, $2, $3);
 	    $lcline =~ s/^\s*%attr\s*\([^\)]*\)\s*//;
 	    $line =~ s/^\s*%attr\s*\([^\)]*\)\s*//;
@@ -1092,7 +1129,7 @@ sub _process_top_level ($$$) {
 	return $self->_process_include ($fhandle, $line, \&_process_top_level, ());
     } elsif ($lcline =~ /^%package/) {
 	return $self->_process_package ($fhandle, $line);
-    } elsif ($lcline =~ /^%(description|prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript)/) {
+    } elsif ($lcline =~ /^%(description|prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun)/) {
 	return $self->_process_block ($fhandle, $line);
     } elsif ($lcline =~ /^%files/) {
 	return $self->_process_files ($fhandle, $line);
@@ -1242,9 +1279,13 @@ sub get_rpms ($) {
     my @packages = $self->get_packages ();
     my @rpms = ();
     foreach my $pkg (@packages) {
+	my $pkg_arch = $pkg->get_tag ("buildarch");
+	if (not defined ($pkg_arch)) {
+	    $pkg_arch = $pkg->get_tag ("buildarchitectures");
+	}
 	push (@rpms, $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
 	      "-" . $pkg->get_tag ("release") . "." .
-	      $pkg->get_tag ("buildarchitectures") . ".rpm");
+	      $pkg_arch . ".rpm");
     }
 
     return @rpms;
@@ -1256,11 +1297,15 @@ sub get_rpm_paths ($) {
     my @packages = $self->get_packages ();
     my @rpms = ();
     foreach my $pkg (@packages) {
+	my $pkg_arch = $pkg->get_tag ("buildarch");
+	if (not defined ($pkg_arch)) {
+	    $pkg_arch = $pkg->get_tag ("buildarchitectures");
+	}
 	push (@rpms, $self->get_value_of ("_rpmdir") . "/" . 
-	      $pkg->get_tag ("buildarchitectures") . "/" .
+	      $pkg_arch . "/" .
 	      $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
 	      "-" . $pkg->get_tag ("release") . "." .
-	      $pkg->get_tag ("buildarchitectures") . ".rpm");
+	      $pkg_arch . ".rpm");
     }
 
     return @rpms;
