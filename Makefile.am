@@ -10,7 +10,7 @@ pkgbuild_DATA = $(all_modules)
 pkgbuild_SCRIPTS = pkgbuild.pl
 bin_SCRIPTS = pkgbuild
 
-EXTRA_DIST= pkgbuild.spec.in $(plain_modules) $(gen_module_sources)
+EXTRA_DIST= pkgbuild.spec.in $(plain_modules) $(gen_module_sources) TODO
 
 if ENABLE_STICKY_DIRS
 DIRMODE=1777

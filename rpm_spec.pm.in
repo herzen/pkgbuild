@@ -162,6 +162,9 @@ sub eval ($$) {
     if (not defined ($str)) {
 	return undef;
     }
+    if ($str =~ /^#/) {
+	return $str;
+    }
     my $repeat_deref = 1;
     while ($repeat_deref) {
 	$repeat_deref = 0;
@@ -303,13 +306,17 @@ sub _get_next_line ($$) {
 	return undef;
     }
 
-    if ($line =~ /^\s*%if(arch|os)/) {
+    if ($line =~ /^%if(arch|os|narch|nos)/) {
 	my $cond = 0;
 	
-	if ($line =~ /%ifarch\s+(\S*)/) {
+	if ($line =~ /^%ifarch\s+(\S*)/) {
 	    $cond = ("$arch" eq "$1");
-	} elsif ($line =~ /%ifos\s+(\S*)/) {
+	} elsif ($line =~ /^%ifnarch\s+(\S*)/) {
+	    $cond = ("$arch" ne "$1");
+	} elsif ($line =~ /^%ifos\s+(\S*)/) {
 	    $cond = ("$os" eq "$1");
+	} elsif ($line =~ /^%ifnos\s+(\S*)/) {
+	    $cond = ("$os" ne "$1");
 	}
 
 	++$self->{_in_conditional};
@@ -627,8 +634,8 @@ sub find_package_by_name ($) {
 
     my $ref = $self->{_packages};
     foreach my $package (@$ref) {
-	if ($$package->get_tag ("name") eq $name) {
-	    return $$package;
+	if ($package->get_tag ("name") eq $name) {
+	    return $package;
 	}
     }
     return undef;
@@ -658,6 +665,7 @@ sub _process_macro ($$$$$$) {
     }
     my @opts = split /\s+-/, $opt_line;
     foreach my $opt (@opts) {
+	$opt =~ s/\s*$//;
 	if ($opt =~ /(\S+)\s+(.*)/) {
 	    $macro_opts{$1}=$2;
 	} elsif ($opt =~ /([a-zA-Z])([0-9]+)/) {
@@ -740,9 +748,9 @@ sub _process_macro ($$$$$$) {
 		    $macro_expansion = $macro_expansion .
 			"$uncompress %SOURCE$srcnum$unpack\n";
 		    $macro_expansion = $macro_expansion .
-			"STATUS=$?\n" .
-			"if [ $STATUS -ne 0 ]; then\n" .
-			"  exit $STATUS\n" .
+			"STATUS=\$?\n" .
+			"if [ \$STATUS -ne 0 ]; then\n" .
+			"  exit \$STATUS\n" .
 			"fi\n";
 		} else {
 		    $self->{error} = "numeric argument required after -a option of %setup\n";
@@ -804,6 +812,8 @@ sub _process_macro ($$$$$$) {
 	    my $patch_opts = '';
 	    if (defined ($macro_opts{'p'})) {
 		$patch_opts = $patch_opts . " -p $macro_opts{'p'}";
+	    } else {
+		$patch_opts = $patch_opts . " -p 0";
 	    }
 	    if (defined ($macro_opts{'E'})) {
 		$patch_opts = $patch_opts . " -E";
@@ -902,7 +912,7 @@ sub _process_block ($$$;$$) {
 	    } else {
 		print "WARNING: undefined macro in $line\n";
 	    }
-	} elsif (not $line =~ /^\s*%/) {
+	} elsif (not $line =~ /^%/) {
 	    if ($block_name =~ /(prep|build|install|clean|changelog)/) {
 		$self->_append_to_block ($block_name, $self->eval ($line));
 	    } else {
@@ -972,7 +982,9 @@ sub _process_files ($$$;$) {
     ($line, $lcline) = $self->_preprocess_line ($line);
 
     while (1) {
-	if ($lcline =~ /^\s*#/) {
+	if ($line = /^\s*$/) {
+	    # ignore empty lines
+	} elsif ($lcline =~ /^\s*#/) {
 	    # comment, skip to next line
 	} elsif ($lcline =~ /^\s*%define/) {
 	    if (not $self->_process_define ($fhandle, $line)) {
@@ -1058,17 +1070,17 @@ sub _process_top_level ($$$) {
     if ($lcline =~ /^#/) {
 	# comment, nothing to do.
 	return 1;
-    } elsif ($lcline eq "") {
+    } elsif ($lcline =~ /^\s*$/) {
 	return 1;
     } elsif ($lcline =~ /^\s*%use/) {
 	return $self->_process_use ($fhandle, $line);
     } elsif ($lcline =~ /^\s*%include/) {
 	return $self->_process_include ($fhandle, $line, \&_process_top_level, ());
-    } elsif ($lcline =~ /^\s*%package/) {
+    } elsif ($lcline =~ /^%package/) {
 	return $self->_process_package ($fhandle, $line);
-    } elsif ($lcline =~ /^\s*%(description|prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript)/) {
+    } elsif ($lcline =~ /^%(description|prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript)/) {
 	return $self->_process_block ($fhandle, $line);
-    } elsif ($lcline =~ /^\s*%files/) {
+    } elsif ($lcline =~ /^%files/) {
 	return $self->_process_files ($fhandle, $line);
     } elsif ($lcline =~ /^\s*%define/) {
 	return $self->_process_define ($fhandle, $line);
