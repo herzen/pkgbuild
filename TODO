@@ -1,0 +1,8 @@
+ - ability to build from CVS
+ - generate plain specs and CVS snapshot tarballs
+ - check versions in dependencies (done, needs testing, bugfixing)
+ - Solaris patch dependency
+ - %{?foo}, %ifosrel
+ - %files -f
+ - %(command)
+ - # comments in %files needs testing

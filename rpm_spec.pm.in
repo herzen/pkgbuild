@@ -1,6 +1,12 @@
-#use strict;
+@WARNING_MESSAGE_L1@
+@WARNING_MESSAGE_L2@
+@WARNING_MESSAGE_L3@
+@WARNING_MESSAGE_L4@
+@WARNING_MESSAGE_L5@
+@WARNING_MESSAGE_L6@
+@WARNING_MESSAGE_L7@
 
-# TODO: implement %ifarch, %ifos, %ifdef
+#use strict;
 
 use warnings;
 use rpm_package;
@@ -16,6 +22,8 @@ use overload ('""' => \&get_name);
 my $arch;
 my $os;
 my $os_rel;
+
+my $_default_topdir = "@TOPDIR@";
 
 sub init () {
     $arch = `uname -p`;
@@ -44,19 +52,24 @@ sub init () {
 
 # Create a new rpm_spec object.
 # Return undef if the spec_file is not found
-sub new ($) {
+sub new ($;$$) {
     my $class = shift;
     my $spec_file = shift;
+    my $predef_ref = shift;
+    my $parent_spec = shift;
     my $self = {};
     
     if (! -r $spec_file) {
 	return (undef);
     }
     
-    my $packagebase = new packagebase ();
-    my $spec = $packagebase->find_spec_by_file_name ($spec_file);
-    if (defined ($spec)) {
-	return ($spec);
+    if ((not defined ($predef_ref) or not @$predef_ref) and
+	not defined $parent_spec) {
+	my $packagebase = new packagebase ();
+	my $spec = $packagebase->find_spec_by_file_name ($spec_file);
+	if (defined ($spec)) {
+	    return ($spec);
+	}
     }
 
     $self->{_file_name} = $spec_file;
@@ -68,48 +81,74 @@ sub new ($) {
     $self->{_defines} = {};
     $self->{_specs_used} = {};
     $self->{_blocks} = {};
+    $self->{_in_conditional} = 0;
+
+    if (defined ($parent_spec)) {
+	my $parent_def_ref = $parent_spec->{_defines};
+	$self->{_defines} = {%$parent_def_ref};
+	delete ($self->{_defines}->{_build_src_dir_name});
+    } else {
+	$self->{_defines}->{_target} = "i386";
+	$self->{_defines}->{_sysconfdir} = "/etc";
+	$self->{_defines}->{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
+	$self->{_defines}->{_prefix} = "/usr";
+	$self->{_defines}->{_exec_prefix} = "%{_prefix}";
+	$self->{_defines}->{_bindir} = "%{_exec_prefix}/bin";
+	$self->{_defines}->{_lib} = "lib";
+	$self->{_defines}->{_libdir} = "%{_exec_prefix}/%{_lib}";
+	$self->{_defines}->{_libexecdir} = "%{_exec_prefix}/libexec";
+	$self->{_defines}->{_sbindir} = "%{_exec_prefix}/sbin";
+	$self->{_defines}->{_sharedstatedir} = "%{_prefix}/com";
+	$self->{_defines}->{_datadir} = "%{_prefix}/share";
+	$self->{_defines}->{_includedir} = "%{_prefix}/include";
+	$self->{_defines}->{_oldincludedir} = "/usr/include";
+	$self->{_defines}->{_infodir} = "/usr/share/info";
+	$self->{_defines}->{_mandir} = "/usr/share/man";
+	$self->{_defines}->{_localstatedir} = "/var";
+	$self->{_defines}->{_defaultdocdir} = "%_prefix/doc";
+	$self->{_defines}->{_docdir} = "%_datadir/doc";
+	$self->{_defines}->{__libtoolize} = "libtoolize";
     
+	$self->{_defines}->{_global_cflags} = "-O2 -g -pipe";
+	$self->{_defines}->{optflags} = "%{_global_cflags}";
+	$self->{_defines}->{_var} = "/var";
+	$self->{_defines}->{_tmppath} = "%{_var}/tmp";
+	$self->{_defines}->{_usr} = "/usr";
+	$self->{_defines}->{_usrsrc} = "%{_usr}/src";
+
+	$self->{_defines}->{_topdir} = $_default_topdir;
+	$self->{_defines}->{_builddir} = "%{_topdir}/BUILD";
+	$self->{_defines}->{_rpmdir} = "%{_topdir}/RPMS";
+	$self->{_defines}->{_sourcedir} = "%{_topdir}/SOURCES";
+	$self->{_defines}->{_specdir} = "%{_topdir}/SPECS";
+	$self->{_defines}->{_srcrpmdir} = "%{_topdir}/SRPMS";
+    }
+
+    if (defined ($predef_ref)) {
+	foreach my $predef (@$predef_ref) {
+	    next if not defined $predef;
+	    if ($predef =~ /^\s*([a-zA-Z0-9_]*)\s+(.*\S)\s*$/) {
+		$self->{_defines}->{$1} = $2;
+	    } else {
+		print "ERROR: invalid definition $predef\n";
+		return undef;
+	    }
+	}
+    }
+    
+    bless ($self, $class);
     my $main_package = rpm_package->new (\$self);
-    $packagebase->add_package ($main_package);
-    $packagebase->add_spec ($self);
     my @packages = ($main_package);
     $self->{_packages} = \@packages;
-    
-    $self->{_defines}->{_sysconfdir} = "/etc";
-    $self->{_defines}->{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
-    $self->{_defines}->{_prefix} = "/usr";
-    $self->{_defines}->{_exec_prefix} = "%{_prefix}";
-    $self->{_defines}->{_bindir} = "%{_exec_prefix}/bin";
-    $self->{_defines}->{_lib} = "lib";
-    $self->{_defines}->{_libdir} = "%{_exec_prefix}/%{_lib}";
-    $self->{_defines}->{_libexecdir} = "%{_exec_prefix}/libexec";
-    $self->{_defines}->{_sbindir} = "%{_exec_prefix}/sbin";
-    $self->{_defines}->{_sharedstatedir} = "%{_prefix}/com";
-    $self->{_defines}->{_datadir} = "%{_prefix}/share";
-    $self->{_defines}->{_includedir} = "%{_prefix}/include";
-    $self->{_defines}->{_oldincludedir} = "/usr/include";
-    $self->{_defines}->{_infodir} = "/usr/share/info";
-    $self->{_defines}->{_mandir} = "/usr/share/man";
-    $self->{_defines}->{_localstatedir} = "/var";
-    $self->{_defines}->{_defaultdocdir} = "%_prefix/doc";
-    $self->{_defines}->{_docdir} = "%_datadir/doc";
-    $self->{_defines}->{__libtoolize} = "libtoolize";
-    
-    $self->{_defines}->{_global_cflags} = "-O2 -g -pipe";
-    $self->{_defines}->{optflags} = "%{_global_cflags} -march=i386 -mcpu=i686";
-    $self->{_defines}->{_var} = "/var";
-    $self->{_defines}->{_tmppath} = "%{_var}/tmp";
-    $self->{_defines}->{_usr} = "/usr";
-    $self->{_defines}->{_usrsrc} = "%{_usr}/src";
 
-    $self->{_defines}->{_topdir} = "@TOPDIR@";
-    $self->{_defines}->{_builddir} = "%{_topdir}/BUILD";
-    $self->{_defines}->{_rpmdir} = "%{_topdir}/RPMS";
-    $self->{_defines}->{_sourcedir} = "%{_topdir}/SOURCES";
-    $self->{_defines}->{_specdir} = "%{_topdir}/SPECS";
-    $self->{_defines}->{_srcrpmdir} = "%{_topdir}/SRPMS";
-    
-    return (bless $self, $class);
+    if ((not defined ($predef_ref) or not @$predef_ref) and
+	not defined $parent_spec) {
+	my $packagebase = new packagebase ();
+	$packagebase->add_package ($main_package);
+	$packagebase->add_spec ($self);
+    }
+
+    return $self;
 }
 
 sub eval ($$) {
@@ -120,6 +159,9 @@ sub eval ($$) {
     my $val;
     my $name;
 
+    if (not defined ($str)) {
+	return undef;
+    }
     my $repeat_deref = 1;
     while ($repeat_deref) {
 	$repeat_deref = 0;
@@ -223,11 +265,103 @@ sub eval ($$) {
     return ($str);
 }
 
+sub _eat_lines ($$) {
+    my $self = shift;
+    my $fhandle = shift;
+    my $line;
+
+    my $depth = 1;
+
+    while (1) {
+	$line = <$fhandle>;
+	if (not defined $line) {
+	    last;
+	}
+	if ($line =~ /^\s*%if(arch|os)/) {
+	    $depth++;
+	} elsif ($line =~ /^\s*%else/) {
+	    $depth--;
+	    if ($depth == 0) {
+		return "%else";
+	    }
+	} elsif ($line =~ /^\s*%endif/) {
+	    $depth--;
+	    if ($depth == 0) {
+		return "%endif";
+	    }
+	}
+    }
+    return undef;
+}
+
 sub _get_next_line ($$) {
     my $self = shift;
     my $fhandle = shift;
 
     my $line = <$fhandle>;
+    if (not defined $line) {
+	return undef;
+    }
+
+    if ($line =~ /^\s*%if(arch|os)/) {
+	my $cond = 0;
+	
+	if ($line =~ /%ifarch\s+(\S*)/) {
+	    $cond = ("$arch" eq "$1");
+	} elsif ($line =~ /%ifos\s+(\S*)/) {
+	    $cond = ("$os" eq "$1");
+	}
+
+	++$self->{_in_conditional};
+
+	if ($cond) {
+	    $line = $self->_get_next_line ($fhandle);
+	    if (not defined($line)) {
+		$self->{error} = "Unclosed %if";
+		return undef;
+	    }
+	    return $line;
+	}
+
+	my $lastline = $self->_eat_lines ($fhandle);
+
+	if (not defined $lastline) {
+	    return undef;
+	}
+	if ($lastline eq "%endif") {
+	    --$self->{_in_conditional};
+	}
+	$line = $self->_get_next_line ($fhandle);
+	return $line;
+
+    } elsif ($line =~ /^\s*%else/) {
+	if ($self->{_in_conditional} == 0) {
+	    $self->{error} = "$fhandle: Got a %else with no if";
+	    return undef;
+	}
+	my $lastline = $self->_eat_lines ($fhandle);
+	if (not defined $lastline) {
+	    return undef;
+	}
+	if ($lastline eq "%else") {
+	    $self->{error} = "%endif expected, %else found";
+	    $line = undef;
+	}
+	if ($lastline eq "%endif") {
+	    --$self->{_in_conditional};
+	    $line = $self->_get_next_line ($fhandle);
+	}
+	return $line;
+    } elsif ($line =~ /^\s*%endif/) {
+	if ($self->{_in_conditional} == 0) {
+	    $self->{error} = "$fhandle: Got a %endif with no if";
+	    return undef;
+	}
+	--$self->{_in_conditional};
+	$line = $self->_get_next_line ($fhandle);
+	return $line;
+    }
+
     return $line;
 }
 
@@ -246,15 +380,21 @@ sub _process_use ($$$) {
 	return 0;
     }
 
-    my $specdir = $self->eval ("%_specdir");
-    my $packagebase = new packagebase ();
-    my $spec = $packagebase->find_spec_by_file_name ("$specdir/$fname");
+    if ($fname =~ /^"(.*)"$/) {
+	$fname = $1;
+    }
+
+    my $specdir = $self->get_value_of ("_specdir");
+    my $spec = new rpm_spec ("$specdir/$fname", undef, $self);
     if (not defined ($spec)) {
-	$spec = new rpm_spec ("$specdir/$fname");
-	if (not defined ($spec)) {
-	    $self->{error} = "Could not find spec file $specdir/$fname";
-	    return 0;
-	}
+	$self->{error} = "Could not open file $specdir/$fname";
+	return 0;
+    }
+
+    $spec->get_value_of ("name");
+    if (defined ($spec->{error})) {
+	$self->{error}="$spec->{_base_file_name}: $spec->{error}";
+	return 0;
     }
 
     $self->{_specs_used}->{$name} = \$spec;
@@ -272,11 +412,14 @@ sub _process_include ($$$$@) {
     my $callback = shift;
     my @cbargs = @_;
 
-    my $specdir = $self->eval ("%_specdir");
+    my $specdir = $self->get_value_of ("_specdir");
     my $fname = $line;
     $fname =~ s/\s*%include\s+(\S+)\s*/$1/ or
 	$self->{error} = "Invalid %include command: $line",
 	return (0);
+    if ($fname =~ /^"(.*)"$/) {
+	$fname = $1;
+    }
 
     my $inc_fhandle = "SPEC_FILE" . $file_id++;
     open $inc_fhandle, "<$specdir/$fname" or
@@ -284,7 +427,7 @@ sub _process_include ($$$$@) {
 	return (0);
 
     while (1) {
-	$line = <$inc_fhandle>;
+	$line = $self->_get_next_line ($inc_fhandle);
 	if (not defined ($line)) {
 	    last;
 	}
@@ -294,6 +437,10 @@ sub _process_include ($$$$@) {
     }
 
     close $inc_fhandle;
+
+    if (defined $self->{error}) {
+	return 0;
+    }
 
     return (1);
 }
@@ -322,8 +469,9 @@ sub _process_tag ($$$) {
 		       "sunw_category", "sunw_hotline",
 		       "sunw_maxinst", "vendor", "docdir",
 		       "sunw_copyright");
-    my @multi_tags = ("buildrequires", "source[0-9]*", "patch[0-9]*",
-		      "requires", "obsoletes", "prereq", "provides");
+    my @multi_tags = ("buildrequires", "requires", "obsoletes",
+		      "prereq", "provides");
+    my @ord_tags = ( "source", "patch" );
     my $lcline = lc($line);
     chomp ($line);
     $lcline =~ s/^\s*//;
@@ -349,6 +497,18 @@ sub _process_tag ($$$) {
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
 	    $package_ref->push_tag ($tagname, $value);
+	    return 1;
+	}
+    }
+
+    foreach my $tag (@ord_tags) {
+	if ($lcline =~ /^$tag([0-9]*)\s*:\s*/) {
+	    my $num = $1;
+	    $line =~ /^\s*[a-zA-Z0-9_-]*\s*:\s*(.*\S)\s*$/;
+	    $value = $self->eval ($1);
+	    $tagname = $tag;
+	    $tagname =~ s/^([a-z_]*).*$/$1/;
+	    $package_ref->set_ord_tag ($tagname, $num, $value);
 	    return 1;
 	}
     }
@@ -399,6 +559,10 @@ sub _process_package ($$$) {
     $line = $self->_get_next_line ($fhandle);
     if (defined ($line)) {
 	return $self->_process_top_level ($fhandle, $line);
+    }
+
+    if (defined $self->{error}) {
+	return 0;
     }
 
     return 1;
@@ -457,6 +621,19 @@ sub _get_unpack_commands ($$) {
     return ($uncompress, $unpack);
 }
 
+sub find_package_by_name ($) {
+    my $self = shift;
+    my $name = shift;
+
+    my $ref = $self->{_packages};
+    foreach my $package (@$ref) {
+	if ($$package->get_tag ("name") eq $name) {
+	    return $$package;
+	}
+    }
+    return undef;
+}
+
 sub _process_macro ($$$$$$) {
     my $self = shift;
     my $name = shift;
@@ -466,19 +643,20 @@ sub _process_macro ($$$$$$) {
     my $line = shift;
 
     my %macro_opts;
+    my $opt_line = $line;
     if (defined ($name)) {
 	if (defined ($package)) {
-	    $line =~ s/\s*%$name.$package.$macro(\s*)/$1/;
-	    $line =~ s/\s*%{$name.$package.$macro}(\s*)/$1/;
+	    $opt_line =~ s/\s*%$name.$package.$macro(\s*)/$1/;
+	    $opt_line =~ s/\s*%{$name.$package.$macro}(\s*)/$1/;
 	} else {
-	    $line =~ s/\s*%$name.$macro(\s*)/$1/;
-	    $line =~ s/\s*%{$name.$macro}(\s*)/$1/;
+	    $opt_line =~ s/\s*%$name.$macro(\s*)/$1/;
+	    $opt_line =~ s/\s*%{$name.$macro}(\s*)/$1/;
 	}
     } else {
-	$line =~ s/\s*%$macro(\s*)/$1/;
-	$line =~ s/\s*%{$macro}(\s*)/$1/;
+	$opt_line =~ s/\s*%$macro(\s*)/$1/;
+	$opt_line =~ s/\s*%{$macro}(\s*)/$1/;
     }
-    my @opts = split /\s+-/, $line;
+    my @opts = split /\s+-/, $opt_line;
     foreach my $opt (@opts) {
 	if ($opt =~ /(\S+)\s+(.*)/) {
 	    $macro_opts{$1}=$2;
@@ -493,6 +671,10 @@ sub _process_macro ($$$$$$) {
 
     if (defined ($name)) {
 	my $spec_used = $self->{_specs_used}->{$name};
+	if (not defined $spec_used) {
+	    $self->{error} = "name $name not found. Missing of mistyped %use?";
+	    return 0;
+	}
 	my $scriptlet;
 
 	if ($macro =~ /^(pre|post|preun|postun|verifyscript)$/) {
@@ -509,10 +691,10 @@ sub _process_macro ($$$$$$) {
 	    $scriptlet = "";
 	}
 	if (defined ($macro_opts{'d'})) {
-	    $scriptlet = "cd %{_builddir}/$macro_opts{'d'}\n${scriptlet}cd ..";
+	    $scriptlet = "cd %{_builddir}/$macro_opts{'d'}\n${scriptlet}\ncd ..";
 	}
 	if ($macro eq "prep") {
-	    $scriptlet = "cd %{_builddir}\n$scriptlet";
+	    $scriptlet = "cd %{_builddir}\n$scriptlet\n";
 	}
 	$macro_expansion = $scriptlet;
     } else {
@@ -528,7 +710,7 @@ sub _process_macro ($$$$$$) {
 	    }
 	    if (not defined ($self->{_defines}->{_build_src_dir_name})) {
 		$self->{_defines}->{_build_src_dir_name} = $dirname;
-	    } 
+	    }
 	    $macro_expansion = "";
 
 	    if (not defined ($macro_opts{'D'})) {
@@ -563,7 +745,8 @@ sub _process_macro ($$$$$$) {
 			"  exit $STATUS\n" .
 			"fi\n";
 		} else {
-		    print "ERROR: numeric argument required after -a option of %setup\n";
+		    $self->{error} = "numeric argument required after -a option of %setup\n";
+		    return (0);
 		}
 	    }
 	    if (not defined ($macro_opts{'c'})) {
@@ -598,7 +781,7 @@ sub _process_macro ($$$$$$) {
 		"/bin/chmod -Rf a+rX,g-w,o-w .\n";
 	} elsif ($macro =~ /^patch([0-9]*)/) {
 	    my $num = $macro_opts{'P'};
-	    if (not defined($num)) {
+	    if (not defined($num) or $num eq "") {
 		if (not defined ($1)) {
 		    $num = 0;
 		} else {
@@ -610,7 +793,12 @@ sub _process_macro ($$$$$$) {
 	    }
 	    my $package_ref = $self->{_packages}[0];
 	    my @values = $package_ref->get_array ('patch');
+
 	    my $val = $values[$num];
+	    if (not defined ($val)) {
+		$self->{error} = "ERROR: no such patch: Patch$num";
+		return 0;
+	    }
 	    $val =~ s/^.*\/([^\/]*)/$1/;
 
 	    my $patch_opts = '';
@@ -623,7 +811,8 @@ sub _process_macro ($$$$$$) {
 	    if (defined ($macro_opts{'b'})) {
 		$patch_opts = $patch_opts . " -b -z $macro_opts{'b'}";
 	    }
-	    $macro_expansion = "patch $patch_opts < %{_sourcedir}/$val"
+	    $macro_expansion = "echo 'Patch #$num ($val):'\n" .
+		"patch $patch_opts < %{_sourcedir}/$val"
 	}
     }
 
@@ -692,12 +881,15 @@ sub _process_block ($$$;$$) {
 		return (0);
 	    }
 	} elsif ($lcline =~ /^\s*%include/) {
-	    $self->_process_include ($fhandle, $line, \&_process_block, 
-				     ($block_name, $package_name));
-	} elsif ($lcline =~ /^\s*%setup/) {
-	    $self->_process_macro (undef, undef, "setup", $block_name, $line);
-	} elsif ($lcline =~ /^\s*%patch/) {
-	    $self->_process_macro (undef, undef, "patch", $block_name, $line);
+	    if (not $self->_process_include ($fhandle, $line, 
+					     \&_process_block, 
+					     ($block_name, $package_name))) {
+		return (0);
+	    }
+	} elsif ($lcline =~ /^\s*%(setup[0-9]*)/) {
+	    $self->_process_macro (undef, undef, $1, $block_name, $line);
+	} elsif ($lcline =~ /^\s*%(patch[0-9]*)/) {
+	    $self->_process_macro (undef, undef, $1, $block_name, $line);
 	} elsif ($lcline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.(prep|build|install|clean|changelog|pre|post|preun|postun|verifyscript)/) {
 	    if (defined ($self->{_specs_used}->{$1})) {
 		$self->_process_macro ($1, undef, $2, $block_name, $line);
@@ -719,6 +911,10 @@ sub _process_block ($$$;$$) {
 	} else {
 	    return $self->_process_top_level ($fhandle, $line);
 	}
+    }
+
+    if (defined $self->{error}) {
+	return 0;
     }
 
     return 1;
@@ -767,25 +963,34 @@ sub _process_files ($$$;$) {
 
     $line = $self->_get_next_line ($fhandle);
     if (not defined($line)) {
+	if (defined $self->{error}) {
+	    return 0;
+	}
+
 	return 1;
     }
     ($line, $lcline) = $self->_preprocess_line ($line);
 
     while (1) {
-	if ($lcline =~ /^\s*%define/) {
+	if ($lcline =~ /^\s*#/) {
+	    # comment, skip to next line
+	} elsif ($lcline =~ /^\s*%define/) {
 	    if (not $self->_process_define ($fhandle, $line)) {
 		return (0);
 	    }
 	} elsif ($lcline =~ /^\s*%include/) {
-	    $self->_process_include ($fhandle, $line, \&_process_files,
-				     ($package_name));
-	} elsif ($lcline =~ /^\s*%defattr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*\)\s*$/) {
+	    if (not $self->_process_include ($fhandle, $line, \&_process_files,
+					     ($package_name))) {
+		return (0);
+	    }
+	} elsif ($line =~ /^\s*%defattr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z_-]*)\s*\)\s*$/) {
 	    @defattr = ($1, $2, $3);
 	} elsif ($lcline =~ /^\s*%doc/) {
 	    $is_doc = 1;
 	    $lcline =~ s/^\s*%doc\s*//;
 	    $line =~ s/^\s*%doc\s*//;
-	    next;
+# FIXME: should process %doc stuff properly...
+#	    next;
 	} elsif ($lcline =~ /^\s*%config/) {
 	    $is_config = 1;
 	    $lcline =~ s/^\s*%config\s*//;
@@ -832,6 +1037,10 @@ sub _process_files ($$$;$) {
 	    last;
 	}
 	($line, $lcline) = $self->_preprocess_line ($line);
+    }
+
+    if (defined $self->{error}) {
+	return 0;
     }
 
     return 1;
@@ -887,7 +1096,7 @@ sub _read_spec ($) {
     $self->{_current_package} = $self->{_packages}[0];
 
     while (1) {
-	$line = <$fhandle>;
+	$line = $self->_get_next_line ($fhandle);
 	if (not defined ($line)) {
 	    last;
 	}
@@ -904,6 +1113,15 @@ sub _read_spec ($) {
     $self->{_being_loaded} = 0;
     $self->{_loaded} = 1;
 
+    if (defined $self->{error}) {
+	return 0;
+    }
+
+    if ($self->{_in_conditional} > 0) {
+	$self->{error} = "Unclosed %if";
+	return 0;
+    }
+
     return (1);
 }
 
@@ -918,7 +1136,11 @@ sub get_name ($) {
     }
 
     my $package = $self->{_packages}[0];
-    return $package->get_tag ("name");
+    my $name = $package->get_tag ("name");
+    if (not defined ($name)) {
+	return $self->{_base_file_name};
+    }
+    return $name;
 }
 
 sub get_packages ($) {
@@ -984,13 +1206,65 @@ sub get_file_name ($) {
 
 sub get_base_file_name ($) {
     my $self = shift;
-
+    
     return $self->{_base_file_name};
+}
+
+sub get_rpms ($) {
+    my $self = shift;
+
+    my @packages = %self->get_packages ();
+    my @rpms = ();
+    foreach my $pkg (@packages) {
+	push (@rpms, $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
+	      "." . $pkg->get_tag ("release") . "." .
+	      $pkg->get_tag ("buildarchitectures") . ".rpm");
+    }
+
+    return @rpms;
+}
+
+sub get_rpm_paths ($) {
+    my $self = shift;
+
+    my @packages = %self->get_packages ();
+    my @rpms = ();
+    foreach my $pkg (@packages) {
+	push (@rpms, $self->get_value_of ("rpmdir") . "/" . 
+	      $pkg->get_tag ("buildarchitectures") . "/" .
+	      $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
+	      "." . $pkg->get_tag ("release") . "." .
+	      $pkg->get_tag ("buildarchitectures") . ".rpm");
+    }
+
+    return @rpms;
+}
+
+sub get_pkgs ($) {
+    my $self = shift;
+
+    my @packages = %self->get_packages ();
+    my @pkgs = ();
+    foreach my $pkg (@packages) {
+	push (@pkgs, $pkg->get_name());
+    }
+
+    return @pkgs;
+}
+
+sub get_package_names ($) {
+    my $self = shift;
+    if ($os eq "solaris") {
+	return $self->get_pkgs ();
+    } else {
+	return $self->get_rpms ();
+    }
 }
 
 sub get_value_of ($$) {
     my $self = shift;
-    my $name = lc (shift);
+    my $name = shift;
+    my $lcname = lc ($name);
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
@@ -1000,9 +1274,9 @@ sub get_value_of ($$) {
     }
 
     my $package_ref = $self->{_packages}[0];
-    if ($package_ref->tag_is_defined ($name)) {
-	return $package_ref->get_tag ($name);
-    } elsif ($name =~ /^source([0-9]*)$/) {
+    if (defined ($package_ref) and $package_ref->tag_is_defined ($lcname)) {
+	return $package_ref->get_tag ($lcname);
+    } elsif ($lcname =~ /^source([0-9]*)$/) {
 	my $num = $1;
 	if (not defined ($num)) {
 	    $num = 0;
@@ -1012,8 +1286,71 @@ sub get_value_of ($$) {
 	$val =~ s/^.*\/([^\/]*)/$1/;
 	return "%{_sourcedir}/$val";
     } else {
-	return $self->{_defines}->{$name};
+	return $self->eval ($self->{_defines}->{$name});
     }
+}
+
+sub get_def ($$) {
+    my $self = shift;
+    my $name = shift;
+    my $lcname = lc ($name);
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    return $self->{_defines}->{$name};
+}
+
+sub get_sources ($) {
+    my $self = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    my $package_ref = $self->{_packages}[0];
+    my @values = $package_ref->get_array ('source');
+    my $specs_used = $self->{_specs_used};
+    my @spec_names_used = keys %$specs_used;
+    foreach my $spec_name_used (@spec_names_used) {
+	my $spec_used = $self->{_specs_used}->{$spec_name_used};
+	my @sources_used = $$spec_used->get_sources ();
+	push (@values, @sources_used);
+    }
+    return @values;
+}
+
+sub get_patches ($) {
+    my $self = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    my $package_ref = $self->{_packages}[0];
+    my @values = $package_ref->get_array ('patch');
+    my $specs_used = $self->{_specs_used};
+    my @spec_names_used = keys %$specs_used;
+    foreach my $spec_name_used (@spec_names_used) {
+	my $spec_used = $self->{_specs_used}->{$spec_name_used};
+	my @patches_used = $$spec_used->get_patches ();
+	push (@values, @patches_used);
+    }
+    return @values;
+}
+
+sub get_default_topdir () {
+    return $_default_topdir;
 }
 
 init();

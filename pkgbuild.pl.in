@@ -1,5 +1,13 @@
 #!@PERL@
 
+@WARNING_MESSAGE_L1@
+@WARNING_MESSAGE_L2@
+@WARNING_MESSAGE_L3@
+@WARNING_MESSAGE_L4@
+@WARNING_MESSAGE_L5@
+@WARNING_MESSAGE_L6@
+@WARNING_MESSAGE_L7@
+
 #use strict;
 use warnings;
 use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling);
@@ -7,9 +15,11 @@ use rpm_spec;
 
 my $myname = "pkgbuild";
 my $myversion = "@PKGBUILD_VERSION@";
+my $version_printed = 0;
 my $debug_level = 0;
 my $verbose = 1;
 my $build_command;
+my $build_skip = 0;
 my $check_deps = 1;
 
 my $mydir;
@@ -44,15 +54,62 @@ sub init () {
     }
 }
 
+my @predefines = ();
+
+sub add_define ($) {
+    shift;
+    my $def = shift;
+
+    push (@predefines, $def);
+}
+
+my %build_phases = ('p', 'p', 
+		    'c', 'pc',
+		    'i', 'pci',
+		    'b', 'pcib',
+		    'a', 'pciba');
+
+sub short_circuit_option {
+    if (defined ($build_command)) {
+	$build_command = substr($build_command, length($build_command)-1);
+    } else {
+	%build_phases = ('p', 'p',
+			 'c', 'c',
+			 'i', 'i',
+			 'b', 'b',
+			 'a', 'a');
+    }
+}
+
+sub set_build_command ($) {
+    shift;
+    my $key = shift;
+
+    if ($key =~ /^[abicp]$/) {
+	$build_command = $build_phases{$key};
+    } elsif ($key eq 'l') {
+	fatal ("-bl not implemented");
+    } else {
+	fatal ("pkgbuild: --build (-b) requires one of a,b,i,c,p,l as its sole argument");
+    }
+}
+
 sub process_options {
     
     GetOptions ('debug=n'   => \$debug_level,
 		'help'      => \&usage,
 		'version'   => \&print_version,
-		'b=s'       => \$build_command,
-		'ba'        => sub { $build_command = 'a' },
+		'b=s'       => \&set_build_command,
+		'bp'        => sub { $build_command = $build_phases{'p'} },
+		'bl'        => sub { fatal ("-bl not implemented\n") },
+		'bc'        => sub { $build_command = $build_phases{'c'} },
+		'bi'        => sub { $build_command = $build_phases{'i'} },
+		'bb'        => sub { $build_command = $build_phases{'b'} },
+		'ba'        => sub { $build_command = $build_phases{'a'} },
+		'short-circuit' => \&short_circuit_option, 
 		'build=s'   => \$build_command,
 		'deps!'     => \$check_deps,
+		'define=s'  => \&add_define,
 		'v+'        => \$verbose,
 		'rcfile=s'  => sub { print "--rcfile option not implemented\n" },
 		'<>' => \&process_args);
@@ -65,6 +122,7 @@ sub process_args () {
 	print ("Unknown option: $arg\n");
 	exit 1;
     }
+
     if (not defined $mydir) {
 	$mydir = $arg;
 	chdir ($arg);
@@ -74,6 +132,7 @@ sub process_args () {
 }
 
 sub print_version () {
+    $version_printed = 1;
     print "$myname version $myversion\n";
 }
 
@@ -82,23 +141,25 @@ sub usage () {
     print <<_EOF_;
 Copyright (C) 2003 - Sun Microsystems, Inc.
 This may be freely redistributed under the terms of the GNU GPL
- 
-Usage:
-   --help                  - print this message
-   --version               - print the version of rpm being used
+
+* = the option is implemented 
+
+ Usage:
+*  --help                  - print this message
+*  --version               - print the version of rpm being used
    all modes support the following arguments:
       --rcfile <file>      - use <file> instead of /etc/rpmrc and \$HOME/.rpmrc
      -v                    - be a little more verbose
      -vv                   - be incredibly verbose (for debugging)
-    -b<stage> <spec>
+*   -b<stage> <spec>
     -t<stage> <tarball>    - build package, where <stage> is one of:
-          p                - prep (unpack sources and apply patches)
+*         p                - prep (unpack sources and apply patches)
           l                - list check (do some cursory checks on %files)
-          c                - compile (prep and compile)
-          i                - install (prep, compile, install)
-          b                - binary package (prep, compile, install, package)
-          a                - bin/src package (prep, compile, install, package)
-      --short-circuit      - skip straight to specified stage (only for c,i)
+*         c                - compile (prep and compile)
+*         i                - install (prep, compile, install)
+*         b                - binary package (prep, compile, install, package)
+*         a                - bin/src package (prep, compile, install, package)
+*     --short-circuit      - skip straight to specified stage (only for c,i)
       --clean              - remove build tree when done
       --rmsource           - remove sources and spec file when done
       --sign               - generate PGP/GPG signature
@@ -107,6 +168,9 @@ Usage:
                              platform1...platformN.
       --nobuild            - do not execute any stages
       --timecheck <secs>   - set the time check to <secs> seconds (0 disables)
+*     --define "<name> <value>"
+                           - define <name> as <value> as if you had
+			     "%define <name> <value>" in the spec file 
  
     --rebuild <src_pkg>    - install source package, build binary package and
                              remove spec file, sources, patches, and icons.
@@ -130,6 +194,86 @@ sub fatal (@) {
     exit 1;
 }
 
+sub get_versions_installed ($) {
+    my $pkg = shift;
+
+    my @retlist = ();
+    if ($os eq "linux") {
+	my $pkglist=`rpm -q --queryformat '%{VERSION}\t%{RELEASE}\t%{SERIAL}\n' $pkg 2>/dev/null`;
+	if ($? != 0) {
+	    return \@retlist;
+	}
+	my @pkginfos=split /\n/, $pkglist;
+	foreach my $pkginfo (@pkginfos) {
+	    next if not defined ($pkginfo);
+	    if ($pkginfo =~ /^([^\t]*)\t([^\t]*)\t([^\t]*)$/) {
+		push (@retlist, ($1, $2, $3));
+	    } else {
+		print "WARNING: couldn't parse version number of $pkg\n";
+	    }
+	}
+	return \@retlist;
+    } elsif ($os eq "solaris") {
+	my $pkglist=`/usr/bin/pkginfo -l $pkg 2>&1 | grep VERSION: | cut -f2- -d:`;
+	if ($? != 0) {
+	    return \@retlist;
+	}
+	my @pkginfos=split /\n/, $pkglist;
+	foreach my $pkginfo (@pkginfos) {
+	    next if not defined ($pkginfo);
+	    if ($pkginfo =~ /^\s*(.*),REV=(.*)\s*$/) {
+		push (@retlist, ($1, $2, undef));
+	    } else {
+		$pkginfo =~ s/\s*//;
+		push (@retlist, ($pkginfo, undef, undef));
+	    }
+	}
+	return \@retlist;
+    } else {
+	return \@retlist;
+    }   
+}
+
+sub compare_version ($$$$$$$) {
+    my $vers1 = shift;
+    my $rev1 = shift;
+    my $serial1 = shift;
+    my $op = shift;
+    my $vers2 = shift;
+    my $rev2 = shift;
+    my $serial2 = shift;
+
+    if ($op =~ /S$/) {
+	if (not defined ($serial1) or not defined ($serial2)) {
+	    return 0;
+	}
+	my $comp_res = compare_version_string ($serial1, $serial2);
+	if ($op eq "=S") {
+	    if ($serial1 = $serial2) {
+		return 1;
+	    }
+	} elsif ($op eq "<=S" or $op eq "=<S") {
+	} elsif ($op eq ">=S" or $op eq "=>S") {
+	}
+    } else {
+	if (not defined ($version1) or not defined ($version2)) {
+	    return 0;
+	}
+	my $version_comp_res = compare_version_string ($serial1, $serial2);
+	my $rev_comp_res;
+	if ($version_comp_res == 0) {
+	    if (not defined ($version1) or not defined ($version2)) {
+		return 0;
+	    }
+	    my $version_comp_res = compare_version_string ($serial1, $serial2);
+	}
+	if ($op eq "=") {
+	} elsif ($op eq "<=" or $op eq "=<") {
+	} elsif ($op eq ">=" or $op eq "=>") {
+	}
+    }
+}
+
 sub check_dep ($) {
     my $dep = shift;
 
@@ -137,16 +281,61 @@ sub check_dep ($) {
 	return 1;
     }
     my $pkg = $dep;
-    $pkg =~ s/ .*$//;
-
+    $pkg =~ s/\s+.*$//;
     if (not defined ($pkg)) {
-	return 1;
+	print "empty dependency: $dep\n";
+	return 0;
     }
-# TODO: version checking!
+    my $ref_vers;
+    my $ref_rev;
+    my $ref_serial;
+    my $rel_op;
+    if ($dep =~ /^$pkg\s*(=|<=|=<|>=|=>)\s*(\S*),REV=(\S*)\s*$/) {
+	if ($os eq "solaris") {
+	    $rel_op = $1;
+	    $ref_vers = $2;
+	    $ref_rev = $3;
+	} else {
+	    $rel_op = $1;
+	    $ref_vers = "$2,REV=$3";
+	    if ($ref_vers =~ /^([^-]*)-([^-]*)$/) {
+		$ref_vers = $1;
+		$ref_rev = $2;
+	    }
+	}
+    } elsif ($dep =~ /^$pkg\s*(=|<=|=<|>=|=>)\s*(\S*)\s*$/) {
+	$rel_op = $1;
+	$ref_vers = $2;
+	if ($os eq "linux") {
+	    if ($ref_vers =~ /^([^-]*)-([^-]*)$/) {
+		$ref_vers = $1;
+		$ref_rev = $2;
+	    }
+	}
+    } elsif ($dep =~ /^$pkg\s*(=S|<=S|=<S|>=S|=>S)\s*(\S*)\s*$/) {
+	$rel_op = $1;
+	$ref_serial = $2;
+	if ($os eq "solaris") {
+	    print "WARNING: \"Serial\" dependency tests not " .
+		"implemented on Solaris\n";
+	    print "WARNING: ignoring dependency \"$dep\"\n";
+	    return 1;
+	}
+    } elsif ($dep =~ /^$pkg\s*$/) {
+	# no version to compare to, check existance of pkg only
+    } else {
+	print "WARNING: could not parse dependency: $dep\n";
+	return 0;
+    }
+
+
     if ($os eq "linux") {
 	`rpm -q $pkg`;
 	if ($? != 0) {
-	    return 0;
+	    `rpm -q --provides $pkg`;
+	    if ($? != 0) {
+		return 0;
+	    }
 	}
     } elsif ($os eq "solaris") {
 	`/usr/bin/pkginfo -q $pkg`;
@@ -156,6 +345,28 @@ sub check_dep ($) {
     } else {
 	print "WARNING: I don't know how to verify dependency $pkg ".
 	    "on this OS.\n";
+	return 1;
+    }
+
+    if (defined ($ref_vers)) {
+
+	my $version_list_ref = get_versions_installed ($pkg);
+	if (not @$version_list_ref) {
+	    return 0;
+	}
+
+	if ($op =~ /S$/) {
+	    
+	}
+	foreach $vers_ref (@$version_list_ref) {
+	    my ($version, $rev, $serial) = @$vers_ref;
+	    if (compare_version ($ref_vers, $ref_rev, $ref_serial,
+				 $rel_op, 
+				 $version, $rev, $serial)) {
+		return 1;
+	    }
+	}
+	return 0;
     }
 
     return 1;
@@ -167,23 +378,35 @@ sub check_build_requires ($) {
     my @packages = $spec->get_packages ();
 
     foreach my $pkg (@packages) {
-	my @reqs = $pkg->get_array ("buildrequires");
-	foreach my $req (@reqs) {
-	    check_dep ($req) or
-		message ("error: $req is required to build " .
-		$spec), return 0;
+	my @reqss = $pkg->get_array ("buildrequires");
+	foreach my $reqstr (@reqss) {
+	    next if not defined $reqstr;
+	    my @reqs = split /\s*,\s*/, $reqstr;
+	    foreach my $req (@reqs) {
+		check_dep ($req) or
+		    message ("error: $req is required to build " .
+			     $spec), return 0;
+	    }
 	}
-	@reqs = $pkg->get_array ("requires");
-	foreach my $req (@reqs) {
-	    check_dep ($req) or
-		message ("error: $req is required to build " .
-		$spec), return 0;
+	@reqss = $pkg->get_array ("requires");
+	foreach my $reqstr (@reqss) {
+	    next if not defined $reqstr;
+	    my @reqs = split /\s*,\s*/, $reqstr;
+	    foreach my $req (@reqs) {
+		check_dep ($req) or
+		    message ("error: $req is required to build " .
+			     $spec), return 0;
+	    }
 	}
-	@reqs = $pkg->get_array ("prereq");
-	foreach my $req (@reqs) {
-	    check_dep ($req) or
-		message ("error: $req is required to build " .
-		$spec), return 0;
+	@reqss = $pkg->get_array ("prereq");
+	foreach my $reqstr (@reqss) {
+	    next if not defined $reqstr;
+	    my @reqs = split /\s*,\s*/, $reqstr;
+	    foreach my $req (@reqs) {
+		check_dep ($req) or
+		    message ("error: $req is required to build " .
+			     $spec), return 0;
+	    }
 	}
     }
 
@@ -428,6 +651,10 @@ sub get_file_mode ($) {
     my $fname = shift;
 
     $mode = (stat($fname))[2];
+    if (not defined ($mode)) {
+        print "WARNING: could not stat() $fname\n";
+	return "0644";
+    }
     return sprintf("%04o", $mode & 07777);
 }
 
@@ -446,6 +673,8 @@ sub get_file_type ($) {
 	return "b";
     } elsif (-c $fname) {
 	return "c";
+    } else {
+	return "-";
     }
 }
 
@@ -461,6 +690,10 @@ sub get_proto_line ($$$$$) {
     my $group = $def_grp;
 
     my $type = get_file_type ($fname);
+    if ($type eq "-") {
+	return undef;
+    }
+
     $basedir = "$basedir/";
     $basedir =~ s/\/\/*/\//g;
     $basedir = substr ("$basedir", 1);
@@ -508,6 +741,8 @@ sub list_all_files ($) {
 sub get_proto_hash ($) {
     my $package = shift;
 
+    my $has_errors = 0;
+
     my @files = $package->get_files ();
     my %file_info = ();
 
@@ -525,7 +760,8 @@ sub get_proto_hash ($) {
 	next if not $file;
 	my @file_list = glob (substr ("$file", 1));
 	if (not @file_list) {
-	    fatal ("File not found by glob: $buildroot$file");
+	    message ("File not found by glob: $buildroot$file");
+	    $has_errors = 1;
 	}
 	my @attribs = $file->get_attributes ();
 	foreach my $fname (@file_list) {
@@ -536,18 +772,27 @@ sub get_proto_hash ($) {
 		}
 	    }
 	    if (not defined ($file_info{$fname})) {
-		$file_info{$fname} = get_proto_line ($fname, 
-						     $basedir,
-						     $attribs[0],
-						     $attribs[1],
-						     $attribs[2]);
+		my $pline = get_proto_line ($fname, 
+					    $basedir,
+					    $attribs[0],
+					    $attribs[1],
+					    $attribs[2]);
+		if (not defined ($pline)) {
+		    message ("File not found by glob: $buildroot$fname");
+		    $has_errors = 1;
+		}
+		$file_info{$fname} = $pline;
 	    }
 	}
     }
 
     chdir ($cwd);
 
-    return %file_info;
+    if ($has_errors == 1) {
+	return undef;
+    } else {
+	return %file_info;
+    }
 }
 
 sub make_solaris_pkg ($$) {
@@ -559,6 +804,9 @@ sub make_solaris_pkg ($$) {
     my $scr_proto = make_scripts ($spec, $package);
 
     my %files = get_proto_hash ($package);
+    if (not %files) {
+	exit (1);
+    }
 
     my $fhandle = "proto" . ++$file_id;
 
@@ -605,16 +853,19 @@ sub main () {
     process_options ();
     init ();
 
-    if (not defined $build_command or $build_command ne "a") {
-	print "Only the -ba command currently is implemented.\n";
-    }
-
     if (not @spec_names) {
+	if (not defined $build_command and $version_printed) {
+	    exit (0);
+	}
 	fatal ("no spec files given for build");
     }
 
+    if (not defined $build_command) {
+	usage ();
+    }
+
     foreach my $spec_name (@spec_names) {
-	my $spec = new rpm_spec ($spec_name);
+	my $spec = new rpm_spec ($spec_name, \@predefines);
 	if (not defined $spec) {
 	    fatal ("File is not a regular file: $spec_name");
 	}
@@ -630,11 +881,19 @@ sub main () {
 	if ($check_deps) {
 	    check_build_requires ($spec) or exit (1);
 	}
-	do_block ($spec, 'prep') or exit (1);
-	do_block ($spec, 'build') or exit (1);
-	do_block ($spec, 'install') or exit (1);
-	make_packages ($spec) or exit (1);
-	do_block ($spec, 'clean') or exit (1);
+	if ($build_command =~ /p/) {
+	    do_block ($spec, 'prep') or exit (1);
+	}
+	if ($build_command =~ /c/) {
+	    do_block ($spec, 'build') or exit (1);
+	}
+	if ($build_command =~ /i/) {
+	    do_block ($spec, 'install') or exit (1);
+	}
+	if ($build_command =~ /[ba]/) {
+	    make_packages ($spec) or exit (1);
+	    do_block ($spec, 'clean') or exit (1);
+	}
     }
 }
 

@@ -19,6 +19,12 @@ sub new ($$;&) {
     $self->{_parent_spec_ref} = $parent_spec_ref;
     $self->{_tags} = {};
     $self->{_tags}->{release} = 0;
+    my $target = $$parent_spec_ref->{_defines}->{"_target"};
+    if (defined $target) {
+	$self->{_tags}->{buildarchitectures} = $target;
+    } else {
+	$self->{_tags}->{buildarchitectures} = 'i386';
+    }
     $self->{_blocks} = {};
     my @files = ();
     $self->{_files} = \@files;
@@ -98,6 +104,26 @@ sub push_tag ($$$) {
     } else {
 	my $ref = $self->{_tags}->{$tag_name};
 	push (@$ref, $value);
+    }
+}
+
+sub set_ord_tag ($$$$) {
+    my $self = shift;
+    my $tag_name = shift;
+    my $tag_num = shift;
+    my $value = shift;
+
+    if (not defined ($tag_num) or $tag_num eq "") {
+	$tag_num = 0;
+    }
+
+    if (not defined ($self->{_tags}->{$tag_name})) {
+	my @arr = ();
+	$arr[$tag_num] = $value;
+	$self->{_tags}->{$tag_name} = \@arr;
+    } else {
+	my $ref = $self->{_tags}->{$tag_name};
+	$$ref[$tag_num] = $value;
     }
 }
 

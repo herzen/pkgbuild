@@ -1,12 +1,16 @@
-topdir=@TOPDIR@
+topdir = @TOPDIR@
 
-bin_SCRIPTS=pkgbuild
+gen_modules =        rpm_spec.pm
+gen_module_sources = rpm_spec.pm.in
+plain_modules = packagebase.pm  rpm_file.pm  rpm_package.pm
+all_modules = $(gen_modules) $(plain_modules)
 
-pkgbuilddir=$(libdir)/pkgbuild-@PKGBUILD_VERSION@
+pkgbuilddir = $(libdir)/pkgbuild-@PKGBUILD_VERSION@
+pkgbuild_DATA = $(all_modules)
+pkgbuild_SCRIPTS = pkgbuild.pl
+bin_SCRIPTS = pkgbuild
 
-modules=packagebase.pm  rpm_file.pm  rpm_package.pm  rpm_spec.pm
-pkgbuild_DATA=$(modules)
-pkgbuild_SCRIPTS=pkgbuild.pl
+EXTRA_DIST= pkgbuild.spec.in $(plain_modules) $(gen_module_sources)
 
 if ENABLE_STICKY_DIRS
 DIRMODE=1777
