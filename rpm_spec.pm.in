@@ -27,7 +27,7 @@ my $_default_topdir = "@TOPDIR@";
 
 my $all_script_names = "pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun";
 my $all_block_names = "prep|build|install|clean|changelog|$all_script_names";
-my $all_keywords = "$all_block_names|define|patch|setup|files|description|package";
+my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass";
 
 sub init () {
     $arch = `uname -p`;
@@ -95,8 +95,11 @@ sub new ($;$$) {
     $self->{_defines} = {};
     $self->{_specs_used} = {};
     $self->{_blocks} = {};
+    $self->{_classes} = {};
     $self->{_in_conditional} = 0;
     $self->{_parent_spec} = $parent_spec;
+    my @inc;
+    $self->{_includes} = \@inc;
 
     if (defined ($parent_spec)) {
 	my $parent_def_ref = $parent_spec->{_defines};
@@ -855,6 +858,8 @@ sub _process_include ($$$$@) {
     open $inc_fhandle, "<$specdir/$fname" or
 	$self->{error} = "Could not open %include file $specdir/$fname for reading",
 	return (0);
+    my $incref = $self->{_includes};
+    push(@$incref, $fname);
 
     while (1) {
 	$line = $self->_get_next_line ($inc_fhandle);
@@ -891,7 +896,7 @@ sub _process_tag ($$$) {
 		       "sunw_prodname", "sunw_prodvers",
 		       "sunw_category", "sunw_hotline", 
 		       "sunw_maxinst", "vendor", "sunw_rev",
-		       "sunw_copyright",
+		       "sunw_copyright", "sourcepackage",
 		       "buildarchitectures", "buildarch",
 		       "excludearch", "exclusivearch",
 		       "excludeos", "exclusiveos", "prefix",
@@ -899,6 +904,7 @@ sub _process_tag ($$$) {
 		       "sunw_prodname", "sunw_prodvers",
 		       "sunw_category", "sunw_hotline",
 		       "sunw_maxinst", "vendor", "docdir",
+		       "sunw_pkglist", "sunw_loc",
 		       "sunw_copyright");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
 		      "buildconflicts", "prereq", "provides", "buildprereq");
@@ -987,15 +993,30 @@ sub _process_package ($$$) {
     my $fhandle = shift;
     my $line = shift;
 
+    my $mainpkg_ref = \$self->{_packages}[0];
     my $package_name;
 
     if ($line =~ /\s*%[pP][aA][cC][kK][aA][gG][eE]\s+-n\s+(\S+)\s*$/) {
 	$package_name = $1;
     } elsif ($line =~ /\s*%[pP][aA][cC][kK][aA][gG][eE]\s+(\S+)\s*$/) {
-	my $mainpkg_ref = \$self->{_packages}[0];
 	$package_name = $$mainpkg_ref->get_tag ("name") . "-" . $1;
     } else {
 	$self->{error} = "invalid %package directive: $line";
+	return 0;
+    }
+
+    my $pkg = $self->find_package_by_name ($package_name);
+    if (defined ($pkg)) {
+	$self->{error} = "Package already exists: $line";
+	return 0;
+    }
+
+    my $src_pkg_name = $self->get_value_of ("sourcepackage");
+    if (not defined $src_pkg_name) {
+	$src_pkg_name = $$mainpkg_ref->get_tag ("name") . "-src";
+    }
+    if ($src_pkg_name eq $package_name) {
+	$self->{error} = "Package name $package_name clashes with the source package name, use the SourcePackage tag to define a different source package name";
 	return 0;
     }
 
@@ -1119,6 +1140,20 @@ sub _is_number($) {
     }
 }
 
+# <opt def> ::=  ! <defs> | <defs>
+# <defs> ::= <def> <defs> | <def>
+# <def> ::= <char> | <char>: | <char>; | <char># | <char>@
+# !
+#   extra arguments not allowed; no ! means extra arguments are
+#   saved in %macro_opts{argv<n>}  <n>=0..<argc-1>
+# <char>:
+#   argument required after option -<char>
+# <char>;
+#   argument optional after option -<char>
+# <char>#
+#   requires a numeric argument
+# <char>@
+#   option can be used multiple times
 sub _process_macro_opts ($$$$;$$) {
     my $self = shift;
     my $opt_def = shift;
@@ -1224,6 +1259,131 @@ sub _process_macro_opts ($$$$;$$) {
     }
 
     return %macro_opts
+}
+
+sub _check_class ($$) {
+    my $self = shift;
+    my $class_name = shift;
+
+    if (defined ($self->{_classes}->{$class_name}->{iclass}) or
+	defined ($self->{_classes}->{$class_name}->{iclass_file}) or
+	defined ($self->{_classes}->{$class_name}->{rclass}) or
+	defined ($self->{_classes}->{$class_name}->{rclass_file})) {
+	return 1;
+    }
+
+    return 0;
+}
+
+sub get_class_script ($$$) {
+    my $self = shift;
+    my $class_name = shift;
+    my $script_name = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    if (defined ($self->{_classes}->{$class_name})) {
+	if (defined ($self->{_classes}->{$class_name}->{$script_name})) {
+	    return ($self->{_classes}->{$class_name}->{$script_name});
+	}
+	if (defined ($self->{_classes}->{$class_name}->{"${script_name}_file"})) {
+	    my $script_file = $self->eval ("%_sourcedir");
+	    $script_file .= "/" . 
+		$self->{_classes}->{$class_name}->{"${script_name}_file"};
+	    open SCRIPT_FILE, "<$script_file" or
+		$self->{error} = "Could not open class action script file $script_file for reading",
+		return undef;
+	    my @lines = <SCRIPT_FILE>;
+	    close SCRIPT_FILE;
+	    my $script = "";
+	    map $script .= $_, @lines;
+	    return $script;
+	}
+    }
+
+    return undef;
+}
+
+sub _process_class_action ($$$) {
+    my $self = shift;
+    my $fhandle = shift;
+    my $line = shift;
+
+    $line =~ /^%([ir]class)/;
+    my $macro = $1;
+    my %macro_opts = $self->_process_macro_opts ('f:', $line,
+						 $macro);
+    if (defined ($self->{error})) {
+	return 0;
+    }
+
+    if ($macro_opts{argc} != 1) {
+	$self->{error} = "Class name required after %$macro";
+	return 0;
+    }
+
+    my $class_name = $macro_opts{argv0};
+    if (not defined ($self->{_classes}->{$class_name})) {
+	$self->{_classes}->{$class_name} = {};
+    } else {
+	if (defined ($self->{_classes}->{$class_name}->{$macro}) or
+	    defined ($self->{_classes}->{$class_name}->{"${macro}_file"})) {
+	    $self->{error} = "%$macro for class $class_name multiply defined";
+	    return 0;
+	}
+    }
+
+    if (defined ($macro_opts{'f'})) {
+	$self->{_classes}->{$class_name}->{"${macro}_file"} = $macro_opts{'f'};
+	return 1;
+    }
+
+    my $eline;
+    while (1) {
+	$line = $self->_get_next_line ($fhandle);
+	if (not defined($line)) {
+	    last;
+	}
+	my $eline = $self->eval ($line);
+	chomp ($eline);
+
+	if ($eline =~ /^\s*%define/) {
+	    if (not $self->_process_define ($fhandle, $self->_pre_eval ($line))) {
+		return (0);
+	    }
+	} elsif ($eline =~ /^\s*%include/) {
+	    if (not $self->_process_include ($fhandle, $line, 
+					     \&_process_block, 
+					     ($block_name, $package_name))) {
+		return (0);
+	    }
+	} elsif ($eline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_-]*)\.(${all_block_names})/) {
+	    if (defined ($self->{_specs_used}->{$1})) {
+		$self->_process_macro ($1, $2, $3, $macro, $line);
+	    } else {
+		print "WARNING: undefined macro $line\n";
+	    }
+	} elsif (not $line =~ /^%(${all_keywords}|%{?)/) {
+	    if (defined ($self->{_classes}->{$class_name}->{$macro})) {
+		$self->{_classes}->{$class_name}->{$macro} .= "\n" . $eline;
+	    } else {
+		$self->{_classes}->{$class_name}->{$macro} = $eline;
+	    }
+	} else {
+	    return $self->_process_top_level ($fhandle, $line);
+	}
+    }
+	
+    if (defined $self->{error}) {
+        return 0;
+    }
+
+    return 1;
 }
 
 sub _process_macro ($$$$$$) {
@@ -1427,7 +1587,7 @@ sub _process_block ($$$;$$) {
 	}
     }
 
-    if ($block_name ne "changelog") {
+    if (not $block_name =~ /(changelog|[ir]class)/) {
 	$package_ref = undef;
 	my $all_packages = $self->{_packages};
 	foreach $package (@$all_packages) {
@@ -1584,6 +1744,7 @@ sub _process_files ($$$;$) {
     my $is_config = 0;
     my @this_verify = (@all_verify);
     my $is_dir = 0;
+    my $class_name = "none";
 
     $line = $self->_get_next_line ($fhandle);
     if (not defined($line)) {
@@ -1634,6 +1795,14 @@ sub _process_files ($$$;$) {
 	    @this_verify = split /\s+/, $1;
 	    $eline =~ s/^\s*%verify\s*\([^\)]*\)//;
 	    next;
+	} elsif ($eline =~ /^\s*%class\s*\(([^\)]*)\)/) {
+	    $class_name = $1;
+	    if (not $self->_check_class ($class_name)) {
+		$self->{error} = "Undefined class $class_name: $line";
+		return 0;
+	    }
+	    $eline =~ s/^\s*%class\s*\([^\)]*\)//;
+	    next;
 	} elsif ($eline =~ /^\s*%docdir/) {
 	    $is_doc = 1;
 	    $is_dir = 1;
@@ -1646,7 +1815,7 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^\s*(\/.*\S)\s*$/) {
 	    my $file = rpm_file->new ($1, \@this_attr, \@this_verify,
 				     not ($is_dir), $is_doc,
-				     $is_config);
+				     $is_config, $class_name);
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
 	    $self->{error} = "File must begin with \"/\": $1";
@@ -1660,6 +1829,7 @@ sub _process_files ($$$;$) {
 	$is_config = 0;
 	@this_verify = (@all_verify);
 	$is_dir = 0;
+        $class_name = "none";
 
 	$line = $self->_get_next_line ($fhandle);
 	if (not defined($line)) {
@@ -1693,6 +1863,8 @@ sub _process_top_level ($$$) {
 	return $self->_process_include ($fhandle, $line, \&_process_top_level, ());
     } elsif ($eline =~ /^%package/) {
 	return $self->_process_package ($fhandle, $line);
+    } elsif ($eline =~ /^%[ir]class/) {
+	return $self->_process_class_action ($fhandle, $line);
     } elsif ($eline =~ /^%(description|${all_block_names})/) {
 	return $self->_process_block ($fhandle, $line);
     } elsif ($eline =~ /^%files/) {
@@ -1969,7 +2141,7 @@ sub get_sources ($) {
 	my @sources_used = $$spec_used->get_sources ();
 	push (@values, @sources_used);
     }
-    return @values;
+    return _uniq (@values);
 }
 
 sub get_patches ($) {
@@ -1991,11 +2163,117 @@ sub get_patches ($) {
 	my @patches_used = $$spec_used->get_patches ();
 	push (@values, @patches_used);
     }
-    return @values;
+    return _uniq (@values);
+}
+
+sub get_classes ($) {
+    my $self = shift;
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    my @classes = keys %{$self->{_classes}};
+    return @classes;
+}
+
+sub get_class_script_names ($) {
+    my $self= shift;
+    my @scripts;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    foreach my $class_name (keys %{$self->{_classes}}) {
+	if (defined ($self->{_classes}->{$class_name}->{iclass_file})) {
+	    push (@scripts, 
+		  $self->{_classes}->{$class_name}->{iclass_file});
+	}
+	if (defined ($self->{_classes}->{$class_name}->{rclass_file})) {
+	    push (@scripts, 
+		  $self->{_classes}->{$class_name}->{rclass_file});
+	}
+    }
+
+    return @scripts;
+}
+
+sub _uniq (@) {
+    my @arr = @_;
+
+    my %h;
+
+    foreach my $elem (@arr) {
+	next if not defined $elem;
+	$h{$elem} = 1;
+    }
+    return keys %h;
+}
+
+sub get_included_files ($) {
+    my $self = shift;
+    my $incref=$self->{_includes};
+    my @includes = @$incref;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    foreach $used_spec_name (keys %{$self->{_specs_used}}) {
+	next if not defined $used_spec_name;
+	my $used_spec = $self->{_specs_used}->{$used_spec_name};
+	my @more_includes = $$used_spec->get_included_files ();
+	if (@more_includes) {
+	    push (@includes, @more_includes);
+	}
+    }
+    return _uniq (@includes);
+}
+
+sub get_used_spec_files ($) {
+    my $self = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    print "ERROR: " . $self->{error} . "\n";
+	    return undef;
+	}
+    }
+
+    my @used_specs;
+    foreach $used_spec_name (keys %{$self->{_specs_used}}) {
+	next if not defined $used_spec_name;
+	my $used_spec = $self->{_specs_used}->{$used_spec_name};
+	push (@used_specs, $$used_spec->get_file_name ());
+	my @more_used_specs = $$used_spec->get_used_spec_files ();
+	if (@more_used_specs) {
+	    push (@used_specs, @more_used_specs);
+	}
+    }
+    return _uniq (@used_specs);
 }
 
 sub get_default_topdir () {
     return $_default_topdir;
+}
+
+sub get_error ($) {
+    my $self = shift;
+
+    if (defined $self->{error}) {
+	return $self->{error};
+    } else {
+	return "No error.";
+    }
 }
 
 init();

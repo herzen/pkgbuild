@@ -222,6 +222,20 @@ sub get_files ($) {
     return undef;
 }
 
+sub get_classes ($) {
+    my $self = shift;
+
+    my @classes;
+    my %cl;
+    my @files = $self->get_files ();
+    foreach my $file (@files) {
+	next if not defined ($file);
+	$cl{$file->get_class ()} = 1;
+    }
+    @classes = keys %cl;
+    return @classes;
+}
+
 sub get_block ($$) {
     my $self = shift;
     my $block_name = shift;
@@ -233,6 +247,15 @@ sub get_error ($) {
     my $self = shift;
     my $parent_spec = $self->{_parent_spec_ref};
     return $$parent_spec -> {error};
+}
+
+sub get_class_script ($$$) {
+    my $self = shift;
+    my $class_name = shift;
+    my $script_name = shift;
+
+    my $parent_spec = $self->{_parent_spec_ref};
+    return $$parent_spec -> get_class_script ($class_name, $script_name);
 }
 
 sub set_defattr ($$$$) {

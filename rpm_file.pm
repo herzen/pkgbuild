@@ -11,7 +11,7 @@ my @_all_verify =  ('owner', 'group', 'mode', 'md5', 'size', 'maj', 'min',
 		    'symlink', 'mtime');
 
 # Create a new rpm_file object.
-sub new ($$;$$$$$) {
+sub new ($$;$$$$$$) {
     my $class = shift;
     my $glob = shift;
     my $attribs = shift;
@@ -19,6 +19,7 @@ sub new ($$;$$$$$) {
     my $is_recursive = shift;
     my $is_doc = shift;
     my $is_config = shift;
+    my $class_name = shift;
     my $self = {};
 
     if (not @$attribs) {
@@ -54,6 +55,11 @@ sub new ($$;$$$$$) {
     $self->{_is_doc} = $is_doc;
     $self->{_is_config} = $is_config;
     $self->{_is_recursive} = $is_recursive;
+    if (defined ($class_name)) {
+	$self->{_class} = $class_name;
+    } else {
+	$self->{_class} = "none";
+    }
 
     return (bless $self, $class);
 }
@@ -139,6 +145,12 @@ sub get_glob ($) {
     my $self = shift;
 
     return $self->{_glob};
+}
+
+sub get_class ($) {
+    my $self = shift;
+
+    return $self->{_class};
 }
 
 1;

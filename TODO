@@ -1,14 +1,16 @@
- + copyright files
- + allow to change REV
+ # make source packages
+ # support for SUNW_PKGLIST, SUNW_LOC
+ # %class
+ # implement --rebuild
  = %space
- = %class
+ - check package name length, including src pkg name
+ - print an error msg if a %defattr arg is numeric
  - fix version checking
  - handle compressed patches
  = ability to build from CVS
  = generate plain specs and CVS snapshot tarballs
  = wrap rpm on Linux
  = Solaris patch dependency
- = make source packages
  - accept multiple -a and -b options to %setup
  - .rcfile support
 --
@@ -17,6 +19,7 @@ Bugs:
 
  Key:
   ? not confirmed/could not reproduce
-  + recently fixed
+  + recently fixed bug
+  # recently fixed RFE
   - dispatched
   = RFE

@@ -1,3 +1,24 @@
+2004-09-05  Laszlo Peter  <laca@sun.com>
+
+	Version 0.7.0:
+
+	* configure.in: bump version
+
+	* pkgbuild.pl.in: create source packages; implement --rebuild;
+	  implement editable file; include class action scripts; implement
+	  tags "SUNW_LOC" and "SUNW_PKGLIST".
+
+	* rpm_package.pm: implement get_classes and get_class_script
+
+	* rpm_file.pm: implement get_class; new(): add optional arg for
+	  class name
+
+	* rpm_spec.pm.in: define %iclass and %rclass keywords,
+	  "SourcePackage" tag; check for clashes with source package
+	  name; implement get_class_script, get_classes,
+	  get_class_script_names, get_included_files, get_used_spec_files,
+	  get_error
+
 2004-07-22  Laszlo Peter  <laca@sun.com>
 
 	Version 0.6.2:

@@ -57,7 +57,7 @@ sub init () {
 
 my @predefines = ();
 
-sub add_define ($) {
+sub add_define ($$) {
     shift;
     my $def = shift;
 
@@ -68,7 +68,8 @@ my %build_phases = ('p', 'p',
 		    'c', 'pc',
 		    'i', 'pci',
 		    'b', 'pcib',
-		    'a', 'pciba');
+		    'a', 'pciba',
+		    's', 'pcis');
 
 sub short_circuit_option {
     if (defined ($build_command)) {
@@ -78,41 +79,82 @@ sub short_circuit_option {
 			 'c', 'c',
 			 'i', 'i',
 			 'b', 'b',
+			 's', 's',
 			 'a', 'a');
     }
 }
 
-sub set_build_command ($) {
+sub set_build_command ($$) {
     shift;
     my $key = shift;
 
-    if ($key =~ /^[abicp]$/) {
+    if (defined $build_command) {
+	fatal ("only one major mode may be specified");
+    }
+    if ($key =~ /^[abicps]$/) {
 	$build_command = $build_phases{$key};
     } elsif ($key eq 'l') {
 	fatal ("-bl not implemented");
     } else {
-	fatal ("pkgbuild: --build (-b) requires one of a,b,i,c,p,l as its sole argument");
+	fatal ("--build (-b) requires one of a,b,i,c,p,l,s as its sole argument");
     }
 }
 
+sub set_rebuild ($) {
+    shift;
+    my $pkg = shift;
+
+    if (defined $build_command) {
+	fatal ("only one major mode may be specified");
+    }
+    if (not $pkg =~ /^\//) {
+	$pkg = "$mydir/$pkg";
+    }
+    $build_command = $build_phases{'b'};
+    my $main_spec = `grep '^1 s none .*/\.\.main\.spec=' $pkg/pkgmap 2>&1`;
+    if ($? == 0) {
+	chomp ($main_spec);
+	$main_spec =~ s/^1 s none (.*\/)\.\.main\.spec=(.*)/$1$2/;
+	$main_spec = "$pkg/reloc/$main_spec";
+	my $src_topdir = $main_spec;
+	$src_topdir =~ s/\/SPECS\/[^\/]*\.spec$//;
+	add_define (0, "_sourcedir $src_topdir/SOURCES");
+	add_define (0, "_specdir $src_topdir/SPECS");
+	@spec_names = ($main_spec);
+	return 1;
+    }
+
+    if (-l "$pkg/SPECS/..main.spec") {
+	add_define (0, "_sourcedir $pkg/SOURCES");
+	add_define (0, "_specdir $pkg/SPECS");
+	$main_spec = readlink ("$pkg/SPECS/..main.spec");
+	$main_spec = "$pkg/SPECS/$main_spec";
+	@spec_names = ($main_spec);
+	return 1;
+    }
+
+    fatal ("$pkg is not a source package");
+}
+
 sub process_options {
-    
     GetOptions ('debug=n'   => \$debug_level,
 		'help'      => \&usage,
 		'version'   => \&print_version,
 		'b=s'       => \&set_build_command,
-		'bp'        => sub { $build_command = $build_phases{'p'} },
+		'v+'        => \$verbose,
+		'define=s'  => \&add_define,
+		'deps!'     => \$check_deps,
+		'interactive!' => \$interactive_mode,
+		'bp'        => sub { set_build_command (0, 'p'); },
 		'bl'        => sub { fatal ("-bl not implemented\n") },
-		'bc'        => sub { $build_command = $build_phases{'c'} },
-		'bi'        => sub { $build_command = $build_phases{'i'} },
-		'bb'        => sub { $build_command = $build_phases{'b'} },
-		'ba'        => sub { $build_command = $build_phases{'a'} },
+		'bc'        => sub { set_build_command (0, 'c'); },
+		'bi'        => sub { set_build_command (0, 'i'); },
+		'bb'        => sub { set_build_command (0, 'b'); },
+		'ba'        => sub { set_build_command (0, 'a'); },
+		'bs'        => sub { set_build_command (0, 's'); },
+		'rebuild=s' => \&set_rebuild,
 		'short-circuit' => \&short_circuit_option, 
 		'build=s'   => \$build_command,
-		'deps!'     => \$check_deps,
-		'define=s'  => \&add_define,
-		'v+'        => \$verbose,
-		'interactive!' => \$interactive_mode,
 		'rcfile=s'  => sub { print "--rcfile option not implemented\n" },
 		'<>' => \&process_args);
 }
@@ -176,7 +218,7 @@ This may be freely redistributed under the terms of the GNU GPL
                            - define <name> as <value> as if you had
 			     "%define <name> <value>" in the spec file 
  
-    --rebuild <src_pkg>    - install source package, build binary package and
+*   --rebuild <src_pkg>    - install source package, build binary package and
                              remove spec file, sources, patches, and icons.
     --rmsource <spec>      - remove sources and spec file
     --recompile <src_pkg>  - like --rebuild, but don't build any package
@@ -454,7 +496,7 @@ sub get_script_header ($) {
     if ($interactive_mode) {
 	$error_handler = "pkgbuild_start_shell () {\n" .
 	    "  set +x\n" .
-	    "  export PS1='pkgbuild@\\H> '" .
+	    "  export PS1='pkgbuild@\\H> '\n" .
 	    "  echo '*** Command failed; entering interactive mode'\n" .
 	    "  echo '*** starting shell'\n" .
 	    "  echo '*** when finished'\n" .
@@ -592,6 +634,16 @@ sub make_pkginfo ($$) {
     $pkgvers = "1.0" unless $pkgvers;
     print $fhandle "SUNW_PKGVERS=$pkgvers\n";
 
+    my $pkglist = $package->get_tag ('SUNW_PkgList');
+    if (defined ($pkglist)) {
+       print $fhandle "SUNW_PKGLIST=$pkglist\n";
+    }
+
+    my $loc = $package->get_tag ('SUNW_Loc');
+    if (defined ($loc)) {
+       print $fhandle "SUNW_LOC=$loc\n";
+    }
+
     my $category = $package->get_tag ('SUNW_Category');
     if (not defined ($category)) {
 	$category = "application";
@@ -621,17 +673,30 @@ sub make_pkginfo ($$) {
     
     print $fhandle "BASEDIR=$basedir\n";
 
-    print $fhandle "CLASSES=none\n";
+    my @classes = $package->get_classes ();
+    print $fhandle "CLASSES=none";
+    foreach my $class_name (@classes) {
+	next if not defined $class_name;
+	next if $class_name eq "none";
+	print $fhandle " $class_name"
+    }
+    print $fhandle "\n";
 
     close $fhandle;
     return "i pkginfo=$pkginfodir/$fname\n";
 }
 
-sub make_copyright ($$) {
+sub make_copyright ($$;$) {
     my $spec = shift;
     my $package = shift;
+    my $pkgname = shift;
 
-    my $cr_file = $package->get_tag ('sunw_copyright');
+    my $cr_file;
+    if (defined $package) {
+	$cr_file = $package->get_tag ('sunw_copyright');
+    } else {
+	$cr_file = $spec->get_value_of ('sunw_copyright');
+    }
     return undef unless defined $cr_file;
 
     my $srcdir = $spec->eval ('%_sourcedir');
@@ -641,14 +706,17 @@ sub make_copyright ($$) {
     }
 
     my $copyrightdir = $spec->eval ("%_topdir") . "/PKGMAPS/copyright";
-    my $out=`cp "$srcdir/$cr_file" "$copyrightdir/${package}.copyright" 2>&1`;
+    if (defined $package) {
+	$pkgname = "$package";
+    }
+    my $out=`cp "$srcdir/$cr_file" "$copyrightdir/${pkgname}.copyright" 2>&1`;
 
     if ($? != 0) {
 	message ("warning: failed to copy copyright file $srcdir/$cr_file: $out");
 	return undef;
     }
 
-    return "i copyright=$copyrightdir/${package}.copyright\n";
+    return "i copyright=$copyrightdir/${pkgname}.copyright\n";
 }
 
 sub make_depend ($$) {
@@ -731,6 +799,7 @@ sub make_scripts ($$) {
 	    fatal ("failed to create file $scriptdir/$fname");
 	print $fhandle "#!/bin/sh\n\n";
 	print $fhandle "$preun\n";
+	close $fhandle;
 	$retstr = $retstr . "i preremove=$scriptdir/$fname\n";
     }
 
@@ -742,7 +811,36 @@ sub make_scripts ($$) {
 	    fatal ("failed to create file $scriptdir/$fname");
 	print $fhandle "#!/bin/sh\n\n";
 	print $fhandle "$postun\n";
+	close $fhandle;
 	$retstr = $retstr . "i postremove=$scriptdir/$fname\n";
+    }
+
+    my @classes = $package->get_classes ();
+    foreach my $class_name (@classes) {
+	next if not defined $class_name;
+	next if $class_name eq "none";
+	my $script = $package->get_class_script ($class_name, "iclass");
+	if (not defined $script) {
+	    my $err = $package->get_error ();
+	    return undef if defined $err;
+	} else {
+	    open $fhandle, ">$scriptdir/i.$class_name" or
+		fatal ("failed to create file $scriptdir/i.$class_name");
+	    print $fhandle "$script";
+	    close $fhandle;
+	    $retstr = $retstr . "i i.$class_name=$scriptdir/i.$class_name\n";
+	}
+	$script = $package->get_class_script ($class_name, "rclass");
+	if (not defined $script) {
+	    my $err = $package->get_error ();
+	    return undef if defined $err;
+	} else {
+	    open $fhandle, ">$scriptdir/r.$class_name" or
+		fatal ("failed to create file $scriptdir/r.$class_name");
+	    print $fhandle "$script";
+	    close $fhandle;
+	    $retstr = $retstr . "i r.$class_name=$scriptdir/r.$class_name\n";
+	}
     }
 
     return $retstr;
@@ -779,8 +877,9 @@ sub get_file_type ($) {
     }
 }
 
-sub get_proto_line ($$$$$$) {
+sub get_proto_line ($$$$$$$) {
     my $file = shift;
+    my $class_name = shift;
     my $fname = shift;
     my $basedir = shift;
     my $def_mode = shift;
@@ -794,6 +893,10 @@ sub get_proto_line ($$$$$$) {
     my $type = get_file_type ($fname);
     if ($type eq "-") {
 	return undef;
+    }
+
+    if ($class_name ne "none" and $type eq "f") {
+	$type = "e";
     }
 
     if ($type eq 'f' and defined ($file)) {
@@ -823,15 +926,15 @@ sub get_proto_line ($$$$$$) {
 	$group = getgrgid ((stat($fname))[5]);
     }
 
-    if ($type eq 'f' or $type eq 'v') {
-	$protoline = "$type none $relpath=$basedir$relpath $mode $user $group";
+    if ($type eq 'f' or $type eq 'v' or $type eq 'e') {
+	$protoline = "$type $class_name $relpath=$basedir$relpath $mode $user $group";
     } elsif ($type eq 'd') {
-	$protoline = "$type none $relpath $mode $user $group";
+	$protoline = "$type $class_name $relpath $mode $user $group";
     } elsif ($type eq 's') {
 	my $linkpoint = readlink ($fname);
 	$protoline = "$type none $relpath=$linkpoint";
     } elsif ($type =~ /(c|b)/) {
-	fatal ('devices special files not implemented');
+	fatal ('device special files not implemented');
     }
 
     return $protoline;
@@ -880,6 +983,7 @@ sub get_proto_hash ($) {
 	next if not $file;
 	my $fn = "$file";
 	$fn =~ s/^\/+//;
+	my $class_name = $file->get_class ();
 	my @file_list = glob ($fn);
 	if (not @file_list) {
 	    message ("File not found by glob: $buildroot$file");
@@ -903,6 +1007,7 @@ sub get_proto_hash ($) {
 	    }
 	    if (not defined ($file_info{$fname})) {
 		my $pline = get_proto_line ($file,
+					    $class_name,
 					    $fname, 
 					    $basedir,
 					    $attribs[0],
@@ -924,6 +1029,7 @@ sub get_proto_hash ($) {
 		   not defined ($file_info{$parent_dir}) and
 		   not defined ($default_dirs{$parent_dir})) {
 		my $pline = get_proto_line (undef,
+					    "none",
 					    $parent_dir,
 					    $basedir,
 					    $defattr[0],
@@ -961,6 +1067,7 @@ sub make_solaris_pkg ($$) {
     my $pkginfo_proto = make_pkginfo ($spec, $package);
     my $dep_proto = make_depend ($spec, $package);
     my $scr_proto = make_scripts ($spec, $package);
+    return 0 if not defined $scr_proto;
     my $copyright = make_copyright ($spec, $package);
 
     my $files_ref = get_proto_hash ($package);
@@ -1035,6 +1142,163 @@ sub make_packages ($) {
     return 1;
 }
 
+sub make_src_pkginfo ($$) {
+    my $spec = shift;
+    my $pkgname = shift;
+
+    my $fhandle = "pkginfo" . ++$file_id;
+
+    my $pkginfodir = $spec->eval ("%_topdir") . "/PKGMAPS/pkginfo";
+    my $fname = $pkgname . ".pkginfo";
+    open $fhandle, ">$pkginfodir/$fname" or
+	fatal ("failed to create file $pkginfodir/$fname");
+
+    print $fhandle "PKG=" . $pkgname . "\n";
+    my $summary = $spec->get_value_of ('summary');
+    $summary = $pkgname unless defined ($summary);
+    print $fhandle "NAME=$summary - sources\n";
+    print $fhandle "DESC=$summary - sources\n";
+    print $fhandle "ARCH=$arch\n";
+
+    my $prodname = $spec->get_value_of ('SUNW_ProdName');
+    print $fhandle "SUNW_PRODNAME=$prodname\n" if $prodname;
+
+    my $prodvers = $spec->get_value_of ('SUNW_ProdVers');
+    print $fhandle "SUNW_PRODVERS=$prodvers\n" if $prodvers;
+    print $fhandle "SUNW_PKGTYPE=usr\n";
+
+    my $pkgvers = $spec->get_value_of ('SUNW_PkgVers');
+    $pkgvers = "1.0" unless $pkgvers;
+    print $fhandle "SUNW_PKGVERS=$pkgvers\n";
+
+    my $category = $spec->get_value_of ('SUNW_Category');
+    if (not defined ($category)) {
+	$category = "application";
+    }
+    print $fhandle "CATEGORY=$category,SOURCE\n";
+
+    my $vendor = $spec->get_value_of ('Vendor');
+    print $fhandle "VENDOR=$vendor\n" if $vendor;
+
+    my $hotline = $spec->get_value_of ('SUNW_HotLine');
+    print $fhandle "HOTLINE=$hotline\n" if $hotline;
+    print $fhandle "EMAIL=\n";
+
+    my $maxinst = $spec->get_value_of ('SUNW_MaxInst');
+    print $fhandle "MAXINST=$maxinst\n" if $maxinst;
+
+    my $version = $spec->eval ('%version');
+    my $rev = $spec->get_value_of ('SUNW_Rev');
+    if (not defined $rev) {
+	$rev = `date +%Y.%m.%d.%H.%M`;
+    } else {
+	$rev = "$rev." . `date +%Y.%m.%d.%H.%M`;
+    }
+    chomp ($rev);
+    print $fhandle "VERSION=$version,REV=$rev\n";
+    print $fhandle "BASEDIR=/usr\n";
+    print $fhandle "CLASSES=none\n";
+
+    close $fhandle;
+    return "i pkginfo=$pkginfodir/$fname\n";
+}
+
+# source package contents:
+# SOURCES/
+#    Source<1..n>
+#    Patch<1..m>
+#    SUNW_CopyRight
+#    Class action script files
+# SPECS/
+#    $self->{file_name}
+#    %use'd spec files (recursively)
+#    %include'd files (recursively)
+sub make_src_package ($) {
+    my $spec = shift;
+
+    if ($os ne 'solaris') {
+#	return 1;
+    }
+
+    my $base_pkg_name = $spec->get_name ();
+    my $base_pkg_version = $spec->eval ("%version");
+
+    my $src_pkg_name = $spec->get_value_of ("sourcepackage");
+    if (not defined $src_pkg_name) {
+	$src_pkg_name = $base_pkg_name;
+	$src_pkg_name .= "-src";
+    }
+
+    my @sources = $spec->get_sources ();
+
+    my @patches = $spec->get_patches ();
+
+    my $copyright = $spec->get_value_of ("sunw_copyright");
+
+    my @script_files = $spec->get_class_script_names ();
+
+    my @includes = $spec->get_included_files ();
+
+    my $this_spec_file = $spec->get_file_name ();
+    if (not $this_spec_file =~ /^\//) {
+	$this_spec_file = "$mydir/$this_spec_file";
+    }
+
+    my @used_spec_files = $spec->get_used_spec_files ();
+
+    my $pkginfo_line = make_src_pkginfo ($spec, $src_pkg_name);
+    my $copyright_line = make_copyright ($spec, undef, $src_pkg_name);
+
+    my $fhandle = "proto" . ++$file_id;
+
+    my $protodir = $spec->eval ("%_topdir") . "/PKGMAPS/proto";
+    my $fname = $src_pkg_name . ".proto";
+    open $fhandle, ">$protodir/$fname" or
+	fatal ("failed to create file $protodir/$fname");
+
+    print $fhandle $pkginfo_line;
+    if (defined $copyright_line) {
+	print $fhandle $copyright_line;
+    }
+
+    my $srcdir = "share/src/${base_pkg_name}-${base_pkg_version}/SOURCES";
+    my $specdir = "share/src/${base_pkg_name}-${base_pkg_version}/SPECS";
+    print $fhandle "d none share 0755 root sys\n";
+    print $fhandle "d none share/src 0755 root sys\n";
+    print $fhandle "d none share/src/$srcdir 0755 root other\n";
+    print $fhandle "d none $srcdir 0755 root other\n";
+    print $fhandle "d none $specdir 0755 root other\n";
+
+    my $topdir = $spec->eval ("%_topdir");
+    foreach my $fname (@sources, @patches, $copyright, @script_files) {
+	next if not $fname;
+	$fname =~ s/^.*\/([^\/]+)/$1/;
+	print $fhandle "f none $srcdir/$fname=$topdir/SOURCES/$fname 644 root other\n";
+    }
+
+    foreach my $fname (@includes, @used_spec_files) {
+	next if not $fname;
+	$fname =~ s/^.*\/([^\/]+)/$1/;
+ 	print $fhandle "f none $specdir/$fname=$topdir/SPECS/$fname 644 root other\n";
+    }
+    my $base_spec_name = $this_spec_file;
+    $base_spec_name =~ s/^.*\/([^\/]*)$/$1/;
+    print $fhandle "f none $specdir/$base_spec_name=$this_spec_file 644 root other\n";
+    print $fhandle "s none $specdir/..main.spec=$base_spec_name\n";
+    my $sourcedir = $spec->eval ("%_sourcedir");
+    open VERSIONFILE, ">$sourcedir/..pkgbuild" or
+	fatal ("failed to create file $sourcedir/..pkgbuild");
+    print VERSIONFILE "pkgbuild_version=$myversion\n";
+    close VERSIONFILE;
+
+    print $fhandle "f none $specdir/..pkgbuild=$sourcedir/..pkgbuild 444 root other\n";
+
+    close ($fhandle);
+
+    system ("/usr/bin/pkgmk -o -r / -d $topdir/SPKGS -f $protodir/$fname");
+    return (not $?);
+}
+
 sub main () {
     process_options ();
     init ();
@@ -1056,13 +1320,12 @@ sub main () {
 	    fatal ("File is not a regular file: $spec_name");
 	}
 	my $name = $spec->get_value_of ("name");
+	if (defined ($spec->{error})) {
+	    fatal ($spec->{error});
+	}
 	if (not defined($name)) {
-	    if (defined ($spec->{error})) {
-		fatal ($spec->{error});
-	    } else {
-		fatal ("The Name tag is not defined in " .
-		       $spec->get_file_name());
-	    }
+	    fatal ("The Name tag is not defined in " .
+		   $spec->get_file_name());
 	}
 	if ($check_deps) {
 	    check_build_requires ($spec) or exit (1);
@@ -1077,10 +1340,17 @@ sub main () {
 	    do_block ($spec, 'install') or exit (1);
 	}
 	if ($build_command =~ /[ba]/) {
-	    make_packages ($spec) or exit (1);
+	    make_packages ($spec) or 
+		fatal ($spec->get_error ());
+	}
+	if ($build_command =~ /[as]/) {
+	    make_src_package ($spec) or
+		fatal ($spec->get_error ());
+	} 
+	if ($build_command =~ /[bas]/) {
 	    do_block ($spec, 'clean') or exit (1);
 	}
-    }
+   }
 }
 
 main();
