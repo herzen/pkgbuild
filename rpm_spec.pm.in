@@ -13,6 +13,35 @@ sub get_name ($);
 
 use overload ('""' => \&get_name);	  
 
+my $arch;
+my $os;
+my $os_rel;
+
+sub init () {
+    $arch = `uname -p`;
+    chomp ($arch);
+    if ($arch eq "unknown") {
+	$arch = `uname -m`;
+	chomp ($arch);
+	if ($arch eq 'i585') {
+	    $arch = 'i386';
+	} elsif ($arch eq 'i686') {
+	    $arch = 'i386';
+	}
+    }
+
+    $os = `uname -s`;
+    chomp ($os);
+    $os = lc($os);
+    $os_rel = `uname -r`;
+    chomp ($os_rel);
+    if ($os eq 'sunos') {
+	if ($os_rel >= 5) {
+	    $os = 'solaris';
+	}
+    }
+}
+
 # Create a new rpm_spec object.
 # Return undef if the spec_file is not found
 sub new ($) {
@@ -104,7 +133,7 @@ sub eval ($$) {
 	    }
 
 	    if (not defined ($self->{_specs_used}->{$name})) {
-		print "WARNING: undefined tag %$name. Forgotten or mistyped %use?\n";
+		print "WARNING: undefined tag %$name at \"$str\".\nForgotten or mistyped %use?\n";
 		$val = undef;
 	    } else {
 		my $spec_used = $self->{_specs_used}->{$name};
@@ -139,7 +168,7 @@ sub eval ($$) {
 	    }
 
 	    if (not defined ($self->{_specs_used}->{$name})) {
-		print "WARNING: undefined tag %$name. Forgotten or mistyped %use?\n";
+		print "WARNING: undefined tag %$name at \"$str\".\nForgotten or mistyped %use?\n";
 		$val = undef;
 	    } else {
 		my $spec_used = $self->{_specs_used}->{$name};
@@ -280,7 +309,7 @@ sub _process_tag ($$$) {
 		       "url", "group",
 		       "packager", "autoreqprov",
 		       "serial", "nosource", "nopatch",
-		       "sunw_basedir",
+		       "sunw_basedir", "sunw_pkg",
 		       "sunw_prodname", "sunw_prodvers",
 		       "sunw_category", "sunw_hotline", 
 		       "sunw_maxinst", "vendor", "sunw_rev",
@@ -528,6 +557,11 @@ sub _process_macro ($$$$$$) {
 			_get_unpack_commands ($srcname, $macro_opts{'q'});
 		    $macro_expansion = $macro_expansion .
 			"$uncompress %SOURCE$srcnum$unpack\n";
+		    $macro_expansion = $macro_expansion .
+			"STATUS=$?\n" .
+			"if [ $STATUS -ne 0 ]; then\n" .
+			"  exit $STATUS\n" .
+			"fi\n";
 		} else {
 		    print "ERROR: numeric argument required after -a option of %setup\n";
 		}
@@ -549,6 +583,19 @@ sub _process_macro ($$$$$$) {
 		    print "ERROR: numeric argument required after -a option of %setup\n";
 		}
 	    }
+	    if ($os eq "solaris") {
+		$macro_expansion = $macro_expansion . 
+		    "[ `/usr/xpg4/bin/id -u` = 0 ] && /bin/chown -Rhf root .\n";
+		$macro_expansion = $macro_expansion .
+		    "[ `/usr/xpg4/bin/id -u` = 0 ] && /bin/chgrp -Rhf other .\n";
+	    } else {
+		$macro_expansion = $macro_expansion . 
+		    "[ `/usr/bin/id -u` = 0 ] && /bin/chown -Rhf root .\n";
+		$macro_expansion = $macro_expansion .
+		    "[ `/usr/bin/id -u` = 0 ] && /bin/chgrp -Rhf root .\n";
+	    }
+	    $macro_expansion = $macro_expansion .
+		"/bin/chmod -Rf a+rX,g-w,o-w .\n";
 	} elsif ($macro =~ /^patch([0-9]*)/) {
 	    my $num = $macro_opts{'P'};
 	    if (not defined($num)) {
@@ -620,7 +667,11 @@ sub _process_block ($$$;$$) {
 
     if (not defined $self->{_blocks}->{$block_name}) {
 	if ($block_name =~ /(build|install|clean)/) {
-	    $self->{_blocks}->{$block_name} = $self->eval ("cd %{_build_src_dir_name}\n");
+	    my $dirname = $self->eval ("%{_build_src_dir_name}");
+	    if ($dirname eq "%{_build_src_dir_name}") {
+		$dirname = $self->eval ("%name-%version");
+	    }
+	    $self->{_blocks}->{$block_name} = "cd $dirname\n";
 	} else {
 	    $self->{_blocks}->{$block_name} = "";
 	}
@@ -965,4 +1016,5 @@ sub get_value_of ($$) {
     }
 }
 
+init();
 1;

@@ -24,6 +24,9 @@ sub new ($$;$$$$$) {
     if (not @$attribs) {
 	my @new_attribs = ('-', '-', '-');
 	$attribs = \@new_attribs;
+    } else {
+	my @new_attribs = (@$attribs);
+	$attribs = \@new_attribs;
     }
 
     if (not @$verify) {

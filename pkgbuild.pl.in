@@ -6,7 +6,7 @@ use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling);
 use rpm_spec;
 
 my $myname = "pkgbuild";
-my $myversion = "@PKGBUILD_VERSION";
+my $myversion = "@PKGBUILD_VERSION@";
 my $debug_level = 0;
 my $verbose = 1;
 my $build_command;
@@ -133,6 +133,9 @@ sub fatal (@) {
 sub check_dep ($) {
     my $dep = shift;
 
+    if (not defined ($dep)) {
+	return 1;
+    }
     my $pkg = $dep;
     $pkg =~ s/ .*$//;
 
@@ -202,12 +205,13 @@ sub get_script_header ($) {
 	"RPM_DOC_DIR=\"/usr/share/doc/packages/" . $spec . "\"\n" .
         "export RPM_DOC_DIR\n" .
 	"RPM_PACKAGE_NAME=\"" . $spec . "\"\n" .
-	"RPM_PACKAGE_VERSION=\"" . $spec->get_value_of ('version') . "\"\n" .
-	"RPM_PACKAGE_RELEASE=\"" . $spec->get_value_of ('release') . "\"\n" .
+	"RPM_PACKAGE_VERSION=\"" . $spec->eval ('%version') . "\"\n" .
+	"RPM_PACKAGE_RELEASE=\"" . $spec->eval ('%release') . "\"\n" .
 	"export RPM_PACKAGE_NAME RPM_PACKAGE_VERSION RPM_PACKAGE_RELEASE\n" .
 	$spec->eval ("RPM_BUILD_ROOT=\"%buildroot\"") . "\n" .
 	"export RPM_BUILD_ROOT\n\n" .
 	"set -x\n" .
+	"umask 022\n" .
 	"uname -a\n\n";
 
     return $script;
@@ -217,7 +221,7 @@ my $file_id = 0;
 sub open_tempfile ($) {
     my $spec = shift;
 
-    my $tempdir = $spec->get_value_of('tempdir');
+    my $tempdir = $spec->eval('%{_tmppath}');
     if (not defined $tempdir) {
 	$tempdir = "/tmp";
     }
@@ -265,7 +269,9 @@ sub make_pkginfo ($$) {
     open $fhandle, ">$pkginfodir/$fname" or
 	fatal ("failed to create file $pkginfodir/$fname");
 
-    print $fhandle "PKG=" . $package . "\n";
+    my $pkgname = $package->get_tag ('SUNW_Pkg');
+    $pkgname = "$package" unless $pkgname;
+    print $fhandle "PKG=" . $pkgname . "\n";
     print $fhandle "NAME=" . $package->get_tag ('summary') . "\n";
     print $fhandle "DESC=" . $package->get_tag ('summary') . "\n";
     print $fhandle "ARCH=$arch\n";
@@ -274,7 +280,7 @@ sub make_pkginfo ($$) {
     print $fhandle "SUNW_PRODNAME=$prodname\n" if $prodname;
 
     my $prodvers = $package->get_tag ('SUNW_ProdVers');
-    print $fhandle "SUNW_PRODNAME=$prodvers\n" if $prodvers;
+    print $fhandle "SUNW_PRODVERS=$prodvers\n" if $prodvers;
 
     my $basedir = $package->get_tag ('SUNW_BaseDir');
     if (not defined ($basedir)) {
@@ -288,7 +294,8 @@ sub make_pkginfo ($$) {
     }
 
     my $pkgvers = $package->get_tag ('SUNW_PkgVers');
-    print $fhandle "SUNW_PKGVERS=$pkgvers\n" if $pkgvers;
+    $pkgvers = "1.0" unless $pkgvers;
+    print $fhandle "SUNW_PKGVERS=$pkgvers\n";
 
     my $category = $package->get_tag ('SUNW_Category');
     if (not defined ($category)) {
@@ -346,7 +353,8 @@ sub make_depend ($$) {
 	if (not defined ($dep)) {
 	    next;
 	}
-	my $pkgname = `/usr/bin/pkginfo $dep 2>/dev/null | cut -c34-`;
+	my $pkgname = `/usr/bin/pkginfo $dep 2>/dev/null`;
+	$pkgname =~ s/^\S*\s*$dep\s*(\S.*)$/$1/;
 	if ($? != 0) {
 	    message ("warning: could not find out the description of "
 		     . "package $dep", "omitting from depend file");
@@ -609,6 +617,15 @@ sub main () {
 	my $spec = new rpm_spec ($spec_name);
 	if (not defined $spec) {
 	    fatal ("File is not a regular file: $spec_name");
+	}
+	my $name = $spec->get_value_of ("name");
+	if (not defined($name)) {
+	    if (defined ($spec->{error})) {
+		fatal ($spec->{error});
+	    } else {
+		fatal ("The Name tag is not defined in " .
+		       $spec->get_file_name());
+	    }
 	}
 	if ($check_deps) {
 	    check_build_requires ($spec) or exit (1);
