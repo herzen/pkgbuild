@@ -1160,35 +1160,35 @@ sub make_src_pkginfo ($$) {
     print $fhandle "DESC=$summary - sources\n";
     print $fhandle "ARCH=$arch\n";
 
-    my $prodname = $spec->get_value_of ('SUNW_ProdName');
+    my $prodname = $spec->get_value_of ('sunw_prodname');
     print $fhandle "SUNW_PRODNAME=$prodname\n" if $prodname;
 
-    my $prodvers = $spec->get_value_of ('SUNW_ProdVers');
+    my $prodvers = $spec->get_value_of ('sunw_prodvers');
     print $fhandle "SUNW_PRODVERS=$prodvers\n" if $prodvers;
     print $fhandle "SUNW_PKGTYPE=usr\n";
 
-    my $pkgvers = $spec->get_value_of ('SUNW_PkgVers');
+    my $pkgvers = $spec->get_value_of ('sunw_pkgvers');
     $pkgvers = "1.0" unless $pkgvers;
     print $fhandle "SUNW_PKGVERS=$pkgvers\n";
 
-    my $category = $spec->get_value_of ('SUNW_Category');
+    my $category = $spec->get_value_of ('sunw_category');
     if (not defined ($category)) {
 	$category = "application";
     }
     print $fhandle "CATEGORY=$category,SOURCE\n";
 
-    my $vendor = $spec->get_value_of ('Vendor');
+    my $vendor = $spec->get_value_of ('vendor');
     print $fhandle "VENDOR=$vendor\n" if $vendor;
 
-    my $hotline = $spec->get_value_of ('SUNW_HotLine');
+    my $hotline = $spec->get_value_of ('sunw_hotline');
     print $fhandle "HOTLINE=$hotline\n" if $hotline;
     print $fhandle "EMAIL=\n";
 
-    my $maxinst = $spec->get_value_of ('SUNW_MaxInst');
+    my $maxinst = $spec->get_value_of ('sunw_maxinst');
     print $fhandle "MAXINST=$maxinst\n" if $maxinst;
 
     my $version = $spec->eval ('%version');
-    my $rev = $spec->get_value_of ('SUNW_Rev');
+    my $rev = $spec->get_value_of ('sunw_rev');
     if (not defined $rev) {
 	$rev = `date +%Y.%m.%d.%H.%M`;
     } else {

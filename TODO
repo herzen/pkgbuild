@@ -2,6 +2,7 @@
  # support for SUNW_PKGLIST, SUNW_LOC
  # %class
  # implement --rebuild
+ - implement nosource and nopatch
  = %space
  - check package name length, including src pkg name
  - print an error msg if a %defattr arg is numeric
