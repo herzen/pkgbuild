@@ -274,7 +274,8 @@ sub compare_version ($$$$$$$) {
     }
 }
 
-sub check_dep ($) {
+sub check_dep ($$) {
+    my $spec = shift;
     my $dep = shift;
 
     if (not defined ($dep)) {
@@ -328,7 +329,7 @@ sub check_dep ($) {
 	return 0;
     }
 
-    my $subpkg = $self->find_package_by_name ($pkg);
+    my $subpkg = $spec->find_package_by_name ($pkg);
     if (not defined $subpkg) {
 	if ($os eq "linux") {
 	    `rpm -q $pkg`;
@@ -385,7 +386,7 @@ sub check_build_requires ($) {
 	    next if not defined $reqstr;
 	    my @reqs = split /\s*,\s*/, $reqstr;
 	    foreach my $req (@reqs) {
-		check_dep ($req) or
+		check_dep ($spec, $req) or
 		    message ("error: $req is required to build " .
 			     $spec), return 0;
 	    }
@@ -395,7 +396,7 @@ sub check_build_requires ($) {
 	    next if not defined $reqstr;
 	    my @reqs = split /\s*,\s*/, $reqstr;
 	    foreach my $req (@reqs) {
-		check_dep ($req) or
+		check_dep ($spec, $req) or
 		    message ("error: $req is required to build " .
 			     $spec), return 0;
 	    }
@@ -405,7 +406,7 @@ sub check_build_requires ($) {
 	    next if not defined $reqstr;
 	    my @reqs = split /\s*,\s*/, $reqstr;
 	    foreach my $req (@reqs) {
-		check_dep ($req) or
+		check_dep ($spec, $req) or
 		    message ("error: $req is required to build " .
 			     $spec), return 0;
 	    }
