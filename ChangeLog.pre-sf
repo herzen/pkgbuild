@@ -1,3 +1,15 @@
+2004-10-18  Laszlo Peter  <laca@sun.com>
+
+	Version 0.8.1:
+
+	* configure.in: bump version
+
+	* rpm_package.pm: print warning if Source<n> or Patch<n> redefined
+
+	* rpm_spec.pm.in: allow multiple OSs/architectures listed in
+	  %ifos/%ifarch; on Solaris, %ifarch matches any architecture
+	  listed by isainfo; error handling fixes
+
 2004-10-01  Laszlo Peter  <laca@sun.com>
 
 	Version 0.8.0:

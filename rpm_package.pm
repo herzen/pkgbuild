@@ -128,6 +128,12 @@ sub set_ord_tag ($$$$) {
 	$self->{_tags}->{$tag_name} = \@arr;
     } else {
 	my $ref = $self->{_tags}->{$tag_name};
+	if (defined $$ref[$tag_num]) {
+	    my $parent_ref = $self->{_parent_spec_ref};
+	    print "WARNING: " . 
+		$$parent_ref->get_base_file_name() .
+		": $tag_name$tag_num redefined\n";
+	}
 	$$ref[$tag_num] = $value;
     }
 }

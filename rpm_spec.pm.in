@@ -19,7 +19,7 @@ sub get_name ($);
 
 use overload ('""' => \&get_name);	  
 
-my $arch;
+my %arch;
 my $os;
 my $os_rel;
 	      
@@ -31,21 +31,22 @@ my $all_block_names = "prep|build|install|clean|changelog|$all_script_names";
 my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use";
 
 sub init () {
-    $arch = `uname -p`;
-    chomp ($arch);
-    if ($arch eq "unknown") {
-	$arch = `uname -m`;
-	chomp ($arch);
-	if ($arch eq 'i585') {
-	    $arch = 'i386';
-	} elsif ($arch eq 'i686') {
-	    $arch = 'i386';
+    my $arch0 = `uname -p`;
+    chomp ($arch0);
+    if ($arch0 eq "unknown") {
+	$arch0 = `uname -m`;
+	chomp ($arch0);
+	if ($arch0 eq 'i585') {
+	    $arch0 = 'i386';
+	} elsif ($arch0 eq 'i686') {
+	    $arch0 = 'i386';
 	}
     }
+    $arch{$arch0} = 1;
 
     $os = `uname -s`;
     chomp ($os);
-    $os = lc($os);
+    $os = lc ($os);
     $os_rel = `uname -r`;
     chomp ($os_rel);
     if ($os eq 'sunos') {
@@ -57,6 +58,14 @@ sub init () {
     if ($os eq "linux") {
 	$_default_topdir = `rpm -ba $_pkgbuild_libdir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
 	chomp ($_default_topdir);
+    } elsif ($os eq "solaris") {
+	my $isainfo = `/usr/bin/isainfo`;
+	chomp ($isainfo);
+	my @isas = split / /, $isainfo;
+	foreach my $isa (@isas) {
+	    next if not defined $isa;
+	    $arch{$isa} = 1;
+	}
     }
 }
 
@@ -750,6 +759,34 @@ sub _eat_lines ($$) {
     return undef;
 }
 
+sub _match_arch ($) {
+    my $str = shift;
+
+    chomp ($str);
+    my @archs = split /[\s,]+/, $str;
+    foreach my $a (@archs) {
+	next if not defined $a;
+	if (defined ($arch{$a})) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+sub _match_os ($) {
+    my $str = shift;
+
+    chomp ($str);
+    my @oss = split /[\s,]+/, $str;
+    foreach my $o (@oss) {
+	next if not defined $o;
+	if (lc ($o) eq $os) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+
 sub _get_next_line ($$) {
     my $self = shift;
     my $fhandle = shift;
@@ -768,14 +805,14 @@ sub _get_next_line ($$) {
     if ($line =~ /^%if(arch|os|narch|nos)/) {
 	my $cond = 0;
 	
-	if ($line =~ /^%ifarch\s+(\S*)/) {
-	    $cond = ("$arch" eq "$1");
-	} elsif ($line =~ /^%ifnarch\s+(\S*)/) {
-	    $cond = ("$arch" ne "$1");
-	} elsif ($line =~ /^%ifos\s+(\S*)/) {
-	    $cond = ("$os" eq "$1");
-	} elsif ($line =~ /^%ifnos\s+(\S*)/) {
-	    $cond = ("$os" ne "$1");
+	if ($line =~ /^%ifarch\s+(\S.*)/) {
+	    $cond = _match_arch ("$1");
+	} elsif ($line =~ /^%ifnarch\s+(\S.*)/) {
+	    $cond = not _match_arch ("$1");
+	} elsif ($line =~ /^%ifos\s+(\S.*)/) {
+	    $cond = _match_os ("$1");
+	} elsif ($line =~ /^%ifnos\s+(\S.*)/) {
+	    $cond = not _match_os ("$1");
 	}
 
 	++$self->{_in_conditional};
@@ -859,6 +896,7 @@ sub _process_use ($$$) {
 
     $spec->get_value_of ("name");
     if (defined ($spec->{error})) {
+	$self->_set_error ($spec->{error}, $fhandle);
 	return 0;
     }
 
@@ -1994,6 +2032,8 @@ sub _process_top_level ($$$) {
 	$line = $self->_get_next_line ($fhandle);
 	return(1) if not $line;
     }
+    $self->_set_error ("assertion failed in _process_top_level()", $fhandle);
+    return (0);
 }
 
 sub _read_spec ($) {
@@ -2080,7 +2120,7 @@ sub get_packages ($) {
 
     if (! ($self->{_loaded} or $self->{_being_loaded})) {
 	if (not $self->_read_spec ()) {
-	    return undef;
+	    return ();
 	}
     }
 
@@ -2143,6 +2183,7 @@ sub get_rpms ($) {
     my $self = shift;
 
     my @packages = $self->get_packages ();
+    return if defined $self->{error};
     my @rpms = ();
     foreach my $pkg (@packages) {
 	next if not $pkg->has_files ();
@@ -2162,6 +2203,7 @@ sub get_rpm_paths ($) {
     my $self = shift;
 
     my @packages = $self->get_packages ();
+    return if defined $self->{error};
     my @rpms = ();
     foreach my $pkg (@packages) {
 	next if not $pkg->has_files ();
@@ -2183,6 +2225,7 @@ sub get_pkgs ($) {
     my $self = shift;
 
     my @packages = $self->get_packages ();
+    return if defined $self->{error};
     my @pkgs = ();
     foreach my $pkg (@packages) {
 	next if not $pkg->has_files ();
