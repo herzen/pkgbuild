@@ -181,6 +181,7 @@ sub eval ($$) {
 
     $str =~ s/\%{S:([0-9]+)}/%{SOURCE$1}/g;
     $str =~ s/\%{P:([0-9]+)}/%{PATCH$1}/g;
+    $str =~ s/\%\%/#p#E#r#C#e#N#t#/g;
 
     my $repeat_deref = 1;
     while ($repeat_deref) {
@@ -416,7 +417,7 @@ sub _process_use ($$$) {
 
     my $name;
     my $fname;
-    if ($line =~ /\s*%use\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(\S+)\s*$/) {
+    if ($line =~ /\s*%use\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*\S)\s*$/) {
 	$name = $1;
 	$fname = $2;
     } else {
@@ -585,9 +586,14 @@ sub _process_define ($$$) {
 	my $value = $2;
 	$self->{_defines}->{$1} = $2;
 	return 1;
+    } else {
+	my $mname = "";
+	if ($line =~ /\s*%define\s+(\S*)/) {
+	    $mname = $1;
+	}
+	print "Macro %$mname has illegal name (%define)\n";
+	return 0;
     }
-
-    return 0;
 }
 
 sub _process_package ($$$) {
@@ -692,13 +698,50 @@ sub find_package_by_name ($) {
     return undef;
 }
 
-sub _process_macro ($$$$$$) {
+sub _split_opts ($) {
+    my $line = shift;
+    my @tokens = ();
+
+    $line =~ s/^\s*//;
+    $line =~ s/\s*$//;
+    while ($line ne "") {
+	my $tok = "";
+	while ($line =~ /^\S/) {
+	    if ($line =~ /^"((\\"|[^"])*)"/) {
+		$tok = "$tok$1";
+		$line =~ s/^"((\\"|[^"])*)"//;
+	    } elsif ($line =~ /^((\\"|[^\s"])+)/) {
+		$tok = "$tok$1";
+		$line =~ s/^((\\"|[^\s"])+)//;
+	    } else {
+		print "ERROR: assertion failed: _split_opts ($line)\n"
+	    }
+	}
+	$tok =~ s/\\"/"/g;
+	@tokens = (@tokens, $tok);
+	$line =~ s/^\s*//;
+    }
+
+    return @tokens;
+}
+
+sub _is_number($) {
+    my $number = shift;
+
+    if( $number =~ /\D/ ) {
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+sub _process_macro_opts ($$$$;$$) {
     my $self = shift;
+    my $opt_def = shift;
+    my $line = shift;
+    my $macro = shift;
     my $name = shift;
     my $package = shift;
-    my $macro = shift;
-    my $block_name = shift;
-    my $line = shift;
 
     my %macro_opts;
     my $opt_line = $line;
@@ -714,17 +757,78 @@ sub _process_macro ($$$$$$) {
 	$opt_line =~ s/\s*%$macro(\s*)/$1/;
 	$opt_line =~ s/\s*%{$macro}(\s*)/$1/;
     }
-    my @opts = split /\s+-/, $opt_line;
-    foreach my $opt (@opts) {
-	$opt =~ s/\s*$//;
-	if ($opt =~ /(\S+)\s+(.*)/) {
-	    $macro_opts{$1}=$2;
-	} elsif ($opt =~ /([a-zA-Z])([0-9]+)/) {
-	    $macro_opts{$1}=$2;	    
+    $macro_opts{argc} = 0;
+    my @tokens = _split_opts ($opt_line);
+    my $opt_name;
+    while (@tokens) {
+	my $token = shift (@tokens);
+	if ($token =~ /^-([A-Za-z])$/) {
+	    my $opt = $1;
+	    if ($opt_def =~ /$opt:/) {
+		my $arg = shift (@tokens);
+		if (not defined ($arg)) {
+		    $self->{error} = "need arg to %$macro $token";
+		    return %macro_opts;
+		}
+		$macro_opts{$opt} = $arg;
+	    } elsif ($opt_def =~ /$opt;/) {
+		$macro_opts{$opt} = '';
+		if (defined ($tokens[0]) and
+		    not $tokens[0] =~ /^-\S$/) {
+		    my $arg = shift (@tokens);
+		    $macro_opts{$opt} = $arg;
+		}
+	    } elsif ($opt_def =~ /$opt\#/) {
+		$macro_opts{$opt} = '';
+		my $arg = shift (@tokens);
+		if (not defined ($arg)) {
+		    $self->{error} = "need arg to %$macro $token";
+		    return %macro_opts;
+		}
+		if (! _is_number ($arg)) {
+		    $self->{error} = "Bad arg to %$macro $token: $arg";
+		    return %macro_opts;
+		}
+		$macro_opts{$opt} = $arg;
+	    } elsif ($opt_def =~ /$opt@/) {
+		my $arg = shift (@tokens);
+		if (not defined ($arg)) {
+		    $self->{error} = "need arg to %$macro $token";
+		    return %macro_opts;
+		}
+		if (not defined ($macro_opts{$opt})) {
+		    $macro_opts{$opt} = $arg;
+		} else {
+		    $macro_opts{$opt} = $macro_opts{$opt} . "\n" . $arg;
+		}
+	    } elsif ($opt_def =~ /$opt/) {
+		$macro_opts{$opt} = '';
+	    } else {
+		chomp($line);
+		$self->{error} = "Bad option $token: $line";
+		return %macro_opts;
+	    }
 	} else {
-	    $macro_opts{$opt} = '';
+	    if (not $opt_def =~ /^!/) {
+		my $argc = $macro_opts{argc}++;
+		$macro_opts{"argv$argc"} = $token;
+	    } else {
+		$self->{error} = "Bad arg to %$macro: $token";
+		return %macro_opts;
+	    }
 	}
     }
+
+    return %macro_opts
+}
+
+sub _process_macro ($$$$$$) {
+    my $self = shift;
+    my $name = shift;
+    my $package = shift;
+    my $macro = shift;
+    my $block_name = shift;
+    my $line = shift;
 
     my $macro_expansion = '';
 
@@ -749,11 +853,21 @@ sub _process_macro ($$$$$$) {
 	if (not defined ($scriptlet)) {
 	    $scriptlet = "";
 	}
+	my %macro_opts = $self->_process_macro_opts ('!d:', $line,
+						     $macro, $name, $package);
+	if (defined ($self->{error})) {
+	    return 0;
+	}
 	if (defined ($macro_opts{'d'})) {
 	    $scriptlet = "cd %{_builddir}/$macro_opts{'d'}\n${scriptlet}\ncd ..";
 	}
 	if ($macro eq "prep") {
 	    $scriptlet = "cd %{_builddir}\n$scriptlet\n";
+	    if (not defined ($spec->{_defines}->{_build_src_dir_name}) and
+	        defined ($$spec_used->{_defines}->{_build_src_dir_name})) {
+		$spec->{_defines}->{_build_src_dir_name} =
+		    $$spec_used->{_defines}->{_build_src_dir_name};
+	    }
 	}
 	$macro_expansion = $scriptlet;
     } else {
@@ -762,7 +876,12 @@ sub _process_macro ($$$$$$) {
 	    if ($num eq "") {
 		$num = 0;
 	    }
-
+	    
+	    my %macro_opts = $self->_process_macro_opts ('!n:DcTqb#a#', $line,
+							 $macro, $name, $package);
+	    if (defined ($self->{error})) {
+		return 0;
+	    }
 	    my $dirname = "%name-%version";
 	    if (defined ($macro_opts{'n'})) {
 		$dirname = $macro_opts{'n'};
@@ -771,7 +890,7 @@ sub _process_macro ($$$$$$) {
 		$self->{_defines}->{_build_src_dir_name} = $dirname;
 	    }
 	    $macro_expansion = "";
-
+	    
 	    if (not defined ($macro_opts{'D'})) {
 		$macro_expansion = $macro_expansion . "rm -rf $dirname\n";
 	    }
@@ -790,40 +909,31 @@ sub _process_macro ($$$$$$) {
 	    }
 	    if (defined ($macro_opts{'b'})) {
 		my $srcnum = $macro_opts{'b'};
-		if ($srcnum =~ /^[0-9]+$/) {
-		    my $srcname = $self->eval("%SOURCE$srcnum");
-		    my $uncompress;
-		    my $unpack;
-		    ($uncompress, $unpack) = 
-			_get_unpack_commands ($srcname, $macro_opts{'q'});
-		    $macro_expansion = $macro_expansion .
-			"$uncompress %SOURCE$srcnum$unpack\n";
-		    $macro_expansion = $macro_expansion .
-			"STATUS=\$?\n" .
-			"if [ \$STATUS -ne 0 ]; then\n" .
-			"  exit \$STATUS\n" .
-			"fi\n";
-		} else {
-		    $self->{error} = "numeric argument required after -a option of %setup\n";
-		    return (0);
-		}
+		my $srcname = $self->eval("%SOURCE$srcnum");
+		my $uncompress;
+		my $unpack;
+		($uncompress, $unpack) = 
+		    _get_unpack_commands ($srcname, $macro_opts{'q'});
+		$macro_expansion = $macro_expansion .
+		    "$uncompress %SOURCE$srcnum$unpack\n";
+		$macro_expansion = $macro_expansion .
+		    "STATUS=\$?\n" .
+		    "if [ \$STATUS -ne 0 ]; then\n" .
+		    "  exit \$STATUS\n" .
+		    "fi\n";
 	    }
 	    if (not defined ($macro_opts{'c'})) {
 		$macro_expansion = $macro_expansion . "cd $dirname\n";
 	    }
 	    if (defined ($macro_opts{'a'})) {
 		my $srcnum = $macro_opts{'a'};
-		if ($srcnum =~ /^[0-9]+$/) {
-		    my $srcname = $self->eval("%SOURCE$srcnum");
-		    my $uncompress;
-		    my $unpack;
-		    ($uncompress, $unpack) = 
-			_get_unpack_commands ($srcname, $macro_opts{'q'});
-		    $macro_expansion = $macro_expansion .
-			"$uncompress %SOURCE$srcnum$unpack\n";
-		} else {
-		    print "ERROR: numeric argument required after -a option of %setup\n";
-		}
+		my $srcname = $self->eval("%SOURCE$srcnum");
+		my $uncompress;
+		my $unpack;
+		($uncompress, $unpack) = 
+		    _get_unpack_commands ($srcname, $macro_opts{'q'});
+		$macro_expansion = $macro_expansion .
+		    "$uncompress %SOURCE$srcnum$unpack\n";
 	    }
 	    if ($os eq "solaris") {
 		$macro_expansion = $macro_expansion . 
@@ -839,12 +949,18 @@ sub _process_macro ($$$$$$) {
 	    $macro_expansion = $macro_expansion .
 		"/bin/chmod -Rf a+rX,g-w,o-w .\n";
 	} elsif ($macro =~ /^patch([0-9]*)/) {
+	    my $pnum = $1;
+	    my %macro_opts = $self->_process_macro_opts ('!P#p#Eb:', $line,
+							 $macro, $name, $package);
+	    if (defined ($self->{error})) {
+		return 0;
+	    }
 	    my $num = $macro_opts{'P'};
 	    if (not defined($num) or $num eq "") {
-		if (not defined ($1)) {
+		if (not defined ($pnum)) {
 		    $num = 0;
 		} else {
-		    $num = $1;
+		    $num = $pnum;
 		}
 	    }
 	    if ($num eq "") {
@@ -981,35 +1097,60 @@ sub _process_block ($$$;$$) {
     return 1;
 }
 
+sub load_metafile ($$$) {
+    my $self = shift;
+    my $fname = shift;
+    my $package_name = shift;
+    
+    my $mf_fhandle = "SPEC_FILE" . $file_id++;
+    my $dirname = $self->eval ("%{_builddir}/%{_build_src_dir_name}");
+    open $mf_fhandle, "<$dirname/$fname" or
+	$self->{error} = "Could not open %files file $dirname/$fname for reading",
+	return (0);
+    return $self->_process_files ($mf_fhandle, undef, $package_name);
+}
+
 sub _process_files ($$$;$) {
     my $self = shift;
     my $fhandle = shift;
     my $line = shift;
     my $package_name = shift;
 
-# TODO: %files -f not implemented!
+    my $package_ref;
 
-    my $package_ref = $self->{_packages}[0];
-    if (not defined($package_name)) {
-	if ($line =~ /^\s*%files\s+-n\s+(\S+)\s*$/) {
-	    $package_name = $1;
-	} elsif ($line =~ /^\s*%files\s+(\S+)\s*$/) {
-	    $package_name = $package_ref->get_name() . "-" . $1;
-	} else {
-	    $package_name = $package_ref->get_name();
+    if (defined $line) {
+	my %macro_opts = $self->_process_macro_opts ('n:f@', $line, "files");
+	if (defined ($self->{error})) {
+	    return 0;
 	}
-    }
-
-    $package_ref = undef;
-    my $all_packages = $self->{_packages};
-    foreach $package (@$all_packages) {
-	if ($package->get_name() eq $package_name) {
-	    $package_ref = $package;
+	$package_ref = $self->{_packages}[0];
+	if (not defined($package_name)) {
+	    if ($line =~ /^\s*%files\s+-n\s+(\S+)\s*$/) {
+		$package_name = $1;
+	    } elsif ($line =~ /^\s*%files\s+(\S+)\s*$/) {
+		$package_name = $package_ref->get_name() . "-" . $1;
+	    } else {
+		$package_name = $package_ref->get_name();
+	    }
 	}
+	$package_ref = undef;
+	$package_ref = $self->find_package_by_name ($package_name);
+	if (defined ($macro_opts{"f"}) and defined ($package_ref)) {
+	    my @metafiles = split /\n/, $macro_opts{"f"};
+	    foreach my $mf (@metafiles) {
+		$package_ref->add_metafile ($mf);
+	    }
+	}
+    } else {
+	if (not defined ($package_name)) {
+	    print "ERROR: assertion failed: _process_files: \$line or \$package_name must be defined\n";
+	    return 0;
+	}
+	$package_ref = $self->find_package_by_name ($package_name);
     }
 
     if (not defined ($package_ref)) {
-	$self->{error} = "Package $package_name not defined in $line";
+	$self->{error} = "Undefined package $package_name";
 	return 0;
     }
 

@@ -28,6 +28,8 @@ sub new ($$;&) {
     $self->{_blocks} = {};
     my @files = ();
     $self->{_files} = \@files;
+    my @metafiles = ();
+    $self->{_metafiles} = \@metafiles;
 
     # initialisation
     if (defined ($name)) {
@@ -65,6 +67,8 @@ sub new_subpackage ($$$) {
     $self->{_blocks} = {};
     my @files = ();
     $self->{_files} = \@files;
+    my @metafiles = ();
+    $self->{_metafiles} = \@metafiles;
 
     return (bless $self, $class);
 }
@@ -182,11 +186,35 @@ sub add_file ($$) {
     push (@$files, $file);
 }
 
+sub add_metafile ($$) {
+    my $self = shift;
+    my $fname = shift;
+
+    if (defined ($self->{_metafiles_loaded}) and
+	$self->{_metafiles_loaded}) {
+	return 0;
+    }
+    my $metafiles = $self->{_metafiles};
+    push (@$metafiles, $fname);
+    $self->{_metafiles_loaded} = 0;
+    return 1;
+}
+
 sub get_files ($) {
     my $self = shift;
 
+    my $metafiles = $self->{_metafiles};
+    if (@$metafiles and not $self->{_metafiles_loaded}) {
+	my $parent_spec_ref = $self->{_parent_spec_ref};
+	foreach my $metafile (@$metafiles) {
+	    $$parent_spec_ref->load_metafile ($metafile, "$self") 
+		or return undef;
+	}
+	$self->{_metafiles_loaded} = 1;
+    }
     my $files = $self->{_files};
     return @$files if $files;
+    print "WARNING: %files missing for package $self\n";
     return undef;
 }
 
@@ -195,6 +223,12 @@ sub get_block ($$) {
     my $block_name = shift;
 
     return $self->{_blocks}->{$block_name};
+}
+
+sub get_error ($) {
+    my $self = shift;
+    my $parent_spec = $self->{_parent_spec_ref};
+    return $$parent_spec -> {error};
 }
 
 1;

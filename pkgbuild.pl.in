@@ -373,7 +373,7 @@ sub check_dep ($$) {
 	    return 0;
 	}
 
-	if ($op =~ /S$/) {
+	if ($rel_op =~ /S$/) {
 #FIXME	    
 	}
 	foreach $vers_ref (@$version_list_ref) {
@@ -767,6 +767,16 @@ sub get_proto_hash ($) {
     my $has_errors = 0;
 
     my @files = $package->get_files ();
+    my $error = $package->get_error ();
+    if (defined ($error)) {
+	print "ERROR: $error\n";
+	return undef;
+    }
+    if (not @files) {
+        my %empty_hash;
+	return \%empty_hash;
+    }
+
     my %file_info = ();
 
     my $cwd = `pwd`;
@@ -788,6 +798,10 @@ sub get_proto_hash ($) {
 	}
 	my @attribs = $file->get_attributes ();
 	foreach my $fname (@file_list) {
+	    if (defined ($file_info{$fname})) {
+		message ("File listed twice: $fname");
+		$has_errors = 1;
+	    }
 	    if (-d $fname) {
 		if ($file->is_recursive()) {
 		    my @files_in_dir = list_all_files ($fname);
@@ -805,6 +819,9 @@ sub get_proto_hash ($) {
 		    $has_errors = 1;
 		}
 		$file_info{$fname} = $pline;
+		if (defined ($all_files{$fname})) {
+		    print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
+		}
 	    }
 	}
     }
@@ -812,12 +829,13 @@ sub get_proto_hash ($) {
     chdir ($cwd);
 
     if ($has_errors == 1) {
-        my %empty_hash;
-	return %empty_hash;
+	return undef;
     } else {
-	return %file_info;
+	return \%file_info;
     }
 }
+
+my %all_files;
 
 sub make_solaris_pkg ($$) {
     my $spec = shift;
@@ -827,9 +845,16 @@ sub make_solaris_pkg ($$) {
     my $dep_proto = make_depend ($spec, $package);
     my $scr_proto = make_scripts ($spec, $package);
 
-    my %files = get_proto_hash ($package);
-    if (not %files) {
+    my $files_ref = get_proto_hash ($package);
+    if (not defined ($files_ref)) {
 	exit (1);
+    }
+    my %files = %$files_ref;
+    foreach my $file (keys %files) {
+	$all_files{$file} = "$package";
+    }
+    if (not %files) {
+	print "WARNING: empty package: $package\n";
     }
 
     my $fhandle = "proto" . ++$file_id;
@@ -860,15 +885,31 @@ sub make_packages ($) {
     my $spec = shift;
 
     if ($os ne 'solaris') {
-	return 1;
+#	return 1;
     }
 
     my @packages = $spec->get_packages ();
 
     foreach my $pkg (@packages) {
-	make_solaris_pkg ($spec, $pkg);
+	make_solaris_pkg ($spec, $pkg) or return 0;
     }
-    
+
+    my $buildroot = $spec->eval ("%buildroot");
+    my $old_cwd = `pwd`;
+    chdir ($buildroot);
+    my @all_fnames = list_all_files (".");
+    my $unpackaged = 0;
+    foreach my $fname (@all_fnames) {
+	$fname = substr ($fname, 2);
+	if (not defined ($all_files{$fname})) {
+	    if (not $unpackaged) {
+		$unpackaged = 1;
+		print "WARNING: the following files are not included in any packages:\n"
+	    }
+	    print "        /$fname\n";
+	}
+    }
+    chdir ($old_cwd);
     
     return 1;
 }

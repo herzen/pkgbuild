@@ -10,7 +10,7 @@ use overload ('""' => \&get_glob);
 my @_all_verify =  ('owner', 'group', 'mode', 'md5', 'size', 'maj', 'min',
 		    'symlink', 'mtime');
 
-# Create a new rpm_package object.
+# Create a new rpm_file object.
 sub new ($$;$$$$$) {
     my $class = shift;
     my $glob = shift;

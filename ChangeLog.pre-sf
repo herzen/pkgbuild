@@ -1,3 +1,16 @@
+2004-03-09  Laca  <laca@sun.com>
+
+	Version 0.3.6:
+
+	- allow escaping % as %%
+	- print warning if no %files section exists for a subpackage
+	- print warning if the package is empty
+	- print warning with the list of unpackaged files
+	- print warning if a file is included in multiple subpackages
+	- print warning for invalid macro names in %define
+	- parse macro options properly
+	- implement %files -f
+
 2004-03-04  Laca  <laca@sun.com>
 
 	Version 0.3.5 bug fixes:
