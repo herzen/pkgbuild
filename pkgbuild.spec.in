@@ -38,10 +38,8 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %{?build_user:%{?build_group:%defattr (-, %build_user, %build_group)}}
-%dir %attr (0755, root, bin) %{_bindir}
-%attr (0755, root, bin) %{_bindir}/*
-%dir %attr (0755, root, bin) %{_libdir}
-%attr (0755, root, bin) %{_libdir}/*
+%attr (0755, root, bin) %{_bindir}
+%attr (0755, root, bin) %{_libdir}
 %{pkgbuild_topdir}
 
 %changelog

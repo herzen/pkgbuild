@@ -30,6 +30,8 @@ sub new ($$;&) {
     $self->{_files} = \@files;
     my @metafiles = ();
     $self->{_metafiles} = \@metafiles;
+    my @defattr = ('-', '-', '-');
+    $self->{_defattr} = \@defattr;
 
     # initialisation
     if (defined ($name)) {
@@ -69,6 +71,8 @@ sub new_subpackage ($$$) {
     $self->{_files} = \@files;
     my @metafiles = ();
     $self->{_metafiles} = \@metafiles;
+    my @defattr = ('-', '-', '-');
+    $self->{_defattr} = \@defattr;
 
     return (bless $self, $class);
 }
@@ -229,6 +233,23 @@ sub get_error ($) {
     my $self = shift;
     my $parent_spec = $self->{_parent_spec_ref};
     return $$parent_spec -> {error};
+}
+
+sub set_defattr ($$$$) {
+    my $self = shift;
+    my $mode = shift;
+    my $user = shift;
+    my $group = shift;
+
+    my $defattr_ref = $self->{_defattr};
+    @$defattr_ref = ($mode, $user, $group);
+}
+
+sub get_defattr ($) {
+    my $self = shift;
+    
+    my $defattr_ref = $self->{_defattr};
+    return @$defattr_ref;
 }
 
 1;

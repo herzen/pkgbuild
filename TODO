@@ -3,10 +3,12 @@
  - wrap rpm on Linux
  - check versions in dependencies
  - Solaris patch dependency
- - %(command)
+ + %(command)
  - %config (missing_ok)
  - make source packages
-
+ - %config (nocheck(?))
+ - multiple -a and -b options to %setup
+ - .rcfile support
 --
 
 Bugs:

@@ -20,6 +20,7 @@ my $debug_level = 0;
 my $verbose = 1;
 my $build_command;
 my $build_skip = 0;
+my $interactive_mode = 0;
 my $check_deps = 1;
 
 my $mydir;
@@ -111,6 +112,7 @@ sub process_options {
 		'deps!'     => \$check_deps,
 		'define=s'  => \&add_define,
 		'v+'        => \$verbose,
+		'interactive!' => \$interactive_mode,
 		'rcfile=s'  => sub { print "--rcfile option not implemented\n" },
 		'<>' => \&process_args);
 }
@@ -147,6 +149,8 @@ This may be freely redistributed under the terms of the GNU GPL
  Usage:
 *  --help                  - print this message
 *  --version               - print the version of rpm being used
+*  --interactive           - start a shell in the build directory if fails
+                             and allow to continue after the shell terminates
    all modes support the following arguments:
       --rcfile <file>      - use <file> instead of /etc/rpmrc and \$HOME/.rpmrc
      -v                    - be a little more verbose
@@ -436,8 +440,28 @@ sub check_build_requires ($) {
 sub get_script_header ($) {
     my $spec = shift;
 
+    my $error_handler = "";
+    if ($interactive_mode) {
+	$error_handler = "pkgbuild_start_shell () {\n" .
+	    "  set +x\n" .
+	    "  echo '*** Command failed; entering interactive mode'\n" .
+	    "  echo '*** starting shell'\n" .
+	    "  echo '*** when finished'\n" .
+	    "  echo '***     type   exit      to continue'\n" .
+	    "  echo '***     type   exit 1    to abort'\n" .
+	    "\n" .
+	    "  \${SHELL:-/bin/bash} || exit 1\n" .
+	    "\n" .
+	    "  set -x\n" .
+	    "}\n" .
+	    "\n" .
+	    "trap pkgbuild_start_shell ERR\n" .
+	    "\n";
+    } else {
+	$error_handler = "set -e\n\n";
+    }
     my $script = "#!/bin/bash\n\n" .
-	"set -e\n\n" .
+	$error_handler .
 	$spec->eval ("RPM_SOURCE_DIR=\"%{_sourcedir}\"") . "\n" .
 	$spec->eval ("RPM_BUILD_DIR=\"%{_builddir}\"") . "\n" .
 	$spec->eval ("RPM_OPT_FLAGS=\"%{optflags}\"") . "\n" .
@@ -494,9 +518,13 @@ sub do_block ($$) {
     close $fhandle;
     my $retval;
 
+    print "Executing(%$block_name): /bin/bash $script_name\n";
     system ("/bin/bash $script_name");
     $retval = $?;
     unlink $script_name;
+    if ($retval) {
+	print "Bad exit status from $script_name (%$block_name)\n";
+    }
 
     return (not $retval);
 }
@@ -770,6 +798,7 @@ sub get_proto_hash ($) {
 
     my @files = $package->get_files ();
     my $error = $package->get_error ();
+    my @defattr = $package->get_defattr ();
     if (defined ($error)) {
 	print "ERROR: $error\n";
 	return undef;
@@ -780,6 +809,7 @@ sub get_proto_hash ($) {
     }
 
     my %file_info = ();
+    my %default_dirs = ();
 
     my $cwd = `pwd`;
     chomp ($cwd);
@@ -812,7 +842,7 @@ sub get_proto_hash ($) {
 	}
 	@file_list = (@file_list, @rec_list);
 	foreach my $fname (@file_list) {
-	    if (defined ($file_info{$fname}) and not -d $fname) {
+	    if (defined ($file_info{$fname})) {
 		message ("File listed twice: $fname");
 		$has_errors = 1;
 	    }
@@ -831,10 +861,31 @@ sub get_proto_hash ($) {
 		    print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
 		}
 	    }
+	    my $parent_dir = $fname;
+	    $parent_dir =~ s/\/[^\/]+$//;
+	    while ($parent_dir ne "" and
+		   not defined ($file_info{$parent_dir}) and
+		   not defined ($default_dirs{$parent_dir})) {
+		my $pline = get_proto_line ($parent_dir,
+					    $basedir,
+					    $defattr[0],
+					    $defattr[1],
+					    $defattr[2]);
+		if (defined ($pline)) {
+		    $default_dirs{$parent_dir} = $pline;
+		}
+		$parent_dir =~ s/\/[^\/]+$//;
+	    }
 	}
     }
 
     chdir ($cwd);
+
+    foreach my $dirname (keys %default_dirs) {
+	if (not defined ($file_info{$dirname})) {
+	    $file_info{$dirname} = $default_dirs{$dirname}
+	}
+    }
 
     if ($has_errors == 1) {
 	return undef;
@@ -875,7 +926,7 @@ sub make_solaris_pkg ($$) {
     print $fhandle $pkginfo_proto;
     print $fhandle $dep_proto;
     print $fhandle $scr_proto;
-    foreach my $fname (keys %files) {
+    foreach my $fname (sort (keys %files)) {
 	next if not $fname;
 	print $fhandle $files{$fname};
 	print $fhandle "\n";

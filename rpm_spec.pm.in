@@ -138,6 +138,25 @@ sub new ($;$$) {
 	$self->{_defines}->{_sourcedir} = "%{_topdir}/SOURCES";
 	$self->{_defines}->{_specdir} = "%{_topdir}/SPECS";
 	$self->{_defines}->{_srcrpmdir} = "%{_topdir}/SRPMS";
+
+	$self->{_defines}->{makeinstall} = "make \\\n" .
+	    "    prefix=%{?buildroot:%{buildroot}}%{_prefix} \\\n" .
+	    "    exec_prefix=%{?buildroot:%{buildroot}}%{_exec_prefix} \\\n" .
+	    "    bindir=%{?buildroot:%{buildroot}}%{_bindir} \\\n" .
+            "    sbindir=%{?buildroot:%{buildroot}}%{_sbindir} \\\n" .
+            "    sysconfdir=%{?buildroot:%{buildroot}}%{_sysconfdir} \\\n" .
+            "    datadir=%{?buildroot:%{buildroot}}%{_datadir} \\\n" .
+            "    includedir=%{?buildroot:%{buildroot}}%{_includedir} \\\n" .
+            "    libdir=%{?buildroot:%{buildroot}}%{_libdir} \\\n" .
+            "    libexecdir=%{?buildroot:%{buildroot}}%{_libexecdir} \\\n" .
+            "    localstatedir=%{?buildroot:%{buildroot}}%{_localstatedir} \\\n" .
+            "    sharedstatedir=%{?buildroot:%{buildroot}}%{_sharedstatedir} \\\n" .
+            "    mandir=%{?buildroot:%{buildroot}}%{_mandir} \\\n" .
+            "    infodir=%{?buildroot:%{buildroot}}%{_infodir} \\\n" .
+            "        install";
+	$self->{_defines}->{nil} = "";
+	$self->{_defines}->{find_lang} = "echo WARNING: find_lang not implemented"
+
     }
 
     if (defined ($predef_ref)) {
@@ -447,8 +466,44 @@ sub _do_eval_command ($$@) {  # %(command)
     my $str = shift;
     my @chrs = @_;
 
-    $self->{error} = "%(command) not implemented";
-    return "$str";
+    my $command = "";
+    my $chr = "";
+    my $depth = 0;
+    while (@chrs) {
+	$chr = shift (@chrs);
+	if ($chr eq "%") {
+	    if (@chrs and ($chrs[0] eq "(")) {
+		++$depth;
+	    }
+	}
+
+	if (($chr eq "\\") and @chrs and ($chrs[0] eq ")")) {
+	    $command="$command\\)";
+	    shift (@chrs);
+	    next;
+	}
+
+	if ($chr eq ")") {
+	    if ($depth > 0) {
+		--$depth;
+	    } else {
+		last;
+	    }
+	}
+	$command = "$command$chr";
+    }
+    if (not @chrs and (($depth > 0) or ($chr ne ")"))) {
+	$self->{error} = "Unterminated %(: $str%($command";
+	return $str;
+    }
+
+    $command = $self->eval ($command);
+    if (defined $self->{error}) {
+	return $str;
+    }
+    my $command_out = `$command`;
+    chomp ($command_out);
+    return $self->_do_eval ("$str$command_out", @chrs);
 }
 
 sub _do_eval_sp ($$$@) {  # %{S:n} or %{P:n}
@@ -1125,7 +1180,6 @@ sub _process_macro ($$$$$$) {
 	my $scriptlet;
 
 	if ($macro =~ /^(${all_script_names})$/) {
-	    print "DEBUG: $1\n";
 	    $pkg_ref = $$spec_used->find_package_by_name ($package);
 	    if (not defined($pkg_ref)) {
 		print "WARNING: subpackage not found: $name.$package\n";
@@ -1290,7 +1344,7 @@ sub _process_block ($$$;$$) {
 
     my $package_ref = $self->{_packages}[0];
     if (not defined ($block_name) or not defined($package_name)) {
-
+	
 	$line =~ /^\s*%([a-z]*)/;
 	$block_name = $1;
 
@@ -1303,17 +1357,19 @@ sub _process_block ($$$;$$) {
 	}
     }
 
-    $package_ref = undef;
-    my $all_packages = $self->{_packages};
-    foreach $package (@$all_packages) {
-	if ($package->get_name() eq $package_name) {
-	    $package_ref = $package;
+    if ($block_name ne "changelog") {
+	$package_ref = undef;
+	my $all_packages = $self->{_packages};
+	foreach $package (@$all_packages) {
+	    if ($package->get_name() eq $package_name) {
+		$package_ref = $package;
+	    }
 	}
-    }
-
-    if (not defined ($package_ref)) {
-	$self->{error} = "Package $package_name not defined in $line";
-	return 0;
+	
+	if (not defined ($package_ref)) {
+	    $self->{error} = "Package $package_name not defined in $line";
+	    return 0;
+	}
     }
 
     if (not defined $self->{_blocks}->{$block_name}) {
@@ -1335,7 +1391,8 @@ sub _process_block ($$$;$$) {
 	if (not defined($line)) {
 	    last;
 	}
-	my $eline = $self->_preprocess_line ($line);
+	my $eline = $self->eval ($line);
+	chomp ($eline);
 
 	if ($line =~ /^\s*%define/) {
 	    if (not $self->_process_define ($fhandle, $line)) {
@@ -1448,7 +1505,7 @@ sub _process_files ($$$;$) {
 	return 0;
     }
 
-    my @defattr = ('-', '-', '-');
+    my @defattr = $package_ref->get_defattr();
     my @all_verify = rpm_file->get_all_verify();
 
     my @this_attr = (@defattr);
@@ -1483,6 +1540,7 @@ sub _process_files ($$$;$) {
 	    }
 	} elsif ($eline =~ /^\s*%defattr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*$/) {
 	    @defattr = ($1, $2, $3);
+	    $package_ref->set_defattr ($1, $2, $3);
 	} elsif ($eline =~ /^\s*%doc/) {
 	    $is_doc = 1;
 	    $eline =~ s/^\s*%doc\s*//;
@@ -1543,24 +1601,26 @@ sub _process_top_level ($$$) {
     my $fhandle = shift;
     my $line = shift;
 
-    if ($line =~ /^\s*#/) {
+    my $eline = $self->eval ($line);
+
+    if ($eline =~ /^\s*#/) {
 	# comment, nothing to do.
 	return 1;
-    } elsif ($line =~ /^\s*$/) {
+    } elsif ($eline =~ /^\s*$/) {
 	return 1;
-    } elsif ($line =~ /^\s*%use/) {
+    } elsif ($eline =~ /^%use/) {
 	return $self->_process_use ($fhandle, $line);
-    } elsif ($line =~ /^\s*%include/) {
+    } elsif ($eline =~ /^%include/) {
 	return $self->_process_include ($fhandle, $line, \&_process_top_level, ());
-    } elsif ($line =~ /^%package/) {
+    } elsif ($eline =~ /^%package/) {
 	return $self->_process_package ($fhandle, $line);
-    } elsif ($line =~ /^%(description|${all_block_names})/) {
+    } elsif ($eline =~ /^%(description|${all_block_names})/) {
 	return $self->_process_block ($fhandle, $line);
-    } elsif ($line =~ /^%files/) {
+    } elsif ($eline =~ /^%files/) {
 	return $self->_process_files ($fhandle, $line);
-    } elsif ($line =~ /^\s*%define/) {
+    } elsif ($eline =~ /^\s*%define/) {
 	return $self->_process_define ($fhandle, $line);
-    } elsif ($line =~ /^\s*\S+\s*:\s*\S+/) {
+    } elsif ($eline =~ /^\s*\S+\s*:\s*\S+/) {
 	return $self->_process_tag ($fhandle, $line);
     }
 

@@ -1,3 +1,39 @@
+2004-04-17  Laca  <laca@sun.com>
+
+	Version 0.5.2:
+
+	- add parent all directories to the pkgmap using the last %defattr
+	  values if not explicitely listed in %files.
+	  E.g.
+
+	     %defattr (-, root, other)
+	     %attr (-, root, bin) %{_libdir}/bonobo/servers/my.server
+
+	 implies
+
+	    %dir %attr (-, root, other) %{_libdir}
+	    %dir %attr (-, root, other) %{_libdir}/bonobo
+	    %dir %attr (-, root, other) %{_libdir}/bonobo/servers
+
+2004-04-08  Laca  <laca@sun.com>
+
+	Version 0.5.1:
+
+	- chomp the result of %(command)
+
+2004-04-05  Laca  <laca@sun.com>
+
+	Version 0.5.0:
+
+	- interactive mode (--interactive): starts a subshell if an error
+	  occurs.
+
+	- defined macros: %find_lang, %makeinstall, %nil
+
+	- implement %(command)
+
+	- fix bug where %files -f file didn't use %defattr.
+	
 2004-03-23  Laca  <laca@sun.com>
 
 	Version 0.4.0:
