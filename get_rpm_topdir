@@ -1,0 +1,17 @@
+# run rpm -ba on this file to print the value of %_topdir
+# example:
+#  rpm -ba get_rpm_topdir 2>&1 | grep '^TOPDIR='
+
+Name: topdir-test
+Version: 0.0
+Release: 0
+Summary: get the value of %_topdir
+Group: dummy
+License: GPL
+
+%description
+dummy
+
+%prep
+echo TOPDIR=%_topdir
+exit 1

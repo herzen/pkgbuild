@@ -48,6 +48,16 @@ sub init () {
 	    $os = 'solaris';
 	}
     }
+
+    if ($os eq "linux") {
+	foreach my $dir (@INC) {
+	    if (-f "$dir/get_rpm_topdir") {
+		$_default_topdir = `rpm -ba $dir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
+		chomp ($_default_topdir);
+		last;
+	    }
+	}
+    }
 }
 
 # Create a new rpm_spec object.
@@ -982,7 +992,7 @@ sub _process_files ($$$;$) {
     ($line, $lcline) = $self->_preprocess_line ($line);
 
     while (1) {
-	if ($line = /^\s*$/) {
+	if ($line =~ /^\s*$/) {
 	    # ignore empty lines
 	} elsif ($lcline =~ /^\s*#/) {
 	    # comment, skip to next line
@@ -1229,7 +1239,7 @@ sub get_rpms ($) {
     my @rpms = ();
     foreach my $pkg (@packages) {
 	push (@rpms, $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
-	      "." . $pkg->get_tag ("release") . "." .
+	      "-" . $pkg->get_tag ("release") . "." .
 	      $pkg->get_tag ("buildarchitectures") . ".rpm");
     }
 
@@ -1245,7 +1255,7 @@ sub get_rpm_paths ($) {
 	push (@rpms, $self->get_value_of ("_rpmdir") . "/" . 
 	      $pkg->get_tag ("buildarchitectures") . "/" .
 	      $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
-	      "." . $pkg->get_tag ("release") . "." .
+	      "-" . $pkg->get_tag ("release") . "." .
 	      $pkg->get_tag ("buildarchitectures") . ".rpm");
     }
 
@@ -1266,11 +1276,7 @@ sub get_pkgs ($) {
 
 sub get_package_names ($) {
     my $self = shift;
-    if ($os eq "solaris") {
-	return $self->get_pkgs ();
-    } else {
-	return $self->get_rpms ();
-    }
+    return $self->get_pkgs ();
 }
 
 sub get_value_of ($$) {

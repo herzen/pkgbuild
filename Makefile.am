@@ -6,7 +6,7 @@ plain_modules = packagebase.pm  rpm_file.pm  rpm_package.pm
 all_modules = $(gen_modules) $(plain_modules)
 
 pkgbuilddir = $(libdir)/pkgbuild-@PKGBUILD_VERSION@
-pkgbuild_DATA = $(all_modules)
+pkgbuild_DATA = $(all_modules) get_rpm_topdir
 pkgbuild_SCRIPTS = pkgbuild.pl
 bin_SCRIPTS = pkgbuild
 
