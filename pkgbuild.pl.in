@@ -412,16 +412,6 @@ sub check_build_requires ($) {
 			     $spec), return 0;
 	    }
 	}
-	@reqss = $pkg->get_array ("requires");
-	foreach my $reqstr (@reqss) {
-	    next if not defined $reqstr;
-	    my @reqs = split /\s*,\s*/, $reqstr;
-	    foreach my $req (@reqs) {
-		check_dep ($spec, $req) or
-		    message ("error: $req is required to build " .
-			     $spec), return 0;
-	    }
-	}
 	@reqss = $pkg->get_array ("buildconflicts");
 	foreach my $reqstr (@reqss) {
 	    next if not defined $reqstr;
@@ -637,6 +627,30 @@ sub make_pkginfo ($$) {
     return "i pkginfo=$pkginfodir/$fname\n";
 }
 
+sub make_copyright ($$) {
+    my $spec = shift;
+    my $package = shift;
+
+    my $cr_file = $package->get_tag ('sunw_copyright');
+    return undef unless defined $cr_file;
+
+    my $srcdir = $spec->eval ('%_sourcedir');
+    if (not -f "$srcdir/$cr_file") {
+	message ("warning: copyright file $srcdir/$cr_file not found");
+	return undef;
+    }
+
+    my $copyrightdir = $spec->eval ("%_topdir") . "/PKGMAPS/copyright";
+    my $out=`cp "$srcdir/$cr_file" "$copyrightdir/${package}.copyright" 2>&1`;
+
+    if ($? != 0) {
+	message ("warning: failed to copy copyright file $srcdir/$cr_file: $out");
+	return undef;
+    }
+
+    return "i copyright=$copyrightdir/${package}.copyright\n";
+}
+
 sub make_depend ($$) {
     my $spec = shift;
     my $package = shift;
@@ -710,7 +724,7 @@ sub make_scripts ($$) {
     }
 
     my $preun = $package->get_block ("preun");
-    if (defined ($post)) {
+    if (defined ($preun)) {
 	my $fhandle = "script" . ++$file_id;
 	my $fname = $package . ".preremove";
 	open $fhandle, ">$scriptdir/$fname" or
@@ -947,6 +961,7 @@ sub make_solaris_pkg ($$) {
     my $pkginfo_proto = make_pkginfo ($spec, $package);
     my $dep_proto = make_depend ($spec, $package);
     my $scr_proto = make_scripts ($spec, $package);
+    my $copyright = make_copyright ($spec, $package);
 
     my $files_ref = get_proto_hash ($package);
     if (not defined ($files_ref)) {
@@ -970,6 +985,9 @@ sub make_solaris_pkg ($$) {
     print $fhandle $pkginfo_proto;
     print $fhandle $dep_proto;
     print $fhandle $scr_proto;
+    if (defined $copyright) {
+	print $fhandle $copyright;
+    }
     foreach my $fname (sort (keys %files)) {
 	next if not $fname;
 	print $fhandle $files{$fname};

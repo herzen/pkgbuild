@@ -1922,7 +1922,7 @@ sub get_value_of ($$) {
     } elsif ($name =~ /^(SOURCE|PATCH)([0-9]*)$/) {
 	my $num = $2;
 	my $source_or_patch = lc($1);
-	if (not defined ($num)) {
+	if (not defined ($num) or ($num eq "")) {
 	    $num = 0;
 	}
 	my @values = $package_ref->get_array ($source_or_patch);

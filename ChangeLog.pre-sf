@@ -1,3 +1,18 @@
+2004-07-22  Laszlo Peter  <laca@sun.com>
+
+	Version 0.6.2:
+
+	* pkgbuild.pl.in: (check_build_requires): don't treat requires as
+	  buildrequires. (make_copyright): new. (make_depend): fix bug
+	  where an empty preremove script is created if postinstall script
+	  exists. (make_solaris_pkg): add copyright file to pkg if
+	  SUNW_CopyRight tag found.
+
+	* rpm_spec.pm.in: get rid of a warning message; fix handling
+	  SUNW_Rev tag.
+	
+	* configure.in: bump version
+
 2004-06-07  Laszlo Peter  <laca@sun.com>
 
 	Version 0.6.1:
