@@ -96,6 +96,7 @@ sub new ($;$$) {
     $self->{_specs_used} = {};
     $self->{_blocks} = {};
     $self->{_in_conditional} = 0;
+    $self->{_parent_spec} = $parent_spec;
 
     if (defined ($parent_spec)) {
 	my $parent_def_ref = $parent_spec->{_defines};
@@ -765,6 +766,8 @@ sub _process_use ($$$) {
 	return 0;
     }
 
+    $spec = new rpm_spec ("$specdir/$fname", undef, $self);
+
     $self->{_specs_used}->{$name} = \$spec;
 
     return 1;
@@ -819,7 +822,7 @@ sub _process_tag ($$$) {
     my $line = shift;
 
     my @unique_tags = ("name", "version", "release",
-		       "epoch",
+		       "epoch", "buildroot",
 		       "copyright", "license",
 		       "distribution", "icon",
 		       "url", "group",
@@ -830,7 +833,7 @@ sub _process_tag ($$$) {
 		       "sunw_category", "sunw_hotline", 
 		       "sunw_maxinst", "vendor", "sunw_rev",
 		       "sunw_copyright",
-		       "buildroot", "buildarchitectures", "buildarch",
+		       "buildarchitectures", "buildarch",
 		       "excludearch", "exclusivearch",
 		       "excludeos", "exclusiveos", "prefix",
 		       "summary", "version", "sunw_basedir",
@@ -1198,10 +1201,12 @@ sub _process_macro ($$$$$$) {
 	    return 0;
 	}
 	if (defined ($macro_opts{'d'})) {
-	    $scriptlet = "cd %{_builddir}/$macro_opts{'d'}\n${scriptlet}\ncd ..";
+	    $scriptlet = $self->eval ("cd %{_builddir}/$macro_opts{'d'}\n") .
+		"${scriptlet}\ncd ..";
 	}
 	if ($macro eq "prep") {
-	    $scriptlet = "cd %{_builddir}\n$scriptlet\n";
+	    $scriptlet = $self->eval ("cd %{_builddir}") .
+		"\n$scriptlet\n";
 #	    if (not defined ($spec->{_defines}->{_build_src_dir_name}) and
 #	        defined ($$spec_used->{_defines}->{_build_src_dir_name})) {
 #		$spec->{_defines}->{_build_src_dir_name} =
@@ -1287,6 +1292,7 @@ sub _process_macro ($$$$$$) {
 	    }
 	    $macro_expansion = $macro_expansion .
 		"/bin/chmod -Rf a+rX,g-w,o-w .\n";
+	    $macro_expansion = $self->eval ($macro_expansion);
 	} elsif ($macro =~ /^patch([0-9]*)/) {
 	    my $pnum = $1;
 	    my %macro_opts = $self->_process_macro_opts ('!P#p#Eb:', $line,
@@ -1328,11 +1334,13 @@ sub _process_macro ($$$$$$) {
 		$patch_opts = $patch_opts . " -b -z $macro_opts{'b'}";
 	    }
 	    $macro_expansion = "echo 'Patch #$num ($val):'\n" .
-		"patch $patch_opts < %{_sourcedir}/$val"
+		"patch $patch_opts < %{_sourcedir}/$val";
+
+	    $macro_expansion = $self->eval ("$macro_expansion");
 	}
     }
 
-    $self->_append_to_block($block_name, $self->eval ($macro_expansion));
+    $self->_append_to_block($block_name, $macro_expansion);
 }
 
 sub _process_block ($$$;$$) {
@@ -1361,7 +1369,8 @@ sub _process_block ($$$;$$) {
 	$package_ref = undef;
 	my $all_packages = $self->{_packages};
 	foreach $package (@$all_packages) {
-	    if ($package->get_name() eq $package_name) {
+	    my $pkgname = $package->get_name ();
+	    if (defined $pkgname and $pkgname eq $package_name) {
 		$package_ref = $package;
 	    }
 	}
@@ -1824,6 +1833,16 @@ sub get_value_of ($$) {
 	if (not $self->_read_spec ()) {
 	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
+	}
+    }
+
+    if ($name eq "buildroot") {
+	my $parent = $self->{_parent_spec};
+	if (defined $parent) {
+	    my $br = $parent->get_value_of ("buildroot");
+	    if (defined $br) {
+		return $br;
+	    }
 	}
     }
 

@@ -5,9 +5,9 @@
  - check versions in dependencies
  - Solaris patch dependency
  + %(command)
- - %config (missing_ok)
+ - %config (missing_ok, noreplace)
+ - %ghost
  - make source packages
- - %config (nocheck(?))
  - multiple -a and -b options to %setup
  - .rcfile support
 --
