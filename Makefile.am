@@ -10,7 +10,8 @@ pkgbuild_DATA = $(all_modules) get_rpm_topdir
 pkgbuild_SCRIPTS = pkgbuild.pl
 bin_SCRIPTS = pkgbuild
 
-EXTRA_DIST= pkgbuild.spec.in $(plain_modules) $(gen_module_sources) TODO
+EXTRA_DIST= pkgbuild.spec.in $(plain_modules) $(gen_module_sources) \
+	TODO get_rpm_topdir
 
 if ENABLE_STICKY_DIRS
 DIRMODE=1777
