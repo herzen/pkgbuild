@@ -1,3 +1,18 @@
+2004-11-12  Laszlo Peter  <laca@sun.com>
+
+	Version 0.8.2:
+
+	* configure.in: bump version
+
+	* pkgbuild.pl.in: fix "-bs" so that it doesn't build anything;
+	  add support for predefined (system) class action scripts;
+	  don't look for files in $RPM_BUILD_ROOT if %files is empty.
+
+	* rpm_spec.pm.in: add support for predefined class action scripts:
+	  no need for %iclass/%rclass tags if i.<class name> or
+	  r.<class name> exists in /usr/sadm/install/scripts; fix
+	  macro expansion in %setup arguments
+
 2004-10-18  Laszlo Peter  <laca@sun.com>
 
 	Version 0.8.1:

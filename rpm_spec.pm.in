@@ -1347,6 +1347,17 @@ sub _check_class ($$) {
     return 0;
 }
 
+sub _is_system_class ($) {
+    my $class_name = shift;
+
+    if ( -f "/usr/sadm/install/scripts/i.$class_name" or
+	 -f "/usr/sadm/install/scripts/r.$class_name" ) {
+	return 1;
+    }
+
+    return 0;
+}
+
 sub get_class_script ($$$) {
     my $self = shift;
     my $class_name = shift;
@@ -1505,11 +1516,6 @@ sub _process_macro ($$$$$$) {
 	if ($macro eq "prep") {
 	    $scriptlet = $self->eval ("cd %{_builddir}") .
 		"\n$scriptlet\n";
-#	    if (not defined ($spec->{_defines}->{_build_src_dir_name}) and
-#	        defined ($$spec_used->{_defines}->{_build_src_dir_name})) {
-#		$spec->{_defines}->{_build_src_dir_name} =
-#		    $$spec_used->eval ("%{_build_src_dir_name}");
-#	    }
 	}
 	$macro_expansion = $scriptlet;
     } else {
@@ -1519,12 +1525,13 @@ sub _process_macro ($$$$$$) {
 		$num = 0;
 	    }
 	    
-	    my %macro_opts = $self->_process_macro_opts ('!n:DcTqb@a@', $line,
+	    my %macro_opts = $self->_process_macro_opts ('!n:DcTqb@a@',
+							 $self->eval ($line),
 							 $macro, $name, $package);
 	    if (defined ($self->{error})) {
 		return 0;
 	    }
-	    my $dirname = "%name-%version";
+	    my $dirname = $self->eval ("%name-%version");
 	    if (defined ($macro_opts{'n'})) {
 		$dirname = $macro_opts{'n'};
 	    }
@@ -1541,13 +1548,13 @@ sub _process_macro ($$$$$$) {
 		    "cd $dirname\n";
 	    } else {
 		if (not defined ($macro_opts{'T'})) {
-		    my $srcname = $self->get_value_of("SOURCE$num");
+		    my $srcname = $self->eval("%SOURCE$num");
 		    my $uncompress;
 		    my $unpack;
 		    ($uncompress, $unpack) = 
 			_get_unpack_commands ($srcname, $macro_opts{'q'});
 		    $macro_expansion = $macro_expansion .
-			"$uncompress %SOURCE$num$unpack\n";
+			"$uncompress $srcname$unpack\n";
 		    $macro_expansion = $macro_expansion .
 			"STATUS=\$?\n" .
 			"if [ \$STATUS -ne 0 ]; then\n" .
@@ -1570,7 +1577,7 @@ sub _process_macro ($$$$$$) {
 		    ($uncompress, $unpack) = 
 			_get_unpack_commands ($srcname, $macro_opts{'q'});
 		    $macro_expansion = $macro_expansion .
-			"$uncompress %SOURCE$srcnum$unpack\n";
+			"$uncompress $srcname$unpack\n";
 		    $macro_expansion = $macro_expansion .
 			"STATUS=\$?\n" .
 			"if [ \$STATUS -ne 0 ]; then\n" .
@@ -1589,7 +1596,7 @@ sub _process_macro ($$$$$$) {
 		    ($uncompress, $unpack) = 
 			_get_unpack_commands ($srcname, $macro_opts{'q'});
 		    $macro_expansion = $macro_expansion .
-			"$uncompress %SOURCE$num$unpack\n";
+			"$uncompress $srcname$unpack\n";
 		    $macro_expansion = $macro_expansion .
 			"STATUS=\$?\n" .
 			"if [ \$STATUS -ne 0 ]; then\n" .
@@ -1612,7 +1619,7 @@ sub _process_macro ($$$$$$) {
 		    ($uncompress, $unpack) = 
 			_get_unpack_commands ($srcname, $macro_opts{'q'});
 		    $macro_expansion = $macro_expansion .
-			"$uncompress %SOURCE$srcnum$unpack\n";
+			"$uncompress $srcname$unpack\n";
 		    $macro_expansion = $macro_expansion .
 			"STATUS=\$?\n" .
 			"if [ \$STATUS -ne 0 ]; then\n" .
@@ -1633,7 +1640,6 @@ sub _process_macro ($$$$$$) {
 	    }
 	    $macro_expansion = $macro_expansion .
 		"/bin/chmod -Rf a+rX,g-w,o-w .\n";
-	    $macro_expansion = $self->eval ($macro_expansion);
 	} elsif ($macro =~ /^patch([0-9]*)/) {
 	    my $pnum = $1;
 	    my %macro_opts = $self->_process_macro_opts ('!P#p#Eb:', $line,
@@ -1683,8 +1689,8 @@ sub _process_macro ($$$$$$) {
 	    }
 	    $macro_expansion = "echo 'Patch #$num ($val):'\n";
 	    if (not defined ($uncompress)) {
-		    $macro_expansion .= 
-			"patch $patch_opts < %{_sourcedir}/$val";
+		    $macro_expansion .= $self->eval(
+			"patch $patch_opts < %{_sourcedir}/$val");
 	    } else {
 		    $macro_expansion .= 
 			"$uncompress | patch $patch_opts";
@@ -1719,7 +1725,7 @@ sub _process_block ($$$;$$) {
 	}
     }
 
-    if (not $block_name =~ /(changelog|[ir]class)/) {
+    if (not $block_name =~ /(changelog|[ir]class|prep|build|install|clean)/) {
 	$package_ref = undef;
 	my $all_packages = $self->{_packages};
 	foreach $package (@$all_packages) {
@@ -1942,9 +1948,13 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^\s*%class\s*\(([^\)]*)\)/) {
 	    $class_name = $1;
 	    if (not $self->_check_class ($class_name)) {
-		$self->_set_error ("Undefined class $class_name: $class_name",
-				   $fhandle);
-		return 0;
+		if (_is_system_class ($class_name)) {
+		    $self->_use_system_class ($class_name);
+		} else {
+		    $self->_set_error ("Undefined class $class_name: $class_name",
+				       $fhandle);
+		    return 0;
+		}
 	    }
 	    $eline =~ s/^\s*%class\s*\([^\)]*\)//;
 	    next;
@@ -2411,6 +2421,18 @@ sub get_classes ($) {
 
     my @classes = keys %{$self->{_classes}};
     return @classes;
+}
+
+sub _use_system_class ($$) {
+    my $self = shift;
+    my $class_name = shift;
+
+    if ( -f "/usr/sadm/install/scripts/i.$class_name" or
+	 -f "/usr/sadm/install/scripts/r.$class_name" ) {
+	$self->{_classes}->{$class_name} = "system";
+    } else {
+	$self->_set_error ("Unknown system class: $class_name");
+    }
 }
 
 sub get_class_script_names ($) {

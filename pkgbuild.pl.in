@@ -69,7 +69,7 @@ my %build_phases = ('p', 'p',
 		    'i', 'pci',
 		    'b', 'pcib',
 		    'a', 'pciba',
-		    's', 'pcis');
+		    's', 's');
 
 sub short_circuit_option {
     if (defined ($build_command)) {
@@ -824,6 +824,9 @@ sub make_scripts ($$) {
 	if (not defined $script) {
 	    my $err = $package->get_error ();
 	    return undef if defined $err;
+	    if ( -f "/usr/sadm/install/scripts/i.$class_name" ) {
+		$retstr = $retstr . "i i.$class_name\n";
+	    }
 	} else {
 	    open $fhandle, ">$scriptdir/i.$class_name" or
 		fatal ("failed to create file $scriptdir/i.$class_name");
@@ -835,6 +838,9 @@ sub make_scripts ($$) {
 	if (not defined $script) {
 	    my $err = $package->get_error ();
 	    return undef if defined $err;
+	    if ( -f "/usr/sadm/install/scripts/r.$class_name" ) {
+		$retstr = $retstr . "i r.$class_name\n";
+	    }
 	} else {
 	    open $fhandle, ">$scriptdir/r.$class_name" or
 		fatal ("failed to create file $scriptdir/r.$class_name");
@@ -1114,6 +1120,7 @@ sub make_solaris_pkg ($$) {
 
 sub make_packages ($) {
     my $spec = shift;
+    my $has_files_at_all = 0;
 
     if ($os ne 'solaris') {
 #	return 1;
@@ -1123,26 +1130,29 @@ sub make_packages ($) {
 
     foreach my $pkg (@packages) {
 	if ($pkg->has_files()) {
+	    $has_files_at_all = 1;
 	    make_solaris_pkg ($spec, $pkg) or return 0;
 	}
     }
 
-    my $buildroot = $spec->eval ("%buildroot");
-    my $old_cwd = `pwd`;
-    chdir ($buildroot);
-    my @all_fnames = list_all_files (".");
-    my $unpackaged = 0;
-    foreach my $fname (@all_fnames) {
-	$fname = substr ($fname, 2);
-	if (not defined ($all_files{$fname})) {
-	    if (not $unpackaged) {
-		$unpackaged = 1;
-		print "WARNING: the following files are not included in any packages:\n"
+    if ($has_files_at_all) {
+	my $buildroot = $spec->eval ("%buildroot");
+	my $old_cwd = `pwd`;
+	chdir ($buildroot);
+	my @all_fnames = list_all_files (".");
+	my $unpackaged = 0;
+	foreach my $fname (@all_fnames) {
+	    $fname = substr ($fname, 2);
+	    if (not defined ($all_files{$fname})) {
+		if (not $unpackaged) {
+		    $unpackaged = 1;
+		    print "WARNING: the following files are not included in any packages:\n"
+		    }
+		print "        /$fname\n";
 	    }
-	    print "        /$fname\n";
 	}
+	chdir ($old_cwd);
     }
-    chdir ($old_cwd);
     
     return 1;
 }
@@ -1352,7 +1362,7 @@ sub main () {
 	    make_src_package ($spec) or
 		fatal ($spec->get_error ());
 	} 
-	if ($build_command =~ /[bas]/) {
+	if ($build_command =~ /[ba]/) {
 	    do_block ($spec, 'clean') or exit (1);
 	}
    }
