@@ -208,11 +208,36 @@ sub eval ($$) {
     }
 
     @chrs = split //, $str;
-    return $self->_do_eval ("", @chrs);
+    return $self->_do_eval (0, "", @chrs);
 }
 
-sub _do_eval ($$@) {
+sub _pre_eval ($$) {
     my $self = shift;
+    my $str = shift;
+
+    my $def;
+    my $val;
+    my $name;
+
+    if (not defined ($str)) {
+	return undef;
+    }
+
+    if ($str =~ /^#/) {
+	return $str;
+    }
+
+    if (index ($str, "%") == -1) {
+	return $str;
+    }
+
+    @chrs = split //, $str;
+    return $self->_do_eval (1, "", @chrs);
+}
+
+sub _do_eval ($$$@) {
+    my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my @chrs = @_;
 
@@ -234,9 +259,13 @@ sub _do_eval ($$@) {
     if ($chr eq "%") {
 	$chr = shift (@chrs);
 	if ($chr eq "%") {  # %%
-	    return $self->_do_eval ("$str%", @chrs);
+	    if ($preeval) {
+		return $self->_do_eval ($preeval, "$str%%", @chrs);
+	    } else {
+		return $self->_do_eval ($preeval, "$str%", @chrs);
+	    }
 	} elsif ($chr eq "(") {  # %(command)
-	    return $self->_do_eval_command ($str, @chrs);
+	    return $self->_do_eval_command ($preeval, $str, @chrs);
 	} elsif ($chr eq "{") {  # %{....
 	    if (not @chrs) {
 		$self->{error} = "Unterminated {: $str%{";
@@ -245,37 +274,46 @@ sub _do_eval ($$@) {
 	    $chr = shift (@chrs);
 	    if (not @chrs) {
 		if ($chr eq "}") {  # %{}
-		    return "$str%";
+		    if ($preeval) {
+			return "$str%{}";
+		    } else {
+			return "$str%";
+		    }
 		}
 		$self->{error} = "Unterminated {: $str%{$chr";
 		return $str;
 	    }
 	    if ($chr =~ /([SP])/ and ($chrs[0] eq ":")) {  # %{S:n} or %{P:n}
 		shift (@chrs);
-		return $self->_do_eval_sp ($str, $1, @chrs);
+		return $self->_do_eval_sp ($preeval, $str, $1, @chrs);
 	    } elsif ($chr eq "?") {  # %{?
-		return $self->_do_eval_cond ($str, "{", @chrs);
+		return $self->_do_eval_cond ($preeval, $str, "{", @chrs);
 	    } elsif ($chr =~ /[a-zA-Z_]/) {
-		return $self->_do_eval_var ($str, "{", "$chr", @chrs);
+		return $self->_do_eval_var ($preeval, $str, "{", "$chr", @chrs);
 	    } elsif ($chr eq "}") {
-		return $self->_do_eval ("$str%", @chrs);
+		if ($preeval) {
+		    return $self->_do_eval ($preeval, "$str%{}", @chrs);
+		} else {
+		    return $self->_do_eval ($preeval, "$str%", @chrs);
+		}
 	    } else {
-		return $self->_do_eval ("$str%{$chr", @chrs);
+		return $self->_do_eval ($preeval, "$str%{$chr", @chrs);
 	    }
 	} else {  # %var
 	    if ($chr =~ /[a-zA-Z_]/) {
-		return $self->_do_eval_var ($str, undef, "$chr", @chrs);
+		return $self->_do_eval_var ($preeval, $str, undef, "$chr", @chrs);
 	    }
-	    return $self->_do_eval ("$str$chr", @chrs);
+	    return $self->_do_eval ($preeval, "$str$chr", @chrs);
 	}
     } else {
 	print "WARNING: assertion failed: _do_eval()\n";
-	return $self->_do_eval ("$str$chr", @chrs);
+	return $self->_do_eval ($preeval, "$str$chr", @chrs);
     }
 }
 
-sub _do_eval_var ($$$$@) {  # %var or %{var}
+sub _do_eval_var ($$$$$@) {  # %var or %{var}
     my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my $delimiter = shift;
     my $varname = shift;
@@ -289,8 +327,8 @@ sub _do_eval_var ($$$$@) {  # %var or %{var}
 	    next;
 	}
 	if ($chr eq ".") {
-	    return $self->_do_eval_spec_var ($str, $delimiter, $varname,
-					     @chrs);
+	    return $self->_do_eval_spec_var ($preeval, $str, $delimiter,
+					     $varname, @chrs);
 	}
 	if (($chr eq "}") and defined ($delimiter)) {
 	    last;
@@ -307,20 +345,21 @@ sub _do_eval_var ($$$$@) {  # %var or %{var}
     }
 
     my $val = $self->get_value_of ($varname);
-    if (defined ($val)) {
+    if (defined ($val) and not $preeval) {
 	$val = $self->eval ($val);
-	return $self->_do_eval ("$str$val", @chrs);
+	return $self->_do_eval ($preeval, "$str$val", @chrs);
     } else {
 	if (defined ($delimiter)) {
-	    return $self->_do_eval ("$str%{$varname}", @chrs);
+	    return $self->_do_eval ($preeval, "$str%{$varname}", @chrs);
 	} else {
-	    return $self->_do_eval ("$str%$varname", @chrs);
+	    return $self->_do_eval ($preeval, "$str%$varname", @chrs);
 	}
     }
 }
 
-sub _do_eval_spec_var ($$$$@) { # %spec.var or %{spec.var}
+sub _do_eval_spec_var ($$$$$@) { # %spec.var or %{spec.var}
     my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my $delimiter = shift;
     my $specname = shift;
@@ -336,7 +375,8 @@ sub _do_eval_spec_var ($$$$@) { # %spec.var or %{spec.var}
 	}
 	if ($chr eq ".") {
 	    if ($varname ne "") {
-		return $self->_do_eval_spec_pkg_var ($str, $delimiter,
+		return $self->_do_eval_spec_pkg_var ($preeval,
+						     $str, $delimiter,
 						     $specname, $varname,
 						     @chrs);
 	    } else {
@@ -345,11 +385,11 @@ sub _do_eval_spec_var ($$$$@) { # %spec.var or %{spec.var}
 		    next;
 		} else {
 		    my $val = $self->get_value_of ($specname);
-		    if (defined ($val)) {
+		    if (defined ($val) and not $preeval) {
 			$val = $self->eval ($val);
-			return $self->_do_eval ("$str$val", @chrs);
+			return $self->_do_eval ($preeval, "$str$val..", @chrs);
 		    } else {
-			return $self->_do_eval ("$str%$specname..", @chrs);
+			return $self->_do_eval ($preeval, "$str%$specname..", @chrs);
 		    }
 		}
 	    }
@@ -371,31 +411,32 @@ sub _do_eval_spec_var ($$$$@) { # %spec.var or %{spec.var}
     my $spec_used = $self->{_specs_used}->{$specname};
     if (not defined $spec_used) {
 	if (defined ($delimiter)) {
-	    return $self->_do_eval ("$str%{$specname.$varname}", @chrs);
+	    return $self->_do_eval ($preeval, "$str%{$specname.$varname}", @chrs);
 	}
 	my $val = $self->get_value_of ($specname);
-	if (not defined $val) {
-	    return $self->_do_eval ("$str%$specname.$varname", @chrs);
+	if (not defined $val or $preeval) {
+	    return $self->_do_eval ($preeval, "$str%$specname.$varname", @chrs);
 	} else {
 	    $val = $self->eval ($val);
-	    return $self->_do_eval ("$str$val.$varname", @chrs);
+	    return $self->_do_eval ($preeval, "$str$val.$varname", @chrs);
 	}
     }
     my $val = $$spec_used->get_value_of ($varname);
-    if (defined ($val)) {
+    if (defined ($val) and not $preeval) {
 	$val = $self->eval ($val);
-	return $self->_do_eval ("$str$val", @chrs);
+	return $self->_do_eval ($preeval, "$str$val", @chrs);
     } else {
 	if (defined ($delimiter)) {
-	    return $self->_do_eval ("$str%{$specname.$varname}", @chrs);
+	    return $self->_do_eval ($preeval, "$str%{$specname.$varname}", @chrs);
 	} else {
-	    return $self->_do_eval ("$str%$specname.$varname", @chrs);
+	    return $self->_do_eval ($preeval, "$str%$specname.$varname", @chrs);
 	}
     }
 }
 
 sub _do_eval_spec_pkg_var ($$$$$@) { # %spec.pkg.var or %{spec.pkg.var}
     my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my $delimiter = shift;
     my $specname = shift;
@@ -427,43 +468,44 @@ sub _do_eval_spec_pkg_var ($$$$$@) { # %spec.pkg.var or %{spec.pkg.var}
     my $spec_used = $self->{_specs_used}->{$specname};
     if (not defined $spec_used) {
 	if (defined ($delimiter)) {
-	    return $self->_do_eval ("$str%{$specname.$pkgname.$varname}", @chrs);
+	    return $self->_do_eval ($preeval, "$str%{$specname.$pkgname.$varname}", @chrs);
 	}
 	my $val = $self->get_value_of ($specname);
-	if (not defined $val) {
-	    return $self->_do_eval ("$str%$specname.$pkgname.$varname", @chrs);
+	if (not defined $val or $preeval) {
+	    return $self->_do_eval ($preeval, "$str%$specname.$pkgname.$varname", @chrs);
 	} else {
 	    $val = $self->eval ($val);
-	    return $self->_do_eval ("$str$val.$pkgname.$varname", @chrs);
+	    return $self->_do_eval ($preeval, "$str$val.$pkgname.$varname", @chrs);
 	}
     }
     my $pkg_ref = $$spec_used->find_package_by_name ($pkg);
     if (not defined $pkg_ref) {
 	if (defined ($delimiter)) {
-	    return $self->_do_eval ("$str%{$specname.$pkgname.$varname}", @chrs);
+	    return $self->_do_eval ($preeval, "$str%{$specname.$pkgname.$varname}", @chrs);
 	}
 	my $val = $$spec_used->get_value_of ($pkgname);
-	if (not defined $val) {
-	    return $self->_do_eval ("$str%$specname.$pkgname.$varname", @chrs);
+	if (not defined $val or $preeval) {
+	    return $self->_do_eval ($preeval, "$str%$specname.$pkgname.$varname", @chrs);
 	} else {
 	    $val = $self->eval ($val);
-	    return $self->_do_eval ("$str$val.$varname", @chrs);
+	    return $self->_do_eval ($preeval, "$str$val.$varname", @chrs);
 	}
     }
     my $val = $$pkg_ref->get_tag ($varname);
-    if (defined ($val)) {
-	return $self->_do_eval ("$str$val", @chrs);
+    if (defined ($val) and not $preeval) {
+	return $self->_do_eval ($preeval, "$str$val", @chrs);
     } else {
 	if (defined ($delimiter)) {
-	    return $self->_do_eval ("$str%{$specname.$pkgname.$varname}", @chrs);
+	    return $self->_do_eval ($preeval, "$str%{$specname.$pkgname.$varname}", @chrs);
 	} else {
-	    return $self->_do_eval ("$str%$specname.$pkgname.$varname", @chrs);
+	    return $self->_do_eval ($preeval, "$str%$specname.$pkgname.$varname", @chrs);
 	}
     }
 }
 
-sub _do_eval_command ($$@) {  # %(command)
+sub _do_eval_command ($$$@) {  # %(command)
     my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my @chrs = @_;
 
@@ -498,17 +540,22 @@ sub _do_eval_command ($$@) {  # %(command)
 	return $str;
     }
 
-    $command = $self->eval ($command);
-    if (defined $self->{error}) {
-	return $str;
+    if ($preeval) {
+	return $self->_do_eval ($preeval, "$str%($command)", @chrs);
+    } else {
+	$command = $self->eval ($command);
+	if (defined $self->{error}) {
+	    return $str;
+	}
+	my $command_out = `$command`;
+	chomp ($command_out);
+	return $self->_do_eval ($preeval, "$str$command_out", @chrs);
     }
-    my $command_out = `$command`;
-    chomp ($command_out);
-    return $self->_do_eval ("$str$command_out", @chrs);
 }
 
-sub _do_eval_sp ($$$@) {  # %{S:n} or %{P:n}
+sub _do_eval_sp ($$$$@) {  # %{S:n} or %{P:n}
     my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my $sp = shift;
     my @chrs = @_;
@@ -527,8 +574,8 @@ sub _do_eval_sp ($$$@) {  # %{S:n} or %{P:n}
 	return $str;
     }
 
-    if (not _is_number ($num)) {
-	return $self->_do_eval ("$str%{$sp:$num}", @chrs);
+    if (not _is_number ($num) or $preeval) {
+	return $self->_do_eval ($preeval, "$str%{$sp:$num}", @chrs);
     }
     my $val;
     if ($sp eq "S") {
@@ -538,14 +585,15 @@ sub _do_eval_sp ($$$@) {  # %{S:n} or %{P:n}
     }
     if (defined ($val)) {
 	$val = $self->eval ($val);
-	return $self->_do_eval ("$str$val", @chrs);
+	return $self->_do_eval ($preeval, "$str$val", @chrs);
     } else {
-	return $self->_do_eval ("$str%{$sp:$num}", @chrs);
+	return $self->_do_eval ($preeval, "$str%{$sp:$num}", @chrs);
     }
 }
 
-sub _do_eval_cond ($$$@) {  # %?foo or %{?foo} or %{?foo:bar}
+sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar}
     my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my $delimiter = shift;
     my @chrs = @_;
@@ -559,7 +607,7 @@ sub _do_eval_cond ($$$@) {  # %?foo or %{?foo} or %{?foo:bar}
 	    next;
 	}
 	if (($chr eq ":") and defined $delimiter) {
-	    return $self->_do_eval_cond_val ($str, $varname, @chrs);
+	    return $self->_do_eval_cond_val ($preeval, $str, $varname, @chrs);
 	}
 	if (($chr eq "}") and defined ($delimiter)) {
 	    last;
@@ -577,15 +625,20 @@ sub _do_eval_cond ($$$@) {  # %?foo or %{?foo} or %{?foo:bar}
 
     my $val = $self->get_value_of ($varname);
     if (defined ($val)) {
-	$val = $self->eval ($val);
-	return $self->_do_eval ("$str$val", @chrs);
+	if (not $preeval) {
+	    $val = $self->eval ($val);
+	} else {
+	    $val = $self->_pre_eval ($val);
+	}
+	return $self->_do_eval ($preeval, "$str$val", @chrs);
     } else {
-	return $self->_do_eval ("$str", @chrs);
+	return $self->_do_eval ($preeval, "$str", @chrs);
     }
 }
 
-sub _do_eval_cond_val ($$$@) {  #  %{?foo:bar}
+sub _do_eval_cond_val ($$$$@) {  #  %{?foo:bar}
     my $self = shift;
+    my $preeval = shift;
     my $str = shift;
     my $varname = shift;
     my @chrs = @_;
@@ -623,10 +676,16 @@ sub _do_eval_cond_val ($$$@) {  #  %{?foo:bar}
 
     my $val = $self->get_value_of ($varname);
     if (defined ($val)) {
-	$val = $self->eval ($defval);
-	return $self->_do_eval ("$str$val", @chrs);
+	if ($preeval) {
+	    $val = $self->_pre_eval ($defval);
+	    $str = $self->_do_eval ($preeval, "$str$val", @chrs);
+	} else {
+	    $val = $self->eval ($defval);
+	    $str = $self->_do_eval ($preeval, "$str$val", @chrs);
+	}
+	return $str;
     } else {
-	return $self->_do_eval ("$str", @chrs);
+	return $self->_do_eval ($preeval, "$str", @chrs);
     }
 }
 
@@ -842,7 +901,7 @@ sub _process_tag ($$$) {
 		       "sunw_maxinst", "vendor", "docdir",
 		       "sunw_copyright");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
-		      "prereq", "provides", "buildprereq");
+		      "buildconflicts", "prereq", "provides", "buildprereq");
     my @ord_tags = ( "source", "patch" );
     my @localised_tags = ("summary");
     my $lcline = lc($line);
@@ -907,8 +966,11 @@ sub _process_define ($$$) {
     my $fhandle = shift;
     my $line = shift;
 
-    if ($line =~ /\s*%define\s+([a-zA-Z0-9_]*)\s+(.*\S)\s*$/) {
-	$self->{_defines}->{$1} = $2;
+    if ($line =~ /\s*%define\s+([a-zA-Z0-9_]*)\s+(.*)$/) {
+	my $val = $2;
+	my $mname = $1;
+	$val =~ s/\s*$//;
+	$self->{_defines}->{$mname} = $val;
 	return 1;
     } else {
 	my $mname = "";
@@ -916,7 +978,7 @@ sub _process_define ($$$) {
 	    $mname = $1;
 	}
 	print "WARNING: Macro %$mname has illegal name (%define)\n";
-	return 0;
+	return 1;
     }
 }
 
@@ -1403,8 +1465,8 @@ sub _process_block ($$$;$$) {
 	my $eline = $self->eval ($line);
 	chomp ($eline);
 
-	if ($line =~ /^\s*%define/) {
-	    if (not $self->_process_define ($fhandle, $line)) {
+	if ($eline =~ /^\s*%define/) {
+	    if (not $self->_process_define ($fhandle, $self->_pre_eval ($line))) {
 		return (0);
 	    }
 	} elsif ($eline =~ /^\s*%include/) {
@@ -1429,7 +1491,7 @@ sub _process_block ($$$;$$) {
 	    } else {
 		print "WARNING: undefined macro in $line\n";
 	    }
-	} elsif (not $line =~ /^%(${all_keywords})/) {
+	} elsif (not $line =~ /^%(${all_keywords}|%{?)/) {
 	    if ($block_name =~ /(prep|build|install|clean|changelog)/) {
 		$self->_append_to_block ($block_name, $eline);
 	    } else {
@@ -1539,7 +1601,7 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^#/) {
 	    # comment, skip to next line
 	} elsif ($eline =~ /^\s*%define/) {
-	    if (not $self->_process_define ($fhandle, $line)) {
+	    if (not $self->_process_define ($fhandle, $self->_pre_eval ($line))) {
 		return (0);
 	    }
 	} elsif ($eline =~ /^\s*%include/) {
@@ -1547,7 +1609,7 @@ sub _process_files ($$$;$) {
 					     ($package_name))) {
 		return (0);
 	    }
-	} elsif ($eline =~ /^\s*%defattr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*$/) {
+	} elsif ($eline =~ /^\s*%defattr\s*\(\s*(-|\?|[0-9]+)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*$/) {
 	    @defattr = ($1, $2, $3);
 	    $package_ref->set_defattr ($1, $2, $3);
 	} elsif ($eline =~ /^\s*%doc/) {
@@ -1555,11 +1617,16 @@ sub _process_files ($$$;$) {
 	    $eline =~ s/^\s*%doc\s*//;
 # FIXME: should process %doc stuff properly...
 #	    next;
+	} elsif ($eline =~ /^\s*%ghost/) {
+# FIXME: what shall we do with ghosts on Solaris??
+#
+	    $eline =~ s/^\s*%ghost\s*//;
 	} elsif ($eline =~ /^\s*%config/) {
 	    $is_config = 1;
-	    $eline =~ s/^\s*%config\s*//;
+	    $eline =~ s/^\s*%config\s*\([^)]*\)\s*// or
+		$eline =~ s/^\s*%config\s*//;
 	    next;	    
-	} elsif ($eline =~ /^\s*%attr\s*\(\s*(-|[0-9]+)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*/) {
+	} elsif ($eline =~ /^\s*%attr\s*\(\s*(-|\?|[0-9]+)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*/) {
 	    @this_attr = ($1, $2, $3);
 	    $eline =~ s/^\s*%attr\s*\([^\)]*\)\s*//;
 	    next;
@@ -1581,6 +1648,9 @@ sub _process_files ($$$;$) {
 				     not ($is_dir), $is_doc,
 				     $is_config);
 	    $package_ref->add_file ($file);
+	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
+	    $self->{error} = "File must begin with \"/\": $1";
+	    return 0;
 	} else {
 	    return $self->_process_top_level ($fhandle, $line);
 	}
@@ -1628,7 +1698,7 @@ sub _process_top_level ($$$) {
     } elsif ($eline =~ /^%files/) {
 	return $self->_process_files ($fhandle, $line);
     } elsif ($eline =~ /^\s*%define/) {
-	return $self->_process_define ($fhandle, $line);
+	return $self->_process_define ($fhandle, $self->_pre_eval ($line));
     } elsif ($eline =~ /^\s*\S+\s*:\s*\S+/) {
 	return $self->_process_tag ($fhandle, $line);
     }

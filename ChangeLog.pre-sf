@@ -1,3 +1,17 @@
+2004-05-25  Laszlo Peter  <laca@sun.com>
+
+	Version 0.6.0:
+
+	- implement the conflicts/buildconflicts tags
+	- allow "?" in attr/defattr: (see prototype(4) for details)
+	- implement %config (.*): makes the file type 'v'
+	- improve interactive mode
+	- correctly ignore missing %prep/%build/%install sections
+	- save the %build and %install scripts in the source directory
+	  for Brian (;
+	- fix %define's in %{?foo:bar} conditionals
+	- print a meaningful error message for relative paths in %files
+
 2004-05-01  Laca  <laca@sun.com>
 
 	Version 0.5.3:

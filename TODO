@@ -1,12 +1,15 @@
+ + allow %defattr (?, ?, ?)
+ - %space
+ - fix version checking
+ + support conflicts tag
  - handle compressed patches
  - ability to build from CVS
  - generate plain specs and CVS snapshot tarballs
  - wrap rpm on Linux
- - check versions in dependencies
  - Solaris patch dependency
  + %(command)
- - %config (missing_ok, noreplace)
- - %ghost
+ + %config (missing_ok, noreplace)
+ + %ghost
  - make source packages
  - multiple -a and -b options to %setup
  - .rcfile support
