@@ -328,24 +328,26 @@ sub check_dep ($) {
 	return 0;
     }
 
-
-    if ($os eq "linux") {
-	`rpm -q $pkg`;
-	if ($? != 0) {
-	    `rpm -q --provides $pkg`;
+    my $subpkg = $self->find_package_by_name ($pkg);
+    if (not defined $subpkg) {
+	if ($os eq "linux") {
+	    `rpm -q $pkg`;
+	    if ($? != 0) {
+		`rpm -q --provides $pkg`;
+		if ($? != 0) {
+		    return 0;
+		}
+	    }
+	} elsif ($os eq "solaris") {
+	    `/usr/bin/pkginfo -q $pkg`;
 	    if ($? != 0) {
 		return 0;
 	    }
+	} else {
+	    print "WARNING: I don't know how to verify dependency $pkg ".
+		"on this OS.\n";
+	    return 1;
 	}
-    } elsif ($os eq "solaris") {
-	`/usr/bin/pkginfo -q $pkg`;
-	if ($? != 0) {
-	    return 0;
-	}
-    } else {
-	print "WARNING: I don't know how to verify dependency $pkg ".
-	    "on this OS.\n";
-	return 1;
     }
 
     if (defined ($ref_vers)) {

@@ -1213,7 +1213,7 @@ sub get_base_file_name ($) {
 sub get_rpms ($) {
     my $self = shift;
 
-    my @packages = %self->get_packages ();
+    my @packages = $self->get_packages ();
     my @rpms = ();
     foreach my $pkg (@packages) {
 	push (@rpms, $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
@@ -1227,10 +1227,10 @@ sub get_rpms ($) {
 sub get_rpm_paths ($) {
     my $self = shift;
 
-    my @packages = %self->get_packages ();
+    my @packages = $self->get_packages ();
     my @rpms = ();
     foreach my $pkg (@packages) {
-	push (@rpms, $self->get_value_of ("rpmdir") . "/" . 
+	push (@rpms, $self->get_value_of ("_rpmdir") . "/" . 
 	      $pkg->get_tag ("buildarchitectures") . "/" .
 	      $pkg->get_name() . "-" . $pkg->get_tag ("version") . 
 	      "." . $pkg->get_tag ("release") . "." .
@@ -1243,7 +1243,7 @@ sub get_rpm_paths ($) {
 sub get_pkgs ($) {
     my $self = shift;
 
-    my @packages = %self->get_packages ();
+    my @packages = $self->get_packages ();
     my @pkgs = ();
     foreach my $pkg (@packages) {
 	push (@pkgs, $pkg->get_name());
