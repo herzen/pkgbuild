@@ -864,6 +864,7 @@ sub get_proto_hash ($) {
 	    my $parent_dir = $fname;
 	    $parent_dir =~ s/\/[^\/]+$//;
 	    while ($parent_dir ne "" and
+		   "/$parent_dir" ne "$basedir" and
 		   not defined ($file_info{$parent_dir}) and
 		   not defined ($default_dirs{$parent_dir})) {
 		my $pline = get_proto_line ($parent_dir,

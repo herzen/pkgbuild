@@ -37,6 +37,7 @@ make DESTDIR=$RPM_BUILD_ROOT install
 rm -rf $RPM_BUILD_ROOT
 
 %files
+%defattr (-, root, other)
 %{?build_user:%{?build_group:%defattr (-, %build_user, %build_group)}}
 %attr (0755, root, bin) %{_bindir}
 %attr (0755, root, bin) %{_libdir}

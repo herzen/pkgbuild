@@ -1,3 +1,4 @@
+ - handle compressed patches
  - ability to build from CVS
  - generate plain specs and CVS snapshot tarballs
  - wrap rpm on Linux
