@@ -1,3 +1,13 @@
+2004-06-07  Laszlo Peter  <laca@sun.com>
+
+	Version 0.6.1:
+
+	* pkgbuild.pl.in: patch from Takao Fujiwara, fixes bug 5056932
+	  (directory symlinks don't work); fix basedir checking in the
+	  case when prefix == basedir.
+
+	* configure.in: update version
+
 2004-05-25  Laszlo Peter  <laca@sun.com>
 
 	Version 0.6.0:

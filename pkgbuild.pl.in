@@ -748,10 +748,10 @@ sub get_file_mode ($) {
 sub get_file_type ($) {
     my $fname = shift;
 
-    if (-d $fname) {
-	return "d";
-    } elsif (-l $fname) {
+    if (-l $fname) {
 	return "s";
+    } elsif (-d $fname) {
+	return "d";
     } elsif (-p $fname) {
 	return "p";
     } elsif (-b $fname) {
@@ -788,13 +788,13 @@ sub get_proto_line ($$$$$$) {
 	}
     }
 
+    if (index ("/$fname", $basedir) != 0) {
+	fatal ("file $fname is not under basedir $basedir");
+    }
+
     $basedir = "$basedir/";
     $basedir =~ s/\/\/*/\//g;
     $basedir = substr ("$basedir", 1);
-
-    if (index ($fname, $basedir) != 0) {
-	fatal ("file $fname is not under basedir $basedir");
-    }
 
     my $relpath = substr ($fname, length ($basedir));
     my $protoline;
