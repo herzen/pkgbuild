@@ -5,13 +5,13 @@ gen_module_sources = rpm_spec.pm.in
 plain_modules = packagebase.pm  rpm_file.pm  rpm_package.pm
 all_modules = $(gen_modules) $(plain_modules)
 
-pkgbuilddir = $(libdir)/pkgbuild-@PKGBUILD_VERSION@
+pkgbuilddir = $(PKGBUILD_LIBDIR)
 pkgbuild_DATA = $(all_modules) get_rpm_topdir
-pkgbuild_SCRIPTS = pkgbuild.pl
+pkgbuild_SCRIPTS = pkgbuild.pl pkgbuild-postprocess
 bin_SCRIPTS = pkgbuild
 
 EXTRA_DIST= pkgbuild.spec.in $(plain_modules) $(gen_module_sources) \
-	TODO get_rpm_topdir
+	TODO get_rpm_topdir pkgbuild-postprocess
 
 if ENABLE_STICKY_DIRS
 DIRMODE=1777

@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to create configure.
 AC_INIT(pkgbuild.pl.in)
-PKGBUILD_VERSION=0.7.0
+PKGBUILD_VERSION=0.8.0
 AC_SUBST(PKGBUILD_VERSION)
 
 AM_INIT_AUTOMAKE(pkgbuild, $PKGBUILD_VERSION)
@@ -30,6 +30,9 @@ AC_SUBST(WARNING_MESSAGE_L4)
 AC_SUBST(WARNING_MESSAGE_L5)
 AC_SUBST(WARNING_MESSAGE_L6)
 AC_SUBST(WARNING_MESSAGE_L7)
+
+PKGBUILD_LIBDIR="${prefix}/lib/pkgbuild-${PKGBUILD_VERSION}"
+AC_SUBST(PKGBUILD_LIBDIR)
 
 AC_ARG_WITH(topdir, [  --with-topdir=dir          set %topdir to dir. [default: /usr/src/packages]], TOPDIR="$with_topdir", TOPDIR="/usr/src/packages")
 AC_SUBST(TOPDIR)

@@ -26,8 +26,6 @@ sub new ($$;&) {
 	$self->{_tags}->{buildarchitectures} = 'i386';
     }
     $self->{_blocks} = {};
-    my @files = ();
-    $self->{_files} = \@files;
     my @metafiles = ();
     $self->{_metafiles} = \@metafiles;
     my @defattr = ('-', '-', '-');
@@ -61,14 +59,13 @@ sub new_subpackage ($$$) {
     $self->{_tags} = {%$tags};
     $self->{_parent_spec_ref} = $parent_spec_ref;
     $self->{_tags}->{name} = $name;
+    $self->{_tags}->{sunw_pkg} = undef;
     for my $tag_name ("buildrequires", "requires", "obsoletes",
 		      "prereq", "provides") {
 	$self->{_tags}->{$tag_name} = ();
     }
 
     $self->{_blocks} = {};
-    my @files = ();
-    $self->{_files} = \@files;
     my @metafiles = ();
     $self->{_metafiles} = \@metafiles;
     my @defattr = ('-', '-', '-');
@@ -150,7 +147,7 @@ sub get_array ($$) {
 
     my $ref = $self->{_tags}->{$tag_name};
     if (not defined ($ref)) {
-	return undef;
+	return ();
     }
     return @$ref;
 }
@@ -186,6 +183,11 @@ sub add_file ($$) {
     my $self = shift;
     my $file = shift;
 
+    if (not defined $self->{_files}) {
+	my @fs = ();
+	$self->{_files} = \@fs;
+    }
+    return if not defined $file;
     my $files = $self->{_files};
     push (@$files, $file);
 }
@@ -217,9 +219,18 @@ sub get_files ($) {
 	$self->{_metafiles_loaded} = 1;
     }
     my $files = $self->{_files};
+    return undef if not defined $files;
     return @$files if $files;
-    print "WARNING: %files missing for package $self\n";
     return undef;
+}
+
+sub has_files ($) {
+    my $self = shift;
+
+    return 1 if defined $self->{_files};
+    my $metafiles = $self->{_metafiles};
+    return 1 if @$metafiles;
+    return 0;
 }
 
 sub get_classes ($) {

@@ -1,18 +1,17 @@
- # make source packages
- # support for SUNW_PKGLIST, SUNW_LOC
- # %class
- # implement --rebuild
- - implement nosource and nopatch
- = %space
- - check package name length, including src pkg name
- - print an error msg if a %defattr arg is numeric
+ + missing %files should not produce a package
+ + implement nosource and nopatch
+ + check package name length, including src pkg name
+ # print file name and line number with error msgs
+ + print an error msg if a %defattr arg is numeric
+ + handle compressed patches
+ + accept multiple -a and -b options to %setup
+ + do not include empty depend file if no dependencies were specified
  - fix version checking
- - handle compressed patches
+ = %space
  = ability to build from CVS
- = generate plain specs and CVS snapshot tarballs
+ = generate plain specs and CVS snapshot tarballs (cvs:// sources)
  = wrap rpm on Linux
  = Solaris patch dependency
- - accept multiple -a and -b options to %setup
  - .rcfile support
 --
 

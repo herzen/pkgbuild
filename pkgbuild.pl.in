@@ -503,7 +503,7 @@ sub get_script_header ($) {
 	    "  echo '***     type   exit      to continue'\n" .
 	    "  echo '***     type   exit 1    to abort'\n" .
 	    "\n" .
-	    "  /bin/bash -i +o monitor || exit 1\n" .
+	    "  /bin/bash --noprofile --norc +o monitor -i || exit 1\n" .
 	    "\n" .
 	    "  set -x\n" .
 	    "}\n" .
@@ -724,8 +724,9 @@ sub make_depend ($$) {
     my $package = shift;
 
     my @deps = $package->get_array ("requires");
-# FIXME: merge with prereq
+
     if (not @deps) {
+	print "WARNING: $package: no dependencies\n";
 	return "";
     }
 
@@ -1024,7 +1025,7 @@ sub get_proto_hash ($) {
 	    }
 	    my $parent_dir = $fname;
 	    $parent_dir =~ s/\/[^\/]+$//;
-	    while ($parent_dir ne "" and
+	    while ($parent_dir =~ /\// and
 		   "/$parent_dir" ne "$basedir" and
 		   not defined ($file_info{$parent_dir}) and
 		   not defined ($default_dirs{$parent_dir})) {
@@ -1037,6 +1038,8 @@ sub get_proto_hash ($) {
 					    $defattr[2]);
 		if (defined ($pline)) {
 		    $default_dirs{$parent_dir} = $pline;
+		} else {
+		    last;
 		}
 		$parent_dir =~ s/\/[^\/]+$//;
 	    }
@@ -1119,7 +1122,9 @@ sub make_packages ($) {
     my @packages = $spec->get_packages ();
 
     foreach my $pkg (@packages) {
-	make_solaris_pkg ($spec, $pkg) or return 0;
+	if ($pkg->has_files()) {
+	    make_solaris_pkg ($spec, $pkg) or return 0;
+	}
     }
 
     my $buildroot = $spec->eval ("%buildroot");
@@ -1220,7 +1225,8 @@ sub make_src_package ($) {
 #	return 1;
     }
 
-    my $base_pkg_name = $spec->get_name ();
+    my $base_pkg_name = $spec->get_value_of ("sunw_pkg");
+    $base_pkg_name = $spec->get_name () if not defined $base_pkg_name;
     my $base_pkg_version = $spec->eval ("%version");
 
     my $src_pkg_name = $spec->get_value_of ("sourcepackage");
@@ -1229,9 +1235,9 @@ sub make_src_package ($) {
 	$src_pkg_name .= "-src";
     }
 
-    my @sources = $spec->get_sources ();
+    my @sources = $spec->get_public_sources ();
 
-    my @patches = $spec->get_patches ();
+    my @patches = $spec->get_public_patches ();
 
     my $copyright = $spec->get_value_of ("sunw_copyright");
 
@@ -1265,7 +1271,6 @@ sub make_src_package ($) {
     my $specdir = "share/src/${base_pkg_name}-${base_pkg_version}/SPECS";
     print $fhandle "d none share 0755 root sys\n";
     print $fhandle "d none share/src 0755 root sys\n";
-    print $fhandle "d none share/src/$srcdir 0755 root other\n";
     print $fhandle "d none $srcdir 0755 root other\n";
     print $fhandle "d none $specdir 0755 root other\n";
 

@@ -1,3 +1,42 @@
+2004-10-01  Laszlo Peter  <laca@sun.com>
+
+	Version 0.8.0:
+
+	* pkgbuild-postprocess: (new) script for setting sane permissions,
+	  strip binaries, set ELF .comments. To be used at the end of
+	  %install scriptlets. Invoke using
+
+	    %pkgbuild_postprocess -c "ELF comments" $RPM_BUILD_ROOT
+
+	* Makefile.am: add pkgbuild-postprocess
+
+	* configure.in: bump version, AC_SUBST(PKGBUILD_LIBDIR) so that
+	  pkgbuild can locate pkgbuild-postprocess.
+
+	* pkgbuild.pl.in: fix bash options for interactive mode; fix a
+	  potential infitite loop when generating the pkg prototype;
+	  don't generate a package if %files list is missing, but generate
+	  an empty package if %files is empty; don't generate an empty
+	  depend file if no Requires defined; use SUNW_Pkg tag for package
+	  name when defined; don't include patches/sources listed as
+	  NoPatch or NoSource.
+
+	* rpm_package.pm: implement has_files(): return 1 if a %files
+	  section exists for the package; subpackages don't inherit the
+	  SUNW_Pkg tag.
+
+	* rpm_spec.pm.in: new global var: _pkgbuild_libdir; define
+	  pkgbuild_postprocess macro: full path to pkgbuild-postprocess
+	  script; change error message handling to that file name and
+	  line number can be included in the messages; file names, current
+	  line numbers and the last file handle read are stored in global
+	  variables; check length of package names; fix expansion of
+	  %setup to allow multiple -a and -b options; allow zipped
+	  patches; report an error if user or group in %defattr numeric;
+	  implement get_public_sources() and get_public_patches(): same as
+	  get_sources and get_patches but omit sources and patches listed
+	  in nosource/nopatch;
+
 2004-09-05  Laszlo Peter  <laca@sun.com>
 
 	Version 0.7.0:

@@ -22,12 +22,13 @@ use overload ('""' => \&get_name);
 my $arch;
 my $os;
 my $os_rel;
-
+	      
 my $_default_topdir = "@TOPDIR@";
+my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 
 my $all_script_names = "pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun";
 my $all_block_names = "prep|build|install|clean|changelog|$all_script_names";
-my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass";
+my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use";
 
 sub init () {
     $arch = `uname -p`;
@@ -54,13 +55,8 @@ sub init () {
     }
 
     if ($os eq "linux") {
-	foreach my $dir (@INC) {
-	    if (-f "$dir/get_rpm_topdir") {
-		$_default_topdir = `rpm -ba $dir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
-		chomp ($_default_topdir);
-		last;
-	    }
-	}
+	$_default_topdir = `rpm -ba $_pkgbuild_libdir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
+	chomp ($_default_topdir);
     }
 }
 
@@ -158,6 +154,7 @@ sub new ($;$$) {
             "    mandir=%{?buildroot:%{buildroot}}%{_mandir} \\\n" .
             "    infodir=%{?buildroot:%{buildroot}}%{_infodir} \\\n" .
             "        install";
+	$self->{_defines}->{pkgbuild_postprocess} = "${_pkgbuild_libdir}/pkgbuild-postprocess";
 	$self->{_defines}->{nil} = "";
 	$self->{_defines}->{find_lang} = "echo WARNING: find_lang not implemented"
 
@@ -169,7 +166,7 @@ sub new ($;$$) {
 	    if ($predef =~ /^\s*([a-zA-Z0-9_]*)\s+(.*\S)\s*$/) {
 		$self->{_defines}->{$1} = $2;
 	    } else {
-		print "ERROR: invalid definition $predef\n";
+		$self->{error} = "invalid definition $predef";
 		return undef;
 	    }
 	}
@@ -271,7 +268,7 @@ sub _do_eval ($$$@) {
 	    return $self->_do_eval_command ($preeval, $str, @chrs);
 	} elsif ($chr eq "{") {  # %{....
 	    if (not @chrs) {
-		$self->{error} = "Unterminated {: $str%{";
+		$self->_set_error ("Unterminated {: $str%{");
 		return $str;
 	    }
 	    $chr = shift (@chrs);
@@ -283,7 +280,7 @@ sub _do_eval ($$$@) {
 			return "$str%";
 		    }
 		}
-		$self->{error} = "Unterminated {: $str%{$chr";
+		$self->_set_error ("Unterminated {: $str%{$chr");
 		return $str;
 	    }
 	    if ($chr =~ /([SP])/ and ($chrs[0] eq ":")) {  # %{S:n} or %{P:n}
@@ -343,7 +340,7 @@ sub _do_eval_var ($$$$$@) {  # %var or %{var}
 	$varname = "$varname$chr";
     }
     if (not @chrs and defined ($delimiter) and ($chr ne "}")) {
-	$self->{error} = "Unterminated {: $str%{$varname";
+	$self->_set_error ("Unterminated {: $str%{$varname");
 	return $str;
     }
 
@@ -407,7 +404,7 @@ sub _do_eval_spec_var ($$$$$@) { # %spec.var or %{spec.var}
 	$varname = "$varname$chr";
     }
     if (not @chrs and defined ($delimiter) and ($chr ne "}")) {
-	$self->{error} = "Unterminated {: $str%{$specname.$varname";
+	$self->_set_error ("Unterminated {: $str%{$specname.$varname");
 	return $str;
     }
 
@@ -464,7 +461,7 @@ sub _do_eval_spec_pkg_var ($$$$$@) { # %spec.pkg.var or %{spec.pkg.var}
 	$varname = "$varname$chr";
     }
     if (not @chrs and defined ($delimiter) and ($chr ne "}")) {
-	$self->{error} = "Unterminated {: $str%{$specname.$pkgname.$varname";
+	$self->_set_error ("Unterminated {: $str%{$specname.$pkgname.$varname");
 	return $str;
     }
 
@@ -539,7 +536,7 @@ sub _do_eval_command ($$$@) {  # %(command)
 	$command = "$command$chr";
     }
     if (not @chrs and (($depth > 0) or ($chr ne ")"))) {
-	$self->{error} = "Unterminated %(: $str%($command";
+	$self->_set_error ("Unterminated %(: $str%($command");
 	return $str;
     }
 
@@ -573,7 +570,7 @@ sub _do_eval_sp ($$$$@) {  # %{S:n} or %{P:n}
 	$num = "$num$chr";
     }
     if (not @chrs and ($chr ne "}")) {
-	$self->{error} = "Unterminated {: $str%{$sp:$num";
+	$self->_set_error ("Unterminated {: $str%{$sp:$num");
 	return $str;
     }
 
@@ -622,7 +619,7 @@ sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar}
 	$varname = "$varname$chr";
     }
     if (not @chrs and defined ($delimiter) and ($chr ne "}")) {
-	$self->{error} = "Unterminated {: $str%{?$varname";
+	$self->_set_error ("Unterminated {: $str%{?$varname");
 	return $str;
     }
 
@@ -673,7 +670,7 @@ sub _do_eval_cond_val ($$$$@) {  #  %{?foo:bar}
 	$defval = "$defval$chr";
     }
     if (not @chrs and (($depth > 0) or ($chr ne "}"))) {
-	$self->{error} = "Unterminated {?: $str%{?$varname:$defval";
+	$self->_set_error ("Unterminated {?: $str%{?$varname:$defval");
 	return $str;
     }
 
@@ -692,6 +689,32 @@ sub _do_eval_cond_val ($$$$@) {  #  %{?foo:bar}
     }
 }
 
+my %_line_numbers;
+my %_file_names;
+my $last_fhandle;
+
+sub _set_error ($$;$) {
+    my $self = shift;
+    my $msg = shift;
+    my $fhandle = shift;
+
+    $fhandle = $last_fhandle if not defined ($fhandle);
+
+    my $fname = $_file_names{$fhandle};
+    $fname = "" if not defined $fname;
+    my $lineno;
+    if (defined ($_line_numbers{$fhandle})) {
+	$lineno = "($_line_numbers{$fhandle}): ";
+    } else {
+	$lineno = "";
+	if ($fname ne "") {
+	    $lineno = ": ";
+	}
+    }
+
+    $self->{error} = "$fname$lineno$msg";
+}
+
 sub _eat_lines ($$) {
     my $self = shift;
     my $fhandle = shift;
@@ -699,8 +722,14 @@ sub _eat_lines ($$) {
 
     my $depth = 1;
 
+    if (not defined ($_line_numbers{$fhandle})) {
+	$_line_numbers{$fhandle} = 0;
+    }
+    $last_fhandle = $fhandle;
+
     while (1) {
 	$line = <$fhandle>;
+	$_line_numbers{$fhandle}++;
 	if (not defined $line) {
 	    last;
 	}
@@ -725,7 +754,13 @@ sub _get_next_line ($$) {
     my $self = shift;
     my $fhandle = shift;
 
+    if (not defined ($_line_numbers{$fhandle})) {
+	$_line_numbers{$fhandle} = 0;
+    }
+
     my $line = <$fhandle>;
+    $_line_numbers{$fhandle}++;
+    $last_fhandle = $fhandle;
     if (not defined $line) {
 	return undef;
     }
@@ -748,7 +783,7 @@ sub _get_next_line ($$) {
 	if ($cond) {
 	    $line = $self->_get_next_line ($fhandle);
 	    if (not defined($line)) {
-		$self->{error} = "Unclosed %if";
+		$self->_set_error ("Unclosed %if", $fhandle);
 		return undef;
 	    }
 	    return $line;
@@ -767,7 +802,7 @@ sub _get_next_line ($$) {
 
     } elsif ($line =~ /^\s*%else/) {
 	if ($self->{_in_conditional} == 0) {
-	    $self->{error} = "$fhandle: Got a %else with no if";
+	    $self->_set_error ("Got a %else with no if", $fhandle);
 	    return undef;
 	}
 	my $lastline = $self->_eat_lines ($fhandle);
@@ -775,7 +810,7 @@ sub _get_next_line ($$) {
 	    return undef;
 	}
 	if ($lastline eq "%else") {
-	    $self->{error} = "%endif expected, %else found";
+	    $self->_set_error ("%endif expected, %else found", $fhandle);
 	    $line = undef;
 	}
 	if ($lastline eq "%endif") {
@@ -785,7 +820,7 @@ sub _get_next_line ($$) {
 	return $line;
     } elsif ($line =~ /^\s*%endif/) {
 	if ($self->{_in_conditional} == 0) {
-	    $self->{error} = "$fhandle: Got a %endif with no if";
+	    $self->_set_error ("$fhandle: Got a %endif with no if", $fhandle);
 	    return undef;
 	}
 	--$self->{_in_conditional};
@@ -807,7 +842,7 @@ sub _process_use ($$$) {
 	$name = $1;
 	$fname = $2;
     } else {
-	$self->{error} = "syntax error in %use directive: $line";
+	$self->_set_error ("syntax error in %use directive", $fhandle);
 	return 0;
     }
 
@@ -818,13 +853,12 @@ sub _process_use ($$$) {
     my $specdir = $self->get_value_of ("_specdir");
     my $spec = new rpm_spec ("$specdir/$fname", undef, $self);
     if (not defined ($spec)) {
-	$self->{error} = "Could not open file $specdir/$fname";
+	$self->_set_error ("Could not open file $specdir/$fname", $fhandle);
 	return 0;
     }
 
     $spec->get_value_of ("name");
     if (defined ($spec->{error})) {
-	$self->{error}="$spec->{_base_file_name}: $spec->{error}";
 	return 0;
     }
 
@@ -848,7 +882,7 @@ sub _process_include ($$$$@) {
     my $specdir = $self->get_value_of ("_specdir");
     my $fname = $line;
     $fname =~ s/\s*%include\s+(\S+)\s*/$1/ or
-	$self->{error} = "Invalid %include command: $line",
+	$self->_set_error ("Invalid %include command: $line", $fhandle),
 	return (0);
     if ($fname =~ /^"(.*)"$/) {
 	$fname = $1;
@@ -856,19 +890,14 @@ sub _process_include ($$$$@) {
 
     my $inc_fhandle = "SPEC_FILE" . $file_id++;
     open $inc_fhandle, "<$specdir/$fname" or
-	$self->{error} = "Could not open %include file $specdir/$fname for reading",
+	$self->_set_error ("Could not open %include file $specdir/$fname for reading", $fhandle), 
 	return (0);
+    $_file_names{$inc_fhandle} = "$fname";
     my $incref = $self->{_includes};
     push(@$incref, $fname);
 
-    while (1) {
-	$line = $self->_get_next_line ($inc_fhandle);
-	if (not defined ($line)) {
-	    last;
-	}
-	if (not $self->$callback ($inc_fhandle, $line, @cbargs)) {
-	    return (0);
-	}
+    if (not $self->$callback ($inc_fhandle, undef, @cbargs)) {
+	return (0);
     }
 
     close $inc_fhandle;
@@ -923,7 +952,7 @@ sub _process_tag ($$$) {
 	    $value = $1;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
-	    $package_ref->set_tag ($tagname, $self->eval ($value));
+	    $package_ref->set_tag ($tagname, $value);
 	    return 1;
 	}
     }
@@ -931,7 +960,7 @@ sub _process_tag ($$$) {
     foreach my $tag (@multi_tags) {
 	if ($lcline =~ /^$tag\s*:\s*/) {
 	    $line =~ /^\s*[a-zA-Z0-9_-]*\s*:\s*(.*\S)\s*$/;
-	    $value = $self->eval ($1);
+	    $value = $1;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
 	    $package_ref->push_tag ($tagname, $value);
@@ -943,7 +972,7 @@ sub _process_tag ($$$) {
 	if ($lcline =~ /^$tag([0-9]*)\s*:\s*/) {
 	    my $num = $1;
 	    $line =~ /^\s*[a-zA-Z0-9_-]*\s*:\s*(.*\S)\s*$/;
-	    $value = $self->eval ($1);
+	    $value = $1;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
 	    $package_ref->set_ord_tag ($tagname, $num, $value);
@@ -958,12 +987,12 @@ sub _process_tag ($$$) {
 	    $value = $1;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
-	    $package_ref->set_tag ("$tagname::$locale", $self->eval ($value));
+	    $package_ref->set_tag ("$tagname::$locale", $value);
 	    return 1;
 	}
     }
 
-    $self->{error} = "Unknown tag: $line";
+    $self->_set_error ("Unknown tag: $line", $fhandle);
     return 0;
 }
 
@@ -1001,23 +1030,29 @@ sub _process_package ($$$) {
     } elsif ($line =~ /\s*%[pP][aA][cC][kK][aA][gG][eE]\s+(\S+)\s*$/) {
 	$package_name = $$mainpkg_ref->get_tag ("name") . "-" . $1;
     } else {
-	$self->{error} = "invalid %package directive: $line";
+	$self->_set_error ("invalid %package directive: $line", $fhandle);
 	return 0;
     }
 
     my $pkg = $self->find_package_by_name ($package_name);
     if (defined ($pkg)) {
-	$self->{error} = "Package already exists: $line";
+	$self->_set_error ("Package already exists: $package_name", $fhandle);
 	return 0;
     }
 
-    my $src_pkg_name = $self->get_value_of ("sourcepackage");
-    if (not defined $src_pkg_name) {
-	$src_pkg_name = $$mainpkg_ref->get_tag ("name") . "-src";
-    }
-    if ($src_pkg_name eq $package_name) {
-	$self->{error} = "Package name $package_name clashes with the source package name, use the SourcePackage tag to define a different source package name";
-	return 0;
+    if ($os eq "solaris") {
+	my $src_pkg_name = $self->get_value_of ("sourcepackage");
+	if (not defined $src_pkg_name) {
+	    $src_pkg_name = $$mainpkg_ref->get_tag ("name") . "-src";
+	}
+	if ($src_pkg_name eq $package_name) {
+	    $self->_set_error ("Package name $package_name clashes with the source package name, use the SourcePackage tag to define a different source package name", $fhandle);
+	    return 0;
+	}
+	if (length ($package_name) > 32) {
+	    $self->_set_error ("Package name $package_name is too long (>32 chars)", $fhandle);
+	    return 0;
+	}
     }
 
     my $new_package = rpm_package->new_subpackage (\$self, $package_name);
@@ -1083,8 +1118,7 @@ sub _get_unpack_commands ($$) {
 	}
     } else {
 ## TODO: add CVS checkout
-	print "WARNING: I don't know how to unpack $srcname\n";
-	$unpack = "/bin/cat";
+	$uncompress = "/bin/cat";
     }
 
     return ($uncompress, $unpack);
@@ -1119,7 +1153,7 @@ sub _split_opts ($) {
 		$tok = "$tok$1";
 		$line =~ s/^((\\"|[^\s"])+)//;
 	    } else {
-		print "ERROR: assertion failed: _split_opts ($line)\n"
+		$self->_set_error ("ERROR: assertion failed: _split_opts ($line)");
 	    }
 	}
 	$tok =~ s/\\"/"/g;
@@ -1153,7 +1187,7 @@ sub _is_number($) {
 # <char>#
 #   requires a numeric argument
 # <char>@
-#   option can be used multiple times
+#   option can be used multiple times, values will be separated by \n's
 sub _process_macro_opts ($$$$;$$) {
     my $self = shift;
     my $opt_def = shift;
@@ -1190,7 +1224,7 @@ sub _process_macro_opts ($$$$;$$) {
 		} else {
 		    my $arg = shift (@tokens);
 		    if (not defined ($arg)) {
-			$self->{error} = "need arg to %$macro $token";
+			$self->_set_error ("need arg to %$macro $token");
 			return %macro_opts;
 		    }
 		    $macro_opts{$opt} = $arg;
@@ -1214,11 +1248,11 @@ sub _process_macro_opts ($$$$;$$) {
 		    $arg = shift (@tokens);
 		}
 		if (not defined ($arg)) {
-		    $self->{error} = "need arg to %$macro $token";
+		    $self->_set_error ("need arg to %$macro $token");
 		    return %macro_opts;
 		}
 		if (! _is_number ($arg)) {
-		    $self->{error} = "Bad arg to %$macro $token: $arg";
+		    $self->_set_error ("Bad arg to %$macro $token: $arg");
 		    return %macro_opts;
 		}
 		$macro_opts{$opt} = $arg;
@@ -1228,23 +1262,23 @@ sub _process_macro_opts ($$$$;$$) {
 		} else {
 		    my $arg = shift (@tokens);
 		    if (not defined ($arg)) {
-			$self->{error} = "need arg to %$macro $token";
+			$self->_set_error ("need arg to %$macro $token");
 			return %macro_opts;
 		    }
 		    if (not defined ($macro_opts{$opt})) {
 			$macro_opts{$opt} = $arg;
 		    } else {
-			$macro_opts{$opt} = $macro_opts{$opt} . "\n" . $arg;
+			$macro_opts{$opt} .= "\n" . $arg;
 		    }
 		}
 	    } elsif ($opt_def =~ /$opt/) {
 		if ($arg0 ne "") {
-		    $self->{error} = "Bad arg to %$macro -$opt: $arg0";
+		    $self->_set_error ("Bad arg to %$macro -$opt: $arg0");
 		}
 		$macro_opts{$opt} = '';
 	    } else {
 		chomp($line);
-		$self->{error} = "Bad option $token: $line";
+		$self->_set_error ("Bad option $token: $line");
 		return %macro_opts;
 	    }
 	} else {
@@ -1252,7 +1286,7 @@ sub _process_macro_opts ($$$$;$$) {
 		my $argc = $macro_opts{argc}++;
 		$macro_opts{"argv$argc"} = $token;
 	    } else {
-		$self->{error} = "Bad arg to %$macro: $token";
+		$self->_set_error ("Bad arg to %$macro: $token");
 		return %macro_opts;
 	    }
 	}
@@ -1282,7 +1316,6 @@ sub get_class_script ($$$) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -1296,7 +1329,7 @@ sub get_class_script ($$$) {
 	    $script_file .= "/" . 
 		$self->{_classes}->{$class_name}->{"${script_name}_file"};
 	    open SCRIPT_FILE, "<$script_file" or
-		$self->{error} = "Could not open class action script file $script_file for reading",
+		$self->_set_error ("Could not open class action script file $script_file for reading"),
 		return undef;
 	    my @lines = <SCRIPT_FILE>;
 	    close SCRIPT_FILE;
@@ -1309,38 +1342,43 @@ sub get_class_script ($$$) {
     return undef;
 }
 
-sub _process_class_action ($$$) {
+sub _process_class_action ($$$;$$) {
     my $self = shift;
     my $fhandle = shift;
     my $line = shift;
+    my $class_name = shift;
+    my $macro = shift;
 
-    $line =~ /^%([ir]class)/;
-    my $macro = $1;
-    my %macro_opts = $self->_process_macro_opts ('f:', $line,
-						 $macro);
-    if (defined ($self->{error})) {
-	return 0;
-    }
-
-    if ($macro_opts{argc} != 1) {
-	$self->{error} = "Class name required after %$macro";
-	return 0;
-    }
-
-    my $class_name = $macro_opts{argv0};
-    if (not defined ($self->{_classes}->{$class_name})) {
-	$self->{_classes}->{$class_name} = {};
-    } else {
-	if (defined ($self->{_classes}->{$class_name}->{$macro}) or
-	    defined ($self->{_classes}->{$class_name}->{"${macro}_file"})) {
-	    $self->{error} = "%$macro for class $class_name multiply defined";
+    if (not defined $class_name) {
+	$line =~ /^%([ir]class)/;
+	$macro = $1;
+	my %macro_opts = $self->_process_macro_opts ('f:', $line,
+						     $macro);
+	if (defined ($self->{error})) {
 	    return 0;
 	}
-    }
 
-    if (defined ($macro_opts{'f'})) {
-	$self->{_classes}->{$class_name}->{"${macro}_file"} = $macro_opts{'f'};
-	return 1;
+	if ($macro_opts{argc} != 1) {
+	    $self->_set_error ("Class name required after %$macro");
+	    return 0;
+	}
+
+	$class_name = $macro_opts{argv0};
+
+	if (not defined ($self->{_classes}->{$class_name})) {
+	    $self->{_classes}->{$class_name} = {};
+	} else {
+	    if (defined ($self->{_classes}->{$class_name}->{$macro}) or
+		defined ($self->{_classes}->{$class_name}->{"${macro}_file"})) {
+		$self->_set_error ("%$macro for class $class_name multiply defined");
+		return 0;
+	    }
+	}
+
+	if (defined ($macro_opts{'f'})) {
+	    $self->{_classes}->{$class_name}->{"${macro}_file"} = $macro_opts{'f'};
+	    return 1;
+	}
     }
 
     my $eline;
@@ -1358,8 +1396,8 @@ sub _process_class_action ($$$) {
 	    }
 	} elsif ($eline =~ /^\s*%include/) {
 	    if (not $self->_process_include ($fhandle, $line, 
-					     \&_process_block, 
-					     ($block_name, $package_name))) {
+					     \&_process_class_action, 
+					     ($class_name, $macro))) {
 		return (0);
 	    }
 	} elsif ($eline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_-]*)\.(${all_block_names})/) {
@@ -1399,7 +1437,7 @@ sub _process_macro ($$$$$$) {
     if (defined ($name)) {
 	my $spec_used = $self->{_specs_used}->{$name};
 	if (not defined $spec_used) {
-	    $self->{error} = "name $name not found. Missing of mistyped %use?";
+	    $self->_set_error ("name $name not found. Missing %use?");
 	    return 0;
 	}
 	my $scriptlet;
@@ -1443,7 +1481,7 @@ sub _process_macro ($$$$$$) {
 		$num = 0;
 	    }
 	    
-	    my %macro_opts = $self->_process_macro_opts ('!n:DcTqb#a#', $line,
+	    my %macro_opts = $self->_process_macro_opts ('!n:DcTqb@a@', $line,
 							 $macro, $name, $package);
 	    if (defined ($self->{error})) {
 		return 0;
@@ -1461,45 +1499,88 @@ sub _process_macro ($$$$$$) {
 		$macro_expansion = $macro_expansion . "rm -rf $dirname\n";
 	    }
 	    if (defined ($macro_opts{'c'})) {
-		$macro_expansion = $macro_expansion . "mkdir $dirname\n" .
+		$macro_expansion = $macro_expansion . "mkdir -p $dirname\n" .
 		    "cd $dirname\n";
+	    } else {
+		if (not defined ($macro_opts{'T'})) {
+		    my $srcname = $self->get_value_of("SOURCE$num");
+		    my $uncompress;
+		    my $unpack;
+		    ($uncompress, $unpack) = 
+			_get_unpack_commands ($srcname, $macro_opts{'q'});
+		    $macro_expansion = $macro_expansion .
+			"$uncompress %SOURCE$num$unpack\n";
+		    $macro_expansion = $macro_expansion .
+			"STATUS=\$?\n" .
+			"if [ \$STATUS -ne 0 ]; then\n" .
+			"  exit \$STATUS\n" .
+			"fi\n";
+		}
 	    }
-	    if (not defined ($macro_opts{'T'})) {
-		my $srcname = $self->get_value_of("SOURCE$num");
-		my $uncompress;
-		my $unpack;
-		($uncompress, $unpack) = 
-		    _get_unpack_commands ($srcname, $macro_opts{'q'});
-		$macro_expansion = $macro_expansion .
-		    "$uncompress %SOURCE$num$unpack\n";
+
+	    if (defined $macro_opts{'b'}) {
+		my @sourcenums = split /\n/, $macro_opts{'b'};
+		foreach my $srcnum (@sourcenums) {
+		    next if not defined $srcnum;
+		    if (not _is_number ($srcnum)) {
+			$self->_set_error ("Bad arg to %setup: number expected after -b");
+			return 0;
+		    }
+		    my $srcname = $self->eval("%SOURCE$srcnum");
+		    my $uncompress;
+		    my $unpack;
+		    ($uncompress, $unpack) = 
+			_get_unpack_commands ($srcname, $macro_opts{'q'});
+		    $macro_expansion = $macro_expansion .
+			"$uncompress %SOURCE$srcnum$unpack\n";
+		    $macro_expansion = $macro_expansion .
+			"STATUS=\$?\n" .
+			"if [ \$STATUS -ne 0 ]; then\n" .
+			"  exit \$STATUS\n" .
+			"fi\n";
+		}
 	    }
-	    if (defined ($macro_opts{'b'})) {
-		my $srcnum = $macro_opts{'b'};
-		my $srcname = $self->eval("%SOURCE$srcnum");
-		my $uncompress;
-		my $unpack;
-		($uncompress, $unpack) = 
-		    _get_unpack_commands ($srcname, $macro_opts{'q'});
-		$macro_expansion = $macro_expansion .
-		    "$uncompress %SOURCE$srcnum$unpack\n";
-		$macro_expansion = $macro_expansion .
-		    "STATUS=\$?\n" .
-		    "if [ \$STATUS -ne 0 ]; then\n" .
-		    "  exit \$STATUS\n" .
-		    "fi\n";
-	    }
+
 	    if (not defined ($macro_opts{'c'})) {
 		$macro_expansion = $macro_expansion . "cd $dirname\n";
+	    } else {
+		if (not defined ($macro_opts{'T'})) {
+		    my $srcname = $self->get_value_of("SOURCE$num");
+		    my $uncompress;
+		    my $unpack;
+		    ($uncompress, $unpack) = 
+			_get_unpack_commands ($srcname, $macro_opts{'q'});
+		    $macro_expansion = $macro_expansion .
+			"$uncompress %SOURCE$num$unpack\n";
+		    $macro_expansion = $macro_expansion .
+			"STATUS=\$?\n" .
+			"if [ \$STATUS -ne 0 ]; then\n" .
+			"  exit \$STATUS\n" .
+			"fi\n";
+		}
 	    }
-	    if (defined ($macro_opts{'a'})) {
-		my $srcnum = $macro_opts{'a'};
-		my $srcname = $self->eval("%SOURCE$srcnum");
-		my $uncompress;
-		my $unpack;
-		($uncompress, $unpack) = 
-		    _get_unpack_commands ($srcname, $macro_opts{'q'});
-		$macro_expansion = $macro_expansion .
-		    "$uncompress %SOURCE$srcnum$unpack\n";
+
+	    if (defined $macro_opts{'a'}) {
+		@sourcenums = split /\n/, $macro_opts{'a'};
+		foreach my $srcnum (@sourcenums) {
+		    next if not defined $srcnum;
+		    if (not _is_number ($srcnum)) {
+			$self->_set_error ("Bad arg to %setup: number expected after -a");
+			return 0;
+		    }
+		    my $srcname = $self->eval("%SOURCE$srcnum");
+		    my $uncompress;
+		    my $unpack;
+		    ($uncompress, $unpack) = 
+			_get_unpack_commands ($srcname, $macro_opts{'q'});
+		    $macro_expansion = $macro_expansion .
+			"$uncompress %SOURCE$srcnum$unpack\n";
+		    $macro_expansion = $macro_expansion .
+			"STATUS=\$?\n" .
+			"if [ \$STATUS -ne 0 ]; then\n" .
+			"  exit \$STATUS\n" .
+			"fi\n";
+		}
 	    }
 	    if ($os eq "solaris") {
 		$macro_expansion = $macro_expansion . 
@@ -1538,11 +1619,18 @@ sub _process_macro ($$$$$$) {
 
 	    my $val = $values[$num];
 	    if (not defined ($val)) {
-		$self->{error} = "ERROR: no such patch: Patch$num";
+		$self->_set_error ("ERROR: no such patch: Patch$num");
 		return 0;
 	    }
 	    $val =~ s/^.*\/([^\/]*)/$1/;
 
+	    my $uncompress;
+	    if ($val =~ /\.bz2$/) {
+		$uncompress = "bzip2 -d < $val";
+	    } elsif ($val =~ /\.(gz|zip)$/) {
+		$uncompress = "gzip -d < $val";
+	    }
+	    
 	    my $patch_opts = '';
 	    if (defined ($macro_opts{'p'})) {
 		$patch_opts = $patch_opts . " -p $macro_opts{'p'}";
@@ -1555,8 +1643,14 @@ sub _process_macro ($$$$$$) {
 	    if (defined ($macro_opts{'b'})) {
 		$patch_opts = $patch_opts . " -b -z $macro_opts{'b'}";
 	    }
-	    $macro_expansion = "echo 'Patch #$num ($val):'\n" .
-		"patch $patch_opts < %{_sourcedir}/$val";
+	    $macro_expansion = "echo 'Patch #$num ($val):'\n";
+	    if (not defined ($uncompress)) {
+		    $macro_expansion .= 
+			"patch $patch_opts < %{_sourcedir}/$val";
+	    } else {
+		    $macro_expansion .= 
+			"$uncompress | patch $patch_opts";
+	    }
 
 	    $macro_expansion = $self->eval ("$macro_expansion");
 	}
@@ -1598,7 +1692,7 @@ sub _process_block ($$$;$$) {
 	}
 	
 	if (not defined ($package_ref)) {
-	    $self->{error} = "Package $package_name not defined in $line";
+	    $self->_set_error ("Package $package_name not defined in $line");
 	    return 0;
 	}
     }
@@ -1643,13 +1737,13 @@ sub _process_block ($$$;$$) {
 	    if (defined ($self->{_specs_used}->{$1})) {
 		$self->_process_macro ($1, undef, $2, $block_name, $line);
 	    } else {
-		print "WARNING: undefined macro in $line\n";
+		print "WARNING: undefined macro $line\n";
 	    }
 	} elsif ($eline =~ /^\s*%([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_-]*)\.(${all_block_names})/) {
 	    if (defined ($self->{_specs_used}->{$1})) {
 		$self->_process_macro ($1, $2, $3, $block_name, $line);
 	    } else {
-		print "WARNING: undefined macro in $line\n";
+		print "WARNING: undefined macro $line\n";
 	    }
 	} elsif (not $line =~ /^%(${all_keywords}|%{?)/) {
 	    if ($block_name =~ /(prep|build|install|clean|changelog)/) {
@@ -1683,6 +1777,7 @@ sub load_metafile ($$$) {
     open $mf_fhandle, "<$builddir/$dirname/$fname" or
 	$self->{error} = "Could not open %files file $builddir/$dirname/$fname for reading",
 	return (0);
+    $_file_names{$mf_fhandle} = "$fname";
     return $self->_process_files ($mf_fhandle, undef, $package_name);
 }
 
@@ -1701,7 +1796,7 @@ sub _process_files ($$$;$) {
 	}
 	if (($macro_opts{'argc'} > 1) or
 	    (defined ($macro_opts{'n'}) and ($macro_opts{'argc'} > 0))) {
-	    $self->{error} = "Too many names: $line";
+	    $self->_set_error ("Too many names: $line", $fhandle);
 	    return 0;
 	}
 	$package_ref = $self->{_packages}[0];
@@ -1725,19 +1820,21 @@ sub _process_files ($$$;$) {
 	}
     } else {
 	if (not defined ($package_name)) {
-	    print "ERROR: assertion failed: _process_files: \$line or \$package_name must be defined\n";
+	    $self->_set_error ("assertion failed: _process_files: \$line or \$package_name must be defined");
 	    return 0;
 	}
 	$package_ref = $self->find_package_by_name ($package_name);
     }
 
     if (not defined ($package_ref)) {
-	$self->{error} = "Undefined package $package_name";
+	$self->_set_error ("Undefined package $package_name", $fhandle);
 	return 0;
     }
 
-    my @defattr = $package_ref->get_defattr();
-    my @all_verify = rpm_file->get_all_verify();
+    $package_ref->add_file (undef);  # initialise so that an empty pkg
+	                             # is created even if no files in %files
+    my @defattr = $package_ref->get_defattr ();
+    my @all_verify = rpm_file->get_all_verify ();
 
     my @this_attr = (@defattr);
     my $is_doc = 0;
@@ -1766,13 +1863,22 @@ sub _process_files ($$$;$) {
 		return (0);
 	    }
 	} elsif ($eline =~ /^\s*%include/) {
-	    if (not $self->_process_include ($fhandle, $line, \&_process_files,
-					     ($package_name))) {
+	    $self->_set_error ("%include not allowed within %files", $fhandle);
+	} elsif ($eline =~ /^\s*%defattr/) {
+	    if ($eline =~ /^%defattr\s*\(\s*(-|\?|[0-9]+)\s*,\s*(-|\?|[a-zA-Z0-9][a-zA-Z0-9_-]*)\s*,\s*(-|\?|[a-zA-Z0-9][a-zA-Z0-9_-]*)\s*\)\s*$/) {
+		my $mod = $1;
+		my $usr = $2;
+		my $grp = $3;
+		if (_is_number ($usr) or _is_number ($grp)) {
+		    $self->_set_error ("%defattr: user and group must be symbolic, not numeric", $fhandle);
+		    return (0);
+		}
+		@defattr = ($mod, $usr, $grp);
+		$package_ref->set_defattr ($mod, $usr, $grp);
+	    } else {
+		$self->_set_error ("syntax error: $line", $fhandle);
 		return (0);
 	    }
-	} elsif ($eline =~ /^\s*%defattr\s*\(\s*(-|\?|[0-9]+)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*$/) {
-	    @defattr = ($1, $2, $3);
-	    $package_ref->set_defattr ($1, $2, $3);
 	} elsif ($eline =~ /^\s*%doc/) {
 	    $is_doc = 1;
 	    $eline =~ s/^\s*%doc\s*//;
@@ -1798,7 +1904,8 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^\s*%class\s*\(([^\)]*)\)/) {
 	    $class_name = $1;
 	    if (not $self->_check_class ($class_name)) {
-		$self->{error} = "Undefined class $class_name: $line";
+		$self->_set_error ("Undefined class $class_name: $class_name",
+				   $fhandle);
 		return 0;
 	    }
 	    $eline =~ s/^\s*%class\s*\([^\)]*\)//;
@@ -1818,7 +1925,7 @@ sub _process_files ($$$;$) {
 				     $is_config, $class_name);
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
-	    $self->{error} = "File must begin with \"/\": $1";
+	    $self->_set_error ("File must begin with \"/\": $1", $fhandle);
 	    return 0;
 	} else {
 	    return $self->_process_top_level ($fhandle, $line);
@@ -1850,33 +1957,43 @@ sub _process_top_level ($$$) {
     my $fhandle = shift;
     my $line = shift;
 
-    my $eline = $self->eval ($line);
+    $line = $self->_get_next_line ($fhandle) if not defined ($line);
+    
+    while (1) {
+	my $eline = $self->eval ($line);
 
-    if ($eline =~ /^\s*#/) {
-	# comment, nothing to do.
-	return 1;
-    } elsif ($eline =~ /^\s*$/) {
-	return 1;
-    } elsif ($eline =~ /^%use/) {
-	return $self->_process_use ($fhandle, $line);
-    } elsif ($eline =~ /^%include/) {
-	return $self->_process_include ($fhandle, $line, \&_process_top_level, ());
-    } elsif ($eline =~ /^%package/) {
-	return $self->_process_package ($fhandle, $line);
-    } elsif ($eline =~ /^%[ir]class/) {
-	return $self->_process_class_action ($fhandle, $line);
-    } elsif ($eline =~ /^%(description|${all_block_names})/) {
-	return $self->_process_block ($fhandle, $line);
-    } elsif ($eline =~ /^%files/) {
-	return $self->_process_files ($fhandle, $line);
-    } elsif ($eline =~ /^\s*%define/) {
-	return $self->_process_define ($fhandle, $self->_pre_eval ($line));
-    } elsif ($eline =~ /^\s*\S+\s*:\s*\S+/) {
-	return $self->_process_tag ($fhandle, $line);
+	if ($eline =~ /^\s*#/) {
+	    # comment, nothing to do.
+	} elsif ($eline =~ /^\s*$/) {
+	    # whitespace only
+	} elsif ($eline =~ /^%use/) {
+	    $self->_process_use ($fhandle, $line) or return 0;
+	} elsif ($eline =~ /^%include/) {
+	    $self->_process_include ($fhandle, $line, \&_process_top_level, ())
+		or return 0;
+	} elsif ($eline =~ /^%package/) {
+	    $self->_process_package ($fhandle, $line) or return 0;
+	} elsif ($eline =~ /^%[ir]class/) {
+	    $self->_process_class_action ($fhandle, $line) or return 0;
+	} elsif ($eline =~ /^%(description|${all_block_names})/) {
+	    $self->_process_block ($fhandle, $line) or return 0;
+	} elsif ($eline =~ /^%files/) {
+	    $self->_process_files ($fhandle, $line) or return 0;
+	} elsif ($eline =~ /^\s*%define/) {
+	    $self->_process_define ($fhandle, $self->_pre_eval ($line))
+		or return 0;
+	} elsif ($eline =~ /^\s*\S+\s*:\s*\S+/) {
+	    $self->_process_tag ($fhandle, $eline) or return 0;
+	} else {
+	    $self -> _set_error ("syntax error", $fhandle);
+	    return 0;
+	}
+	if (defined $self->{error}) {
+	    return 0;
+	}
+	$line = $self->_get_next_line ($fhandle);
+	return(1) if not $line;
     }
-
-    $self -> {error} = "Unable to process line " . $line;
-    return 0;
 }
 
 sub _read_spec ($) {
@@ -1888,6 +2005,7 @@ sub _read_spec ($) {
     open $fhandle, "<$fname" or 
 	$self->{error} = "Could not open file $fname for reading",
 	return (0);
+    $_file_names{$fhandle} = $self->{_base_file_name};
 
     my $line;
 
@@ -1921,6 +2039,22 @@ sub _read_spec ($) {
 	return 0;
     }
 
+    if ($os eq "solaris") {
+	my $pkg_name = $self->get_value_of ("sunw_pkg");
+	$pkg_name = $self->get_name () unless defined $pkg_name;
+	if (length($pkg_name) > 32) {
+	    $self->{error} = "Package name $src_pkg_name is too long (>32 chars)";
+	    return 0;
+	}
+
+	my $src_pkg_name = $self->get_value_of ("sourcepackage");
+	$src_pkg_name = "${pkg_name}-src" if not defined $src_pkg_name;
+	if (length($src_pkg_name) > 32) {
+	    $self->{error} = "Source package name $src_pkg_name is too long (>32 chars), use the SourcePackage tag to define a different source package name";
+	    return 0;
+	}	
+    }
+
     return (1);
 }
 
@@ -1929,7 +2063,6 @@ sub get_name ($) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -1947,7 +2080,6 @@ sub get_packages ($) {
 
     if (! ($self->{_loaded} or $self->{_being_loaded})) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -1962,7 +2094,6 @@ sub block_is_defined ($$) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -1989,7 +2120,6 @@ sub get_block ($$) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2015,6 +2145,7 @@ sub get_rpms ($) {
     my @packages = $self->get_packages ();
     my @rpms = ();
     foreach my $pkg (@packages) {
+	next if not $pkg->has_files ();
 	my $pkg_arch = $pkg->get_tag ("buildarch");
 	if (not defined ($pkg_arch)) {
 	    $pkg_arch = $pkg->get_tag ("buildarchitectures");
@@ -2033,6 +2164,7 @@ sub get_rpm_paths ($) {
     my @packages = $self->get_packages ();
     my @rpms = ();
     foreach my $pkg (@packages) {
+	next if not $pkg->has_files ();
 	my $pkg_arch = $pkg->get_tag ("buildarch");
 	if (not defined ($pkg_arch)) {
 	    $pkg_arch = $pkg->get_tag ("buildarchitectures");
@@ -2053,7 +2185,13 @@ sub get_pkgs ($) {
     my @packages = $self->get_packages ();
     my @pkgs = ();
     foreach my $pkg (@packages) {
-	push (@pkgs, $pkg->get_name());
+	next if not $pkg->has_files ();
+	my $sunw_pkg = $pkg->get_tag ('sunw_pkg');
+	if (defined ($sunw_pkg)) {
+	    push (@pkgs, $sunw_pkg);
+	} else {
+	    push (@pkgs, $pkg->get_name());
+	}
     }
 
     return @pkgs;
@@ -2073,7 +2211,6 @@ sub get_value_of ($$) {
     }
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2114,7 +2251,6 @@ sub get_def ($$) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2127,7 +2263,6 @@ sub get_sources ($) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2144,12 +2279,40 @@ sub get_sources ($) {
     return _uniq (@values);
 }
 
+sub get_public_sources ($) {
+    my $self = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    return undef;
+	}
+    }
+
+    my $package_ref = $self->{_packages}[0];
+    my @values = ($package_ref->get_array ('source'));
+    my $nosrc = $package_ref->get_tag ("nosource");
+    if (defined $nosrc) {
+	my @nosrcs = split /[,\s]*/, $nosrc;
+	foreach my $nosrcid (@nosrcs) {
+	    next if not defined $nosrcid;
+	    $values[$nosrcid] = undef;
+	}
+    }
+    my $specs_used = $self->{_specs_used};
+    my @spec_names_used = keys %$specs_used;
+    foreach my $spec_name_used (@spec_names_used) {
+	my $spec_used = $self->{_specs_used}->{$spec_name_used};
+	my @sources_used = $$spec_used->get_public_sources ();
+	push (@values, @sources_used);
+    }
+    return _uniq (@values);
+}
+
 sub get_patches ($) {
     my $self = shift;
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2166,11 +2329,39 @@ sub get_patches ($) {
     return _uniq (@values);
 }
 
+sub get_public_patches ($) {
+    my $self = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    return undef;
+	}
+    }
+
+    my $package_ref = $self->{_packages}[0];
+    my @values = ($package_ref->get_array ('patch'));
+    my $noptch = $package_ref->get_tag ("nopatch");
+    if (defined $noptch) {
+	my @noptchs = split /[,\s]*/, $noptch;
+	foreach my $noptchid (@noptchs) {
+	    next if not defined $noptchid;
+	    $values[$noptchid] = undef;
+	}
+    }
+    my $specs_used = $self->{_specs_used};
+    my @spec_names_used = keys %$specs_used;
+    foreach my $spec_name_used (@spec_names_used) {
+	my $spec_used = $self->{_specs_used}->{$spec_name_used};
+	my @patches_used = $$spec_used->get_public_patches ();
+	push (@values, @patches_used);
+    }
+    return _uniq (@values);
+}
+
 sub get_classes ($) {
     my $self = shift;
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2185,7 +2376,6 @@ sub get_class_script_names ($) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2223,7 +2413,6 @@ sub get_included_files ($) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
@@ -2244,7 +2433,6 @@ sub get_used_spec_files ($) {
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
-	    print "ERROR: " . $self->{error} . "\n";
 	    return undef;
 	}
     }
