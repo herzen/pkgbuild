@@ -1,0 +1,46 @@
+Name:         SUNWpkgbuild
+License:      GPL
+Group:        System/Libraries
+Version:      @PKGBUILD_VERSION@
+Release:      1
+Vendor:	      Sun Microsystems, Inc.
+Summary:      pkgbuild - rpmbuild compatible tool for building Solaris packages
+Source:       pkgbuild-%{version}.tar.gz
+BuildRoot:    %{_tmppath}/%{name}-%{version}-build
+
+SUNW_Category:             application
+SUNW_HotLine:              Please contact your local service provider
+SUNW_MaxInst:              1000
+SUNW_BaseDir:              /
+
+Requires:     SUNWpl5u
+
+%define pkgbuild_topdir @TOPDIR@
+
+%description
+A tool for building Solaris SVr4 packages based on RPM spec files.
+Most features and some extensions of the spec format are implemented.
+
+%prep
+%setup -q -n pkgbuild-%version
+
+%build
+CFLAGS="$RPM_OPT_FLAGS"					\
+./configure --prefix=%{_prefix}				\
+            --with-topdir=%{pkgbuild_topdir}         	\
+make
+
+%install
+make DESTDIR=$RPM_BUILD_ROOT install
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%files
+%{_bindir}
+%{_libdir}
+%{pkgbuild_topdir}
+
+%changelog
+* Wed Jan 07 2004 - <laszlo.peter@sun.com>
+- initial version of the spec file
