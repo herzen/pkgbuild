@@ -1,3 +1,8 @@
 pkgbuild is a perl script for building Solaris packages from RPM spec
 files. It supports some extensions to the original spec format.
+
+File bugs at https://sourceforge.net/tracker/?group_id=125443&atid=702474
+
+More info at http://pkgbuild.sourceforge.net/
+
 Documentation to come soon...

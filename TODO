@@ -1,25 +1,8 @@
- + missing %files should not produce a package
- + implement nosource and nopatch
- + check package name length, including src pkg name
- # print file name and line number with error msgs
- + print an error msg if a %defattr arg is numeric
- + handle compressed patches
- + accept multiple -a and -b options to %setup
- + do not include empty depend file if no dependencies were specified
- - fix version checking
- = %space
- = ability to build from CVS
- = generate plain specs and CVS snapshot tarballs (cvs:// sources)
- = wrap rpm on Linux
- = Solaris patch dependency
+Some thing's I'm planning fix/add:
+ - support all rpm 4 spec file elements
+ - fix/implement version checking (currently dependencies are on pkg names only)
+ - add support for SVr4 "space files", see space(4) on Solaris
+ - on Linux, generate plain rpm spec files and call rpmbuild to do the build
  - .rcfile support
---
-
-Bugs:
-
- Key:
-  ? not confirmed/could not reproduce
-  + recently fixed bug
-  # recently fixed RFE
-  - dispatched
-  = RFE
+ - automatic regression tests
+ - support for building straight from CVS
