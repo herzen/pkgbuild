@@ -778,7 +778,7 @@ sub get_proto_hash ($) {
 					    $attribs[1],
 					    $attribs[2]);
 		if (not defined ($pline)) {
-		    message ("File not found by glob: $buildroot$fname");
+		    message ("File not found by glob: $buildroot/$fname");
 		    $has_errors = 1;
 		}
 		$file_info{$fname} = $pline;
@@ -789,7 +789,8 @@ sub get_proto_hash ($) {
     chdir ($cwd);
 
     if ($has_errors == 1) {
-	return undef;
+        my %empty_hash;
+	return %empty_hash;
     } else {
 	return %file_info;
     }
