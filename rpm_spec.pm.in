@@ -113,6 +113,7 @@ sub new ($;$$) {
     } else {
 	$self->{_defines}->{_pkgbuild} = "pkgbuild";
 	$self->{_defines}->{_pkgbuild_version} = "@PKGBUILD_VERSION@";
+	$self->{_defines}->{buildroot} = "/";
 	$self->{_defines}->{_target} = "i386";
 	$self->{_defines}->{_sysconfdir} = "/etc";
 	$self->{_defines}->{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
@@ -744,6 +745,8 @@ sub _eat_lines ($$) {
 	}
 	if ($line =~ /^\s*%if(arch|os)/) {
 	    $depth++;
+	} elsif ($line =~ /^\s*%if\s/) {
+	    $depth++;
 	} elsif ($line =~ /^\s*%else/) {
 	    $depth--;
 	    if ($depth == 0) {
@@ -802,7 +805,7 @@ sub _get_next_line ($$) {
 	return undef;
     }
 
-    if ($line =~ /^%if(arch|os|narch|nos)/) {
+    if ($line =~ /^%if(arch|os|narch|nos|\s)/) {
 	my $cond = 0;
 	
 	if ($line =~ /^%ifarch\s+(\S.*)/) {
@@ -813,6 +816,13 @@ sub _get_next_line ($$) {
 	    $cond = _match_os ("$1");
 	} elsif ($line =~ /^%ifnos\s+(\S.*)/) {
 	    $cond = not _match_os ("$1");
+	} elsif ($line =~ /^%if\s+(\S.*)/) {
+	    $cond = $self->eval ($1);
+	    $cond =~ s/-(.*)/$1/;
+	    if (not _is_number ($cond)) {
+		$self->_set_error ("%if: invalid boolean expression", $fhandle);
+		return undef;
+	    }
 	}
 
 	++$self->{_in_conditional};
@@ -1716,6 +1726,9 @@ sub _process_block ($$$;$$) {
 	$line =~ /^\s*%([a-z]*)/;
 	$block_name = $1;
 
+# FIXME: use _process_macro_opts instead
+# FIXME: implement %pre -p /path/to/shell
+
 	if ($line =~ /^\s*%$block_name\s+-n\s+(\S+)\s*$/) {
 	    $package_name = $1;
 	} elsif ($line =~ /^\s*%$block_name\s+(\S+)\s*$/) {
@@ -1748,6 +1761,9 @@ sub _process_block ($$$;$$) {
 		$dirname = $self->eval ("%name-%version");
 	    }
 	    $self->{_blocks}->{$block_name} = "cd $dirname\n";
+	} elsif ($block_name =~ /$all_script_names/) {
+	    # FIXME: value of -p comes here
+	    $self->{_blocks}->{$block_name} = "#!/bin/sh\n\n"
 	} else {
 	    $self->{_blocks}->{$block_name} = "";
 	}

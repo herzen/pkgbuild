@@ -774,7 +774,6 @@ sub make_scripts ($$) {
 	my $fname = $package . ".preinstall";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
-	print $fhandle "#!/bin/sh\n\n";
 	print $fhandle "$pre\n";
 	close $fhandle;
 	$retstr = $retstr . "i preinstall=$scriptdir/$fname\n";
@@ -786,7 +785,6 @@ sub make_scripts ($$) {
 	my $fname = $package . ".postinstall";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
-	print $fhandle "#!/bin/sh\n\n";
 	print $fhandle "$post\n";
 	close $fhandle;
 	$retstr = $retstr . "i postinstall=$scriptdir/$fname\n";
@@ -798,7 +796,6 @@ sub make_scripts ($$) {
 	my $fname = $package . ".preremove";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
-	print $fhandle "#!/bin/sh\n\n";
 	print $fhandle "$preun\n";
 	close $fhandle;
 	$retstr = $retstr . "i preremove=$scriptdir/$fname\n";
@@ -810,7 +807,6 @@ sub make_scripts ($$) {
 	my $fname = $package . ".postremove";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
-	print $fhandle "#!/bin/sh\n\n";
 	print $fhandle "$postun\n";
 	close $fhandle;
 	$retstr = $retstr . "i postremove=$scriptdir/$fname\n";
@@ -1137,21 +1133,23 @@ sub make_packages ($) {
 
     if ($has_files_at_all) {
 	my $buildroot = $spec->eval ("%buildroot");
-	my $old_cwd = `pwd`;
-	chdir ($buildroot);
-	my @all_fnames = list_all_files (".");
-	my $unpackaged = 0;
-	foreach my $fname (@all_fnames) {
-	    $fname = substr ($fname, 2);
-	    if (not defined ($all_files{$fname})) {
-		if (not $unpackaged) {
-		    $unpackaged = 1;
-		    print "WARNING: the following files are not included in any packages:\n"
-		    }
-		print "        /$fname\n";
+	if ($buildroot ne "/") {
+	    my $old_cwd = `pwd`;
+	    chdir ($buildroot);
+	    my @all_fnames = list_all_files (".");
+	    my $unpackaged = 0;
+	    foreach my $fname (@all_fnames) {
+		$fname = substr ($fname, 2);
+		if (not defined ($all_files{$fname})) {
+		    if (not $unpackaged) {
+			$unpackaged = 1;
+			print "WARNING: the following files are not included in any packages:\n"
+			}
+		    print "        /$fname\n";
+		}
 	    }
+	    chdir ($old_cwd);
 	}
-	chdir ($old_cwd);
     }
     
     return 1;

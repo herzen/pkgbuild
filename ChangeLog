@@ -1,3 +1,12 @@
+2005-06-13  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: version 0.9.1
+
+	* rpm_spec.pm.in: implement %if <expression>
+
+	* pkgbuild.pl.in: a baby step towards implementing %pre/post -p shell;
+	  avoid running find / when buildroot is unset.
+
 2005-01-25  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: fix solaris release checking
