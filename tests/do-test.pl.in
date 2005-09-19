@@ -1,0 +1,154 @@
+#!@PERL@
+
+use strict;
+use warnings;
+use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
+
+sub usage () {
+    print "do-test.pl [options] spec\n";
+    print "\n";
+    print "Options:\n";
+    print "     -S file, --stdout=file\n";
+    print "                    Compare standard output with file\n";
+    print "     -B dir, --build=dir\n";
+    print "                    Compare BUILD/dir to BASELINE/dir\n";
+    print "                    Remove BUILD/dir after the test\n";
+    print "     -R dir, --root=dir\n";
+    print "                    Compare /var/tmp/dir to BASELINE/dir\n";
+    print "                    Remove /var/tmp/dir after the test\n";
+    print "     -x {0|1}, --exit={0|1}\n";
+    print "                    Expect the exit status to be 0 or 1\n";
+    print "     -p, --bp\n";
+    print "                    Run pkgbuild -bp\n";
+    print "     -c, --bc\n";
+    print "                    Run pkgbuild -bc\n";
+    print "     -i, --bc\n";
+    print "                    Run pkgbuild -bi\n";
+    print "     -l, --bl\n";
+    print "                    Run pkgbuild -bl\n";
+    print "     -b, --bb\n";
+    print "                    Run pkgbuild -bb\n";
+    print "     -a, --ba\n";
+    print "                    Run pkgbuild -ba\n";
+    print "     -s, --bs\n";
+    print "                    Run pkgbuild -bs\n";
+    print "     -o \"options\", --options=\"options\"\n";
+    print "                    Additional options to pass to pkgbuild\n";
+    print "     -h, --help\n";
+    print "                    Print this usage info\n";
+
+    exit 0;
+}
+
+my $stdout_file;
+
+sub compare_stdout_with ($$) {
+    shift;
+    $stdout_file = shift;
+}
+ 
+my $builddir;
+sub compare_builddir_with ($$) {
+    shift;
+    $builddir = shift;
+}
+
+my $rootdir;
+sub compare_rootdir_with ($$) {
+    shift;
+    $rootdir = shift;
+}
+
+my $expected_exitval;
+sub expect_exitval ($$) {
+    shift;
+    $expected_exitval = shift;
+}
+
+my $build_command = "-ba";
+sub set_build_command ($) {
+    my $bc = shift;
+    $bc =~ s/.*(.)$/$1/;
+    $build_command = "-b$bc";
+}
+
+my $extra_options = "";
+sub set_options ($$) {
+    shift;
+    $extra_options = shift;
+}
+
+my $spec;
+sub process_args ($) {
+    my $arg = shift;
+    if ($arg =~ /^-/) {
+	print "Invalid option: $arg\n";
+	print "Use --help for usage information\n";
+	exit 1;
+    }
+
+    $spec = $arg;
+}
+
+sub process_options () {
+    if (not GetOptions (
+			'h|help'      => \&usage,
+			'S|stdout=s'  => \&compare_stdout_with,
+			'B|build=s'   => \&compare_builddir_with,
+			'R|root=s'    => \&compare_rootdir_with,
+			'x|exit=s'    => \&expect_exitval,
+			'p|bp'        => \&set_build_command,
+			'c|bc'        => \&set_build_command,
+			'i|bi'        => \&set_build_command,
+			'l|bl'        => \&set_build_command,
+			'b|bb'        => \&set_build_command,
+			'a|ba'        => \&set_build_command,
+			's|bs'        => \&set_build_command,
+			'o|options=s' => \&set_options,
+			'<>' => \&process_args)) {
+	exit 1;
+    }
+}
+
+my $top_builddir;
+sub init () {
+    process_options ();
+    if (not defined $build_command) {
+	$build_command = "-ba";
+    }
+
+    if (not defined $spec) {
+	print "Error: no spec file given for test\n";
+	print "Use --help for usage information\n";
+	exit 1;
+    }
+
+    $top_builddir = $ENV{top_builddir};
+    if (not defined $top_builddir) {
+	$top_builddir = `dirname $0`;
+	chomp ($top_builddir);
+	$top_builddir = `cd $top_builddir/..; pwd`;
+	chomp ($top_builddir);
+    }
+}
+
+sub main () {
+    init ();
+    my $command_output = `perl -I $top_builddir $top_builddir/pkgbuild.pl $build_command $extra_options $spec 2>&1`;
+    my $retval = $?;
+
+    my $test_results = 0;
+    if (defined ($stdout_file)) {
+	$test_results = 
+	    $test_results * do_compare_stdout ($command_output, $stdout_file);
+    }
+
+    if (defined ($builddir)) {
+	$test_results =
+	    $test_results * do_compare_builddir ($builddir);
+    }
+
+    print "Output: $command_output\n";
+}
+
+main();
