@@ -1,3 +1,7 @@
+Version 0.10.0:
+	pkgtool
+	--pkgformat
+	_unpackaged_files_terminate_build
 Version 0.9.0:
 	released on sourceforge.net -- many thanks to them for hosting it
 	future releases will be posted on http://pkgbuild.sourceforge.net/

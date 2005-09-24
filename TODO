@@ -1,8 +1,10 @@
-Some thing's I'm planning fix/add:
+Some things I'm planning fix/add:
  - support all rpm 4 spec file elements
  - fix/implement version checking (currently dependencies are on pkg names only)
  - add support for SVr4 "space files", see space(4) on Solaris
  - on Linux, generate plain rpm spec files and call rpmbuild to do the build
  - .rcfile support
+ - rpm macro support
  - automatic regression tests
- - support for building straight from CVS
+ - support for building straight from CVS (?)
+ - implement autoreqprov

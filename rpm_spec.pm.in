@@ -24,6 +24,7 @@ my $os;
 my $os_rel;
 	      
 my $_default_topdir = "@TOPDIR@";
+my $_topdir = $_default_topdir;
 my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 
 my $all_script_names = "pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun";
@@ -55,10 +56,7 @@ sub init () {
 	}
     }
 
-    if ($os eq "linux") {
-	$_default_topdir = `rpm -ba $_pkgbuild_libdir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
-	chomp ($_default_topdir);
-    } elsif ($os eq "solaris") {
+    if ($os eq "solaris") {
 	my $isainfo = `/usr/bin/isainfo`;
 	chomp ($isainfo);
 	my @isas = split / /, $isainfo;
@@ -82,6 +80,12 @@ sub new ($;$$) {
 	return (undef);
     }
     
+    if (not $spec_file =~ /^\//) {
+	my $current_dir=`pwd`;
+	chomp ($current_dir);
+	$spec_file = "$current_dir/$spec_file";
+    }
+
     if ((not defined ($predef_ref) or not @$predef_ref) and
 	not defined $parent_spec) {
 	my $packagebase = new packagebase ();
@@ -114,7 +118,7 @@ sub new ($;$$) {
 	$self->{_defines}->{_pkgbuild} = "pkgbuild";
 	$self->{_defines}->{_pkgbuild_version} = "@PKGBUILD_VERSION@";
 	$self->{_defines}->{buildroot} = "/";
-	$self->{_defines}->{_target} = "i386";
+	$self->{_defines}->{_target} = "i586";
 	$self->{_defines}->{_sysconfdir} = "/etc";
 	$self->{_defines}->{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
 	$self->{_defines}->{_prefix} = "/usr";
@@ -142,7 +146,7 @@ sub new ($;$$) {
 	$self->{_defines}->{_usr} = "/usr";
 	$self->{_defines}->{_usrsrc} = "%{_usr}/src";
 
-	$self->{_defines}->{_topdir} = $_default_topdir;
+	$self->{_defines}->{_topdir} = $_topdir;
 	$self->{_defines}->{_builddir} = "%{_topdir}/BUILD";
 	$self->{_defines}->{_rpmdir} = "%{_topdir}/RPMS";
 	$self->{_defines}->{_sourcedir} = "%{_topdir}/SOURCES";
@@ -166,8 +170,8 @@ sub new ($;$$) {
             "        install";
 	$self->{_defines}->{pkgbuild_postprocess} = "${_pkgbuild_libdir}/pkgbuild-postprocess";
 	$self->{_defines}->{nil} = "";
-	$self->{_defines}->{find_lang} = "echo WARNING: find_lang not implemented"
-
+	$self->{_defines}->{find_lang} = "echo WARNING: find_lang not implemented";
+	$self->{_defines}->{_unpackaged_files_terminate_build} = 1;
     }
 
     if (defined ($predef_ref)) {
@@ -601,13 +605,14 @@ sub _do_eval_sp ($$$$@) {  # %{S:n} or %{P:n}
     }
 }
 
-sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar}
+sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar} or %{?!.*}
     my $self = shift;
     my $preeval = shift;
     my $str = shift;
     my $delimiter = shift;
     my @chrs = @_;
 
+    my $negate = 0;
     my $varname = "";
     my $chr = "";
     while (@chrs) {
@@ -616,8 +621,13 @@ sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar}
 	    $varname = "$varname$chr";
 	    next;
 	}
+	if ($chr eq "!") {
+	    $negate = 1;
+	    next;
+	}
 	if (($chr eq ":") and defined $delimiter) {
-	    return $self->_do_eval_cond_val ($preeval, $str, $varname, @chrs);
+	    return $self->_do_eval_cond_val ($preeval, $str, 
+					     $varname, $negate, @chrs);
 	}
 	if (($chr eq "}") and defined ($delimiter)) {
 	    last;
@@ -634,7 +644,10 @@ sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar}
     }
 
     my $val = $self->get_value_of ($varname);
-    if (defined ($val)) {
+    if (defined ($val) xor $negate) {
+	if (not defined ($val)) {
+	    $val = "";
+	}
 	if (not $preeval) {
 	    $val = $self->eval ($val);
 	} else {
@@ -646,11 +659,12 @@ sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar}
     }
 }
 
-sub _do_eval_cond_val ($$$$@) {  #  %{?foo:bar}
+sub _do_eval_cond_val ($$$$$@) {  #  %{?foo:bar}  %{?!foo:bar}
     my $self = shift;
     my $preeval = shift;
     my $str = shift;
     my $varname = shift;
+    my $negate = shift;
     my @chrs = @_;
 
     my $defval = "";
@@ -685,7 +699,7 @@ sub _do_eval_cond_val ($$$$@) {  #  %{?foo:bar}
     }
 
     my $val = $self->get_value_of ($varname);
-    if (defined ($val)) {
+    if (defined ($val) xor $negate) {
 	if ($preeval) {
 	    $val = $self->_pre_eval ($defval);
 	    $str = $self->_do_eval ($preeval, "$str$val", @chrs);
@@ -748,8 +762,7 @@ sub _eat_lines ($$) {
 	} elsif ($line =~ /^\s*%if\s/) {
 	    $depth++;
 	} elsif ($line =~ /^\s*%else/) {
-	    $depth--;
-	    if ($depth == 0) {
+	    if ($depth == 1) {
 		return "%else";
 	    }
 	} elsif ($line =~ /^\s*%endif/) {
@@ -1011,7 +1024,10 @@ sub _process_tag ($$$) {
 	    $value = $1;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
-	    $package_ref->push_tag ($tagname, $value);
+	    my @values = split /\s*,\s*/, $value;
+	    foreach my $v (@values) {
+		$package_ref->push_tag ($tagname, $v);
+	    }
 	    return 1;
 	}
     }
@@ -1140,9 +1156,9 @@ sub _get_unpack_commands ($$) {
     my $uncompress;
 
     if (not defined $opt_q) {
-	$unpack = " | /bin/tar xvf -";
+	$unpack = " | @TAR@ xvf -";
     } else {
-	$unpack = " | /bin/tar xf -";
+	$unpack = " | @TAR@ xf -";
     }
     if ($srcname =~ /(\.tar\.bz2|\.tbz|\.tbz2)$/) {
 	$uncompress = "/usr/bin/bzip2 -dc";
@@ -1501,31 +1517,36 @@ sub _process_macro ($$$$$$) {
 	}
 	my $scriptlet;
 
+	my %macro_opts = $self->_process_macro_opts ('!d:', $line,
+						     $macro, $name, $package);
+	my $build_subdir = $macro_opts{'d'};
+
 	if ($macro =~ /^(${all_script_names})$/) {
 	    $pkg_ref = $$spec_used->find_package_by_name ($package);
 	    if (not defined($pkg_ref)) {
 		print "WARNING: subpackage not found: $name.$package\n";
 	    } else {
-		$scriptlet = $pkg_ref->get_block ($macro);
+		$scriptlet = $pkg_ref->_get_block_nochdir ($macro, $build_subdir);
 	    }
 	} else {
-	    $scriptlet = $$spec_used->get_block ($macro);
+	    $scriptlet = $$spec_used->_get_block_nochdir ($macro, $build_subdir);
 	}
 	if (not defined ($scriptlet)) {
 	    $scriptlet = "";
 	}
-	my %macro_opts = $self->_process_macro_opts ('!d:', $line,
-						     $macro, $name, $package);
+	my $builddir = $self->eval ("%{_builddir}");
+	if (defined ($$spec_used->{_defines}->{_build_src_dir_name})) {
+	    $scriptlet = "$scriptlet\ncd $builddir%{setup:extradirs}\n";
+	}
 	if (defined ($self->{error})) {
 	    return 0;
 	}
 	if (defined ($macro_opts{'d'})) {
-	    $scriptlet = $self->eval ("cd %{_builddir}/$macro_opts{'d'}\n") .
-		"${scriptlet}\ncd ..";
+	    $self->{_blocks}->{$block_name.chdir} = "cd $builddir";
+	    $scriptlet = $self->eval ("cd $macro_opts{'d'};\n${scriptlet}\ncd $builddir%{setup:extradirs}");
 	}
 	if ($macro eq "prep") {
-	    $scriptlet = $self->eval ("cd %{_builddir}") .
-		"\n$scriptlet\n";
+	    $self->{_blocks}->{$block_name.chdir} = "cd $builddir";
 	}
 	$macro_expansion = $scriptlet;
     } else {
@@ -1548,8 +1569,9 @@ sub _process_macro ($$$$$$) {
 	    if (not defined ($self->{_defines}->{_build_src_dir_name})) {
 		$self->{_defines}->{_build_src_dir_name} = $dirname;
 	    }
-	    $macro_expansion = "";
-	    
+	    $macro_expansion = $self->eval ("cd %{_builddir}") . 
+		"%{setup:extradirs}\n";
+
 	    if (not defined ($macro_opts{'D'})) {
 		$macro_expansion = $macro_expansion . "rm -rf $dirname\n";
 	    }
@@ -1700,10 +1722,10 @@ sub _process_macro ($$$$$$) {
 	    $macro_expansion = "echo 'Patch #$num ($val):'\n";
 	    if (not defined ($uncompress)) {
 		    $macro_expansion .= $self->eval(
-			"patch $patch_opts < %{_sourcedir}/$val");
+			"@PATCH@ $patch_opts < %{_sourcedir}/$val");
 	    } else {
 		    $macro_expansion .= 
-			"$uncompress | patch $patch_opts";
+			"$uncompress | @PATCH@ $patch_opts";
 	    }
 
 	    $macro_expansion = $self->eval ("$macro_expansion");
@@ -1757,10 +1779,9 @@ sub _process_block ($$$;$$) {
     if (not defined $self->{_blocks}->{$block_name}) {
 	if ($block_name =~ /(build|install|clean)/) {
 	    my $dirname = $self->eval ("%{_build_src_dir_name}");
-	    if ($dirname eq "%{_build_src_dir_name}") {
-		$dirname = $self->eval ("%name-%version");
+	    if ($dirname ne "%{_build_src_dir_name}") {
+		$self->{_blocks}->{$block_name} = "cd $dirname\n";
 	    }
-	    $self->{_blocks}->{$block_name} = "cd $dirname\n";
 	} elsif ($block_name =~ /$all_script_names/) {
 	    # FIXME: value of -p comes here
 	    $self->{_blocks}->{$block_name} = "#!/bin/sh\n\n"
@@ -2180,9 +2201,10 @@ sub _append_to_block ($$$) {
     }
 }
 
-sub get_block ($$) {
+sub get_block ($$;$) {
     my $self = shift;
     my $block_name = shift;
+    my $builddir = shift;
 
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
@@ -2190,7 +2212,40 @@ sub get_block ($$) {
 	}
     }
 
-    return $self->{_blocks}->{$block_name};
+    my $spec_block = $self->{_blocks}->{$block_name};
+    if (defined ($spec_block)) {
+	if (defined ($builddir)) {
+	    $spec_block =~ s/\%\{setup:extradirs\}/\/$builddir/g;
+	} else {
+	    $spec_block =~ s/\%\{setup:extradirs\}//g;
+	}
+    }
+    my $block;
+    if (exists ($self->{_blocks}->{$block_name.chdir})) { 
+	$block = "$self->{_blocks}->{$block_name.chdir}" .
+	    "\n" . $spec_block;
+    } else {
+	$block = $spec_block;
+    }
+    return $block;
+}
+
+sub _get_block_nochdir ($$;$) {
+    my $self = shift;
+    my $block_name = shift;
+    my $builddir = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    return undef;
+	}
+    }
+
+    my $spec_block = $self->{_blocks}->{$block_name};
+    if (defined ($builddir) and defined ($spec_block)) {
+	$spec_block =~ s/\%\{setup:extradirs\}/\%\{setup:extradirs\}\/$builddir/g;
+    }
+    return $spec_block;
 }
 
 sub get_file_name ($) {
@@ -2531,8 +2586,16 @@ sub get_used_spec_files ($) {
     return _uniq (@used_specs);
 }
 
-sub get_default_topdir () {
-    return $_default_topdir;
+sub get_topdir ($$) {
+    my $build_engine = shift;
+    my $predef_ref = shift;
+    my $defines = "";
+    foreach my $def (@$predef_ref) {
+	$defines = $defines . " --define \"$def\"";
+    }
+    $_topdir = `$build_engine $defines -bp $_pkgbuild_libdir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
+    chomp ($_topdir);
+    return $_topdir;
 }
 
 sub get_error ($) {

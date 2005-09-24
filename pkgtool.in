@@ -1,0 +1,46 @@
+#!/bin/bash
+
+origwd=`pwd`;
+mydir=$(cd $(dirname $0); pwd);
+
+/usr/bin/id | /usr/bin/grep '^uid=0(' > /dev/null 2>&1
+is_root=$?
+
+if [ `uname -s` = "SunOS" ]; then
+    profiles | fgrep -sx "Software Installation" > /dev/null 2>&1
+    haveinstallprofile=$?
+
+    if [ $is_root != 0 -a $haveinstallprofile != 0 ]; then
+	echo "Run this script as root or make sure you have been assigned"
+	echo "the 'Software Installation' profile"
+	echo "See the user_attr(4) and profiles(1) man pages for more details"
+	exit 1
+    fi
+else
+    :
+#    if [ $is_root != 0 ]; then
+#	echo "Run this script as root"
+#    fi
+fi
+
+pkgbuild_prefix=
+IFS=:
+for dir in $PATH; do
+    if [ -x $dir/pkgbuild ]; then
+        pkgbuild_prefix=$(cd $dir/../; pwd)
+	break;
+    fi
+done
+
+if [ -z "$pkgbuild_prefix" ]; then
+    pkgbuild_libdir="@PKGBUILD_LIBDIR@"
+    pkgbuild_prefix="$pkgbuild_libdir/../.."
+    echo "ERROR: pkgbuild not found in the PATH" 1>&2
+    exit 1
+else
+    pkgbuild_version=`"$pkgbuild_prefix/bin/pkgbuild" --version | \
+    grep '^pkgbuild version' | cut -f3 -d' '`
+    pkgbuild_libdir="$pkgbuild_prefix/lib/pkgbuild-$pkgbuild_version"
+fi
+
+exec perl -I "$pkgbuild_libdir" $pkgbuild_libdir/pkgtool.pl "${@}"

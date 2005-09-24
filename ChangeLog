@@ -1,3 +1,47 @@
+2005-09-24  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: use gtar on Solaris
+
+2005-09-19  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.spec.in: fix build on Linux
+
+2005-08-25  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: bump to 0.10.0
+	
+	* tests/: add beginnings of an automated test suite
+
+	* rpm_spec.pm.in: fix "cd" commands at the beginning of blocks
+	  so they work properly in %use'd spec files.
+
+2005-08-08  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: find GNU patch (gpatch on Solaris)
+	
+	* rpm_spec.pm.in: use GNU patch found in configure
+
+	* pkgbuild.pm.in: new command line option: --pkgformat
+	  valid arguments: datastream (or ds) or filesystem (fs);
+	  implement creating datastream format packages
+	
+	* pkgtool.pl: script for building multiple modules from
+	  spec files, tarballs and patches, copying sources/specs to the
+	  right directories, etc.  See pkgtool --help for
+	  more details.
+
+	* pkgtool: wrapper script for pkgtool.pl
+
+	* config.pm: simple config file parser module used by pkgtool.pl.
+	
+2005-07-25  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: implemented --with foo / --without foo command
+	  line parsing; the following sintaxes are valid:
+	    --with foo
+	    --with=foo
+	    --with-foo
+
 2005-06-13  Laszlo Peter  <laca@sun.com>
 
 	* configure.in: version 0.9.1

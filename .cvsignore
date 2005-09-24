@@ -8,3 +8,8 @@ configure
 pkgbuild
 pkgbuild.pl
 rpm_spec.pm
+INSTALL
+build-all
+install-sh
+missing
+pkgbuild.spec

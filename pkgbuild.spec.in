@@ -2,28 +2,32 @@
 # Use pkgbuild --define 'pkgbuild_prefix /path/to/dir'
 # to define a different one.
 
-%{?pkgbuild_prefix:#}%define pkgbuild_prefix /opt
+%{?!pkgbuild_prefix:%define pkgbuild_prefix /opt}
 %define _prefix %{pkgbuild_prefix}
-%{?pkgbuild_topdir:#}%define pkgbuild_topdir %pkgbuild_prefix/src/packages
+%{?!pkgbuild_topdir:%define pkgbuild_topdir %pkgbuild_prefix/src/packages}
 
-Name:         SFpkgbuild
+Name:         pkgbuild
 License:      GPL
-Group:        System/Libraries
+Group:        Development/Tools/Other
 URL:	      http://pkgbuild.sourceforge.net/
 Version:      @PKGBUILD_VERSION@
 Release:      1
+BuildArch:    noarch
 Vendor:	      Sun Microsystems, Inc.
 Summary:      pkgbuild - rpmbuild compatible tool for building Solaris packages
 Source:       pkgbuild-%{version}.tar.bz2
 BuildRoot:    %{_tmppath}/%{name}-%{version}-build
 
-%{?pkgbuild:SUNW_MaxInst:              1000}
-%{?pkgbuild:SUNW_BaseDir:              %{pkgbuild_prefix}}
+%{?_pkgbuild:SUNW_Pkg:                  SFpkgbuild}
+%{?_pkgbuild:SUNW_MaxInst:              1000}
+%{?_pkgbuild:SUNW_BaseDir:              %{pkgbuild_prefix}}
 
 %ifos Solaris
 Requires:     SUNWpl5u
+Requires:     SUNWgpch
 %else
 Requires:     perl >= 5.0.0
+Requires:     patch
 %endif
 
 %description
@@ -42,6 +46,7 @@ make
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
 rm -rf $RPM_BUILD_ROOT%{pkgbuild_topdir}
+rm -rf $RPM_BUILD_ROOT%{pkgbuild_prefix}/src
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -109,9 +114,11 @@ exit 0
 %defattr (-, root, bin)
 %attr (0755, root, bin) %{_bindir}
 %attr (0755, root, bin) %{_libdir}
-%defattr (?, ?, ?)
+%{?_pkgbuild:%defattr (?, ?, ?)}
 
 %changelog
+* Mon Aug 08 2005 - <laca@sun.com>
+- add GNU Patch dependency
 * Thu Dec 09 2004 - <laca@sun.com>
 - Remove %topdir/* from the pkgmap and create these directories in %post
 * Fri Mar 05 2004 - <laca@sun.com>

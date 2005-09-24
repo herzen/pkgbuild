@@ -10,7 +10,7 @@
 
 #use strict;
 use warnings;
-use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling);
+use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
 
 my $myname = "pkgbuild";
@@ -23,7 +23,8 @@ my $build_skip = 0;
 my $interactive_mode = 0;
 my $check_deps = 1;
 
-my $mydir;
+my $mydir = `pwd`;
+chomp ($mydir);
 my @spec_names = ();
 
 my $arch;
@@ -110,6 +111,21 @@ sub set_rebuild ($) {
     if (not $pkg =~ /^\//) {
 	$pkg = "$mydir/$pkg";
     }
+
+    if ( -f $pkg ) {
+	# check if it's a datastream pkg
+	my $ftype = `/usr/bin/file $pkg | cut -f2 -d:`;
+	chomp ($ftype);
+	if (not $ftype =~ /package datastream/) {
+	    fatal ("file $pkg is not a package datastream");
+	}
+	my $tmpdir=`mktemp -d`;
+	chomp ($tmpdir);
+	system ("/usr/bin/pkgtrans -o $pkg $tmpdir all");
+	$pkg = `/bin/ls -d $tmpdir/* | head -1`;
+	chomp ($pkg);
+	print "pkg is $pkg\n";
+    }
     $build_command = $build_phases{'b'};
     my $main_spec = `grep '^1 s none .*/\.\.main\.spec=' $pkg/pkgmap 2>&1`;
     if ($? == 0) {
@@ -136,8 +152,32 @@ sub set_rebuild ($) {
     fatal ("$pkg is not a source package");
 }
 
+sub process_with ($$) {
+    my $with = shift;
+    my $opt = shift;
+
+    if ($with ne "with" and $with ne "without") {
+	fatal ("Internal error in sub process_with()");
+    }
+    my $optname = $opt;
+    $optname =~ tr /\-/_/;
+    push (@predefines, "_${with}_${optname} --${with}-${opt}");
+}
+
+my $pkgformat = "filesystem";
+sub set_pkgformat ($) {
+    shift;
+    my $format = shift;
+
+    if ($format eq "fs" or $format eq "filesystem") {
+	$pkgformat = "filesystem";
+    } elsif ($format eq "ds" or $format eq "datastream") {
+	$pkgformat = "datastream";
+    }
+}
+
 sub process_options {
-    GetOptions ('debug=n'   => \$debug_level,
+    if (not GetOptions ('debug=n'   => \$debug_level,
 		'help'      => \&usage,
 		'version'   => \&print_version,
 		'b=s'       => \&set_build_command,
@@ -153,26 +193,31 @@ sub process_options {
 		'ba'        => sub { set_build_command (0, 'a'); },
 		'bs'        => sub { set_build_command (0, 's'); },
 		'rebuild=s' => \&set_rebuild,
+		'with=s'    => \&process_with,
+		'without=s' => \&process_with,
+		'pkgformat=s' => \&set_pkgformat,
 		'short-circuit' => \&short_circuit_option, 
 		'build=s'   => \$build_command,
 		'rcfile=s'  => sub { print "--rcfile option not implemented\n" },
-		'<>' => \&process_args);
+			'<>' => \&process_args)) {
+	exit 1;
+    }
 }
 
 sub process_args () {
     my $arg = shift;
 
-    if ($arg =~ /^-/) {
-	print ("Unknown option: $arg\n");
-	exit 1;
+    if ($arg =~ /^--with-(.*)/) {
+	process_with ("with", $1);
+	return;
+    } elsif ($arg =~ /^--without-(.*)/) {
+	process_with ("without", $1);
+	return;
+    } elsif ($arg =~ /^-/) {
+	fatal ("Unknown option: $arg\n");
     }
-
-    if (not defined $mydir) {
-	$mydir = $arg;
-	chdir ($arg);
-    } else {
-	push (@spec_names, $arg);
-    }
+    
+    push (@spec_names, $arg);
 }
 
 sub print_version () {
@@ -195,8 +240,8 @@ This may be freely redistributed under the terms of the GNU GPL
                              and allow to continue after the shell terminates
    all modes support the following arguments:
       --rcfile <file>      - use <file> instead of /etc/rpmrc and \$HOME/.rpmrc
-     -v                    - be a little more verbose
-     -vv                   - be incredibly verbose (for debugging)
+*    -v                    - be a little more verbose
+*    -vv                   - be incredibly verbose (for debugging)
 *   -b<stage> <spec>
     -t<stage> <tarball>    - build package, where <stage> is one of:
 *         p                - prep (unpack sources and apply patches)
@@ -222,6 +267,9 @@ This may be freely redistributed under the terms of the GNU GPL
                              remove spec file, sources, patches, and icons.
     --rmsource <spec>      - remove sources and spec file
     --recompile <src_pkg>  - like --rebuild, but don't build any package
+*   --pkgformat={filesystem|fs|datastream|ds}
+                           - Create packages in filesystem or datastream
+                             format.  Default: filesystem
 _EOF_
 # '
     exit(1);
@@ -235,8 +283,24 @@ sub message (@) {
     }
 }
 
+my @tempfiles = ();
+sub register_tempfile ($) {
+    push  (@tempfiles, shift);
+}
+
+sub remove_tempfiles () {
+    foreach my $tmpf (@tempfiles) {
+	if ( -d $tmpf ) {
+	    `rm -rf $tmpf`;
+	} elsif ( -f $tmpf ) {
+	    `rm -f $tmpf`;
+	}
+    }
+}
+
 sub fatal (@) {
     message (@_);
+    remove_tempfiles ();
     exit 1;
 }
 
@@ -445,44 +509,25 @@ sub check_build_requires ($) {
 
     foreach my $pkg (@packages) {
 	my @reqss = $pkg->get_array ("buildrequires");
-	foreach my $reqstr (@reqss) {
-	    next if not defined $reqstr;
-	    my @reqs = split /\s*,\s*/, $reqstr;
-	    foreach my $req (@reqs) {
-		check_dep ($spec, $req) or
-		    message ("error: $req is required to build " .
-			     $spec), return 0;
-	    }
+	foreach my $req (@reqss) {
+	    next if not defined $req;
+	    check_dep ($spec, $req) or
+		message ("error: $req is required to build " .
+			 $spec), return 0;
 	}
 	@reqss = $pkg->get_array ("buildconflicts");
-	foreach my $reqstr (@reqss) {
-	    next if not defined $reqstr;
-	    my @reqs = split /\s*,\s*/, $reqstr;
-	    foreach my $req (@reqs) {
-		check_dep ($spec, $req) and
-		    message ("error: $req conflicts with " .
-			     $spec), return 0;
-	    }
+	foreach my $req (@reqss) {
+	    next if not defined $req;
+	    check_dep ($spec, $req) and
+		message ("error: $req conflicts with " .
+			 $spec), return 0;
 	}
-	@reqss = $pkg->get_array ("conflicts");
-	foreach my $reqstr (@reqss) {
-	    next if not defined $reqstr;
-	    my @reqs = split /\s*,\s*/, $reqstr;
-	    foreach my $req (@reqs) {
-		check_dep ($spec, $req) and
-		    message ("error: $req conflicts with " .
-			     $spec), return 0;
-	    }
-	}
-	@reqss = $pkg->get_array ("prereq");
-	foreach my $reqstr (@reqss) {
-	    next if not defined $reqstr;
-	    my @reqs = split /\s*,\s*/, $reqstr;
-	    foreach my $req (@reqs) {
-		check_dep ($spec, $req) or
-		    message ("error: $req is required to build " .
-			     $spec), return 0;
-	    }
+	@reqss = $pkg->get_array ("buildprereq");
+	foreach my $req (@reqss) {
+	    next if not defined $req;
+	    check_dep ($spec, $req) or
+		message ("error: $req is required to build " .
+			 $spec), return 0;
 	}
     }
 
@@ -581,7 +626,7 @@ sub do_block ($$) {
 	    $bsdirname = $spec->eval ('%name-%version');
 	}
 	my $blddir = $spec->eval ("%{_builddir}");
-	`cp $script_name $blddir/$bsdirname/.pkgbuild.$block_name.sh && chmod a+x $blddir/$bsdirname/.pkgbuild.$block_name.sh`;
+	`test -d $blddir/$bsdirname && cp $script_name $blddir/$bsdirname/.pkgbuild.$block_name.sh && chmod a+x $blddir/$bsdirname/.pkgbuild.$block_name.sh`;
     }
     system ("/bin/bash $script_name");
     $retval = $?;
@@ -592,6 +637,9 @@ sub do_block ($$) {
 
     return (not $retval);
 }
+
+
+my %all_files;
 
 sub make_pkginfo ($$) {
     my $spec = shift;
@@ -624,6 +672,12 @@ sub make_pkginfo ($$) {
 	$basedir = "/";
     }
 
+    my $parent_dir = $basedir;
+    while ($parent_dir =~ /\// and $parent_dir ne "/") {
+	$all_files{substr($parent_dir, 1)}="base directory";
+	$parent_dir =~ s/\/[^\/]+$//;
+    }
+    
     if ($basedir eq "/usr") {
 	print $fhandle "SUNW_PKGTYPE=usr\n";
     } elsif ($basedir eq "/") {
@@ -910,6 +964,10 @@ sub get_proto_line ($$$$$$$) {
 
     if (index ("/$fname", $basedir) != 0) {
 	fatal ("file $fname is not under basedir $basedir");
+    }	
+    
+    if ( "/$fname" eq $basedir) {
+	fatal ("file $fname is the base directory, should not be listed in %files");
     }
 
     $basedir = "$basedir/";
@@ -985,7 +1043,11 @@ sub get_proto_hash ($) {
     foreach my $file (@files) {
 	next if not $file;
 	my $fn = "$file";
+	# remove duplicate /'s, e.g. /etc///passwd
 	$fn =~ s/^\/+//;
+	# remove /'s and whitespace from the end of the file name
+	# except if fn is /
+	$fn =~ s/(.)\/*\s*$/$1/;
 	my $class_name = $file->get_class ();
 	my @file_list = glob ($fn);
 	if (not @file_list) {
@@ -1020,14 +1082,16 @@ sub get_proto_hash ($) {
 		    message ("File not found by glob: $buildroot/$fname");
 		    $has_errors = 1;
 		}
+#FIXME: ignore directories
 		$file_info{$fname} = $pline;
-		if (defined ($all_files{$fname})) {
+		if (defined ($all_files{$fname}) and
+		    substr ($pline, 0, 1) ne "d") {
 		    print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
 		}
 	    }
 	    my $parent_dir = $fname;
 	    $parent_dir =~ s/\/[^\/]+$//;
-	    while ($parent_dir =~ /\// and
+	    while ($parent_dir ne "" and
 		   "/$parent_dir" ne "$basedir" and
 		   not defined ($file_info{$parent_dir}) and
 		   not defined ($default_dirs{$parent_dir})) {
@@ -1062,8 +1126,6 @@ sub get_proto_hash ($) {
 	return \%file_info;
     }
 }
-
-my %all_files;
 
 sub make_solaris_pkg ($$) {
     my $spec = shift;
@@ -1110,8 +1172,24 @@ sub make_solaris_pkg ($$) {
     my $pkgdir = $spec->eval ("%_topdir") . "/PKGS";
     my $buildroot = $package->eval ("%buildroot");
     system ("/usr/bin/pkgmk -o -r $buildroot -d $pkgdir -f $protodir/$fname");
+    my $retval = $?;
+    if ($retval) {
+	return 0;
+    }
 
-    return (not $?);
+    if ($pkgformat eq "datastream") {
+	my $inst = $package->get_tag ('SUNW_Pkg');
+	$inst = "$package" unless $inst;
+	my $version = $package->get_tag ('Version');
+	my $dsname = "${inst}-${version}.${arch}.pkg";
+	system ("/usr/bin/pkgtrans -o -s $pkgdir $pkgdir/$dsname $inst");
+	$retval = $?;
+	if (not $retval) {
+	    system ("rm -rf $pkgdir/$inst");
+	}
+    }
+
+    return (not $retval);
 }
 
 sub make_packages ($) {
@@ -1131,20 +1209,31 @@ sub make_packages ($) {
 	}
     }
 
+    my $unpackaged = 0;
+    my $unpackaged_files_terminate_build =
+	$spec->eval ("%_unpackaged_files_terminate_build");
     if ($has_files_at_all) {
 	my $buildroot = $spec->eval ("%buildroot");
-	if ($buildroot ne "/") {
+	if ($buildroot ne "/" and -d $buildroot) {
 	    my $old_cwd = `pwd`;
-	    chdir ($buildroot);
+	    chdir ($buildroot) or
+		$spec->_set_error ("Failed to access directory $buildroot")
+		and return 0;
 	    my @all_fnames = list_all_files (".");
-	    my $unpackaged = 0;
 	    foreach my $fname (@all_fnames) {
 		$fname = substr ($fname, 2);
 		if (not defined ($all_files{$fname})) {
 		    if (not $unpackaged) {
 			$unpackaged = 1;
-			print "WARNING: the following files are not included in any packages:\n"
+			if ($unpackaged_files_terminate_build) {
+			    print "error: ";
+			    # FIXME _set_error is private...
+			    $spec->_set_error ("Installed (but unpackaged) file(s) found");
+			} else {
+			    print "WARNING: ";
 			}
+			print "Installed (but unpackaged) file(s) found:\n";
+		    }
 		    print "        /$fname\n";
 		}
 	    }
@@ -1152,6 +1241,9 @@ sub make_packages ($) {
 	}
     }
     
+    if ($unpackaged_files_terminate_build and $unpackaged) {
+	return 0;
+    }
     return 1;
 }
 
@@ -1309,7 +1401,21 @@ sub make_src_package ($) {
     close ($fhandle);
 
     system ("/usr/bin/pkgmk -o -r / -d $topdir/SPKGS -f $protodir/$fname");
-    return (not $?);
+    my $retval = $?;
+    if ($retval) {
+	return 0;
+    }
+
+    if ($pkgformat eq "datastream") {
+	my $dsname = "${src_pkg_name}-${base_pkg_version}.src.pkg";
+	system ("/usr/bin/pkgtrans -o -s $topdir/SPKGS $topdir/SPKGS/$dsname $src_pkg_name");
+	$retval = $?;
+	if (not $retval) {
+	    system ("rm -rf $topdir/SPKGS/$src_pkg_name");
+	}
+    }
+
+    return (not $retval);
 }
 
 sub main () {
