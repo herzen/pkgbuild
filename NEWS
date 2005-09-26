@@ -1,7 +1,50 @@
-Version 0.10.0:
-	pkgtool
-	--pkgformat
-	_unpackaged_files_terminate_build
+Version 1.0.0:
+	Incompatible changes since 0.9.x:
+
+	- Unpackaged file now break the build (just like in rpm4).
+	  To disable this behaviour, set the
+          "_unpackaged_files_terminate_build" macro to 0.
+	  (just like in rpm4)
+
+        - In scriptlet references like %foo.prep and %foo.build, the
+	  effect of the "-d subdir" option was fixed.  In the 0.9.x
+	  versions these macros did not cd back to the original
+	  directory, but stayed in "subdir".  That was not the expected
+	  behaviour but a bug that is now fixed but it breaks spec
+	  files that depend on the old behaviour.
+
+	- slight change in the way %class files work:
+	  non-%config files that belong to a %class are type 'f' in the
+          prototype; %class %config files are type 'e'
+
+	More changes in this release:
+
+	- The pkgtool script was added.  This is a higher level build
+	  script that takes care of downloading sources, copying to
+	  SOURCES, copying spec files to SPECS, building multiple
+	  modules based on the dependency info in the spec files and
+	  much much more...  It's based on the jds build script used
+	  internally within Sun.  Use pkgtool --help for more info.
+
+	- New pkgbuild option: --pkgformat {datastream|ds|filesystem|fs}
+
+        - implement %ghost files:
+	  In pkgbuild's implementation:
+	   - %ghost files are volatile ('v' file type in the prototype)
+	   - an empty file is added to the prototype if the %ghost file
+	     does not exist in $RPM_BUILD_ROOT
+
+	- pkgbuild now requires GNU tar and GNU patch (/usr/sfw/bin/gtar 
+	  and /usr/bin/gpatch on Solaris or SUNWgtar and SUNWgpch)
+
+	- pkgtool has an optional dependency on wget (SUNWwgetr, SUNWwgetu)
+	  for downloading sources
+
+	- the pkgtool tarball now builds out of the box on Linux using
+	  rpmbuild -ta <tarball name>;  Why would anyone build it on
+	  Linux?  You can use the pkgtool script to control a linux
+	  build and it will run rpmbuild/rpm instead of pkgbuild.
+
 Version 0.9.0:
 	released on sourceforge.net -- many thanks to them for hosting it
 	future releases will be posted on http://pkgbuild.sourceforge.net/

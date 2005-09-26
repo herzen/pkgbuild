@@ -908,7 +908,7 @@ sub get_file_mode ($) {
 
     $mode = (stat($fname))[2];
     if (not defined ($mode)) {
-        print "WARNING: could not stat() $fname\n";
+	print "WARNING: could not stat() $fname\n";
 	return "0644";
     }
     return sprintf("%04o", $mode & 07777);
@@ -946,18 +946,32 @@ sub get_proto_line ($$$$$$$) {
     my $mode = $def_mode;
     my $user = $def_user;
     my $group = $def_grp;
+    my $ghost = 0;
 
     my $type = get_file_type ($fname);
-    if ($type eq "-") {
-	return undef;
+    if ($type eq '-') {
+	if (defined ($file) and not $file->is_ghost ()) {
+	    return undef;
+	} else {
+	    if (not defined ($file)) {
+		# parent dir of a ghost
+		$ghost = 1;
+		$type = 'd';
+	    } else {
+		$ghost = 1;
+		$type='g';
+	    }
+	}
     }
 
-    if ($class_name ne "none" and $type eq "f") {
+    if ($class_name ne 'none' and $type eq 'f' and $file->is_config ()) {
 	$type = "e";
     }
 
     if ($type eq 'f' and defined ($file)) {
-	if ($file->is_config ()) {
+	if ($file->is_ghost ()) {
+	    $type = 'v';
+	} elsif ($file->is_config ()) {
 	    $type = 'v';
 	}
     }
@@ -977,25 +991,45 @@ sub get_proto_line ($$$$$$$) {
     my $relpath = substr ($fname, length ($basedir));
     my $protoline;
 
-    if ($def_mode eq "-" and $type ne 's') {
-	$mode = get_file_mode ($fname);
+    if ($def_mode eq '-' and $type ne 's') {
+	if ($ghost) {
+	    if ($type eq 'd') {
+		$mode = '0755';
+	    } else {
+		$mode = '0644';
+	    }
+	} else {
+	    $mode = get_file_mode ($fname);
+	}
     }
-    if ($def_user eq "-") {
-	$user = getpwuid ((stat($fname))[4]);
+    if ($def_user eq '-') {
+	if ($ghost) {
+	    $user = 'root';
+	} else {
+	    $user = getpwuid ((stat($fname))[4]);
+	}
     }
-    if ($def_grp eq "-") {
-	$group = getgrgid ((stat($fname))[5]);
+    if ($def_grp eq '-') {
+	if ($ghost) {
+	    $group = 'root';
+	} else {
+	    $group = getgrgid ((stat($fname))[5]);
+	}
     }
 
     if ($type eq 'f' or $type eq 'v' or $type eq 'e') {
 	$protoline = "$type $class_name $relpath=$basedir$relpath $mode $user $group";
     } elsif ($type eq 'd') {
 	$protoline = "$type $class_name $relpath $mode $user $group";
+    } elsif ($type eq 'g') {
+	$protoline = "v $class_name $relpath=/dev/null $mode $user $group";
     } elsif ($type eq 's') {
 	my $linkpoint = readlink ($fname);
 	$protoline = "$type none $relpath=$linkpoint";
     } elsif ($type =~ /(c|b)/) {
 	fatal ('device special files not implemented');
+    } else {
+	fatal ('ASSERTION FAILED: get_proto_line');
     }
 
     return $protoline;
@@ -1051,8 +1085,11 @@ sub get_proto_hash ($) {
 	my $class_name = $file->get_class ();
 	my @file_list = glob ($fn);
 	if (not @file_list) {
-	    message ("File not found by glob: $buildroot$file");
-	    $has_errors = 1;
+	    if ($file->is_ghost ()) {
+	    } else {
+		message ("File not found by glob: $buildroot$file");
+		$has_errors = 1;
+	    }
 	}
 	my @attribs = $file->get_attributes ();
 	my @rec_list = ();
@@ -1383,8 +1420,9 @@ sub make_src_package ($) {
 
     foreach my $fname (@includes, @used_spec_files) {
 	next if not $fname;
-	$fname =~ s/^.*\/([^\/]+)/$1/;
- 	print $fhandle "f none $specdir/$fname=$topdir/SPECS/$fname 644 root other\n";
+	if (not $fname =~ /\//) {
+	    print $fhandle "f none $specdir/$fname=$topdir/SPECS/$fname 644 root other\n";
+	}
     }
     my $base_spec_name = $this_spec_file;
     $base_spec_name =~ s/^.*\/([^\/]*)$/$1/;

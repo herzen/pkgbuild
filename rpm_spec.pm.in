@@ -948,14 +948,18 @@ sub _process_include ($$$$@) {
     if ($fname =~ /^"(.*)"$/) {
 	$fname = $1;
     }
-
+    $fname = $self->eval ($fname);
+    my $fname0 = $fname;
+    if (not $fname =~ /^\//) {
+	$fname = "$specdir/$fname";
+    }
     my $inc_fhandle = "SPEC_FILE" . $file_id++;
-    open $inc_fhandle, "<$specdir/$fname" or
-	$self->_set_error ("Could not open %include file $specdir/$fname for reading", $fhandle), 
+    open $inc_fhandle, "<$fname" or
+	$self->_set_error ("Could not open %include file $fname for reading", $fhandle), 
 	return (0);
     $_file_names{$inc_fhandle} = "$fname";
     my $incref = $self->{_includes};
-    push(@$incref, $fname);
+    push(@$incref, $fname0);
 
     if (not $self->$callback ($inc_fhandle, undef, @cbargs)) {
 	return (0);
@@ -1920,6 +1924,7 @@ sub _process_files ($$$;$) {
     my @this_attr = (@defattr);
     my $is_doc = 0;
     my $is_config = 0;
+    my $is_ghost = 0;
     my @this_verify = (@all_verify);
     my $is_dir = 0;
     my $class_name = "none";
@@ -1965,14 +1970,15 @@ sub _process_files ($$$;$) {
 	    $eline =~ s/^\s*%doc\s*//;
 # FIXME: should process %doc stuff properly...
 #	    next;
-	} elsif ($eline =~ /^\s*%ghost/) {
-# FIXME: what shall we do with ghosts on Solaris??
-#
-	    $eline =~ s/^\s*%ghost\s*//;
 	} elsif ($eline =~ /^\s*%config/) {
 	    $is_config = 1;
 	    $eline =~ s/^\s*%config\s*\([^)]*\)\s*// or
 		$eline =~ s/^\s*%config\s*//;
+	    next;	    
+	} elsif ($eline =~ /^\s*%ghost/) {
+	    $is_ghost = 1;
+	    $eline =~ s/^\s*%ghost\s*\([^)]*\)\s*// or
+		$eline =~ s/^\s*%ghost\s*//;
 	    next;	    
 	} elsif ($eline =~ /^\s*%attr\s*\(\s*(-|\?|[0-9]+)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*/) {
 	    @this_attr = ($1, $2, $3);
@@ -2007,7 +2013,7 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^\s*(\/.*\S)\s*$/) {
 	    my $file = rpm_file->new ($1, \@this_attr, \@this_verify,
 				     not ($is_dir), $is_doc,
-				     $is_config, $class_name);
+				     $is_config, $class_name, $is_ghost);
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
 	    $self->_set_error ("File must begin with \"/\": $1", $fhandle);
@@ -2019,6 +2025,7 @@ sub _process_files ($$$;$) {
 	@this_attr = (@defattr);
 	$is_doc = 0;
 	$is_config = 0;
+        $is_ghost = 0;
 	@this_verify = (@all_verify);
 	$is_dir = 0;
         $class_name = "none";

@@ -1,3 +1,19 @@
+2005-09-25  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: version 1.0.0
+	* pkgbuild.pl.in: implement %ghost files.
+	  In pkgbuild's implementation:
+	   - %ghost files are volatile ('v' file type in the prototype)
+	   - an empty file is added to the prototype if the %ghost file
+	     does not exist in $RPM_BUILD_ROOT
+	  Slight change in the way %config and %class files work:
+	   - %config files that belong to class none are volatile
+	   - %config files belong to other classes are editable
+	   - non-%config files that belong to a %class are type 'f' in the
+	     prototype
+	* rpm_spec.pm.in: process %ghost files
+	* rpm_file.pm: process %ghost files; add is_ghost()
+
 2005-09-24  Laszlo Peter  <laca@sun.com>
 
 	* configure.in: use gtar on Solaris
