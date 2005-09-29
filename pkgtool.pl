@@ -250,6 +250,37 @@ sub open_log ($) {
     msg_log ("--- log starts --- " . `date`);
 }
 
+sub log_cmdout_starts () {
+    msg_log ("--- command output follows --- started at " . `date`);
+    close LOG_FILE;
+    $current_log = undef;
+}
+
+sub log_cmdout_ends ($) {
+    my $log_filename = shift;
+    
+    if (not defined ($log_filename)) {
+	return;
+    }
+    
+    if (defined ($current_log)) {
+	if ($current_log ne $log_filename) {
+	    close LOG_FILE;
+	}
+    }
+    
+    $current_log = undef;
+    
+    if (! open LOG_FILE, ">>$log_filename") {
+	msg_warning (0, "Failed to open log file $log_filename for writing");
+	return;
+    }
+    
+    $current_log = $log_filename;
+    
+    msg_log ("--- command output ends --- finished at " . `date`);
+}
+
 sub close_log () {
     msg_log ("--- log ends --- " . `date`);
     close LOG_FILE;
@@ -1767,8 +1798,10 @@ sub run_build ($;$) {
 
     my $save_log_name = $current_log;
     msg_log ("INFO: Starting $build_engine build engine at " . `date`);
-    close_log;
     my $tempfile = "/tmp/$build_engine.out.$$";
+    msg_log ("INFO: Build engine output is written to $tempfile");
+    msg_log ("INFO: and will be appended to this log when completed.");
+    log_cmdout_starts ();
 # FIXME: ExclusiveArch?
     my $rpm_target = $defaults->get ('target');
     if (defined($rpm_target)) {
@@ -1791,7 +1824,7 @@ sub run_build ($;$) {
 	$build_result = $?; 
     }
     system ("sed -e 's/^/$build_engine: /' $tempfile >> $the_log_dir/$log_name 2>&1; rm -f $tempfile");
-    open_log ($save_log_name);
+    log_cmdout_ends ($save_log_name);
     msg_log ("INFO: $build_engine $build_mode finished at " . `date`);
 
     if ($build_result) {
