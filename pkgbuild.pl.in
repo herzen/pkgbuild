@@ -683,7 +683,12 @@ sub make_pkginfo ($$) {
     my $summary = $package->get_tag ('summary');
     $summary = $pkgname unless defined ($summary);
     print $fhandle "NAME=$summary\n";
-    print $fhandle "DESC=$summary\n";
+    my $desc = $package->get_tag ('SUNW_Desc');
+    if (defined ($desc)) {
+        print $fhandle "DESC=$desc\n";
+    } else {
+        print $fhandle "DESC=$summary\n";
+    }
     print $fhandle "ARCH=$arch\n";
 
     my $prodname = $package->get_tag ('SUNW_ProdName');
@@ -703,7 +708,10 @@ sub make_pkginfo ($$) {
 	$parent_dir =~ s/\/[^\/]+$//;
     }
     
-    if ($basedir eq "/usr") {
+    my $pkgtype = $package->get_tag ('SUNW_PkgType');
+    if (defined ($pkgtype)) {
+	print $fhandle "SUNW_PKGTYPE=$pkgtype\n";
+    } elsif ($basedir eq "/usr") {
 	print $fhandle "SUNW_PKGTYPE=usr\n";
     } elsif ($basedir eq "/") {
 	print $fhandle "SUNW_PKGTYPE=root\n";
@@ -743,9 +751,7 @@ sub make_pkginfo ($$) {
     my $version = $package->get_tag ('Version');
     my $rev = $package->get_tag ('SUNW_Rev');
     if (not defined $rev) {
-	$rev = `date +%Y.%m.%d.%H.%M`;
-    } else {
-	$rev = "$rev." . `date +%Y.%m.%d.%H.%M`;
+	$rev = `date +%Y.%m.%d.%H.%M.%S`;
     }
     chomp ($rev);
     print $fhandle "VERSION=$version,REV=$rev\n";

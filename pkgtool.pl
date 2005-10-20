@@ -1394,7 +1394,7 @@ sub find_source ($$) {
 	    if (! -f "$src_path") {
 		msg_info (3, "   $src not found in $srcdir");
 	    } else {
-		msg_info (3, "   found in $srcdir");
+		msg_info (3, "   $src found in $srcdir");
 		return "$src_path";
 	    }
 	}
@@ -1405,7 +1405,7 @@ sub find_source ($$) {
 	if (! -f "$src_path") {
 	    msg_info (3, "   $src not found in $extsrcdir");
 	} else {
-	    msg_info (3, "   found in $extsrcdir");
+	    msg_info (3, "   $src found in $extsrcdir");
 	    return "$src_path";
 	}
     }
@@ -1417,7 +1417,7 @@ sub find_source ($$) {
 	    if (! -f "$src_path") {
 		msg_info (3, "   $src not found in $srcdir");
 	    } else {
-		msg_info (3, "   found in $srcdir");
+		msg_info (3, "   $src found in $srcdir");
 		msg_warning (1, "$src is not expected to be in the tarball dir");
 		return $src_path;
 	    }
@@ -1495,10 +1495,8 @@ sub copy_sources ($) {
 	push (@sources, $cp_file);
     }
 
-    if ($spec->{_defines}->{_pkgbuild_version} =~ /0\.[789]/) {
-	my @class_scripts = $spec->get_class_script_names ();
-	push (@sources, @class_scripts);
-    }
+    my @class_scripts = $spec->get_class_script_names ();
+    push (@sources, @class_scripts);
 
     msg_info (2, "copying sources to $topdir/SOURCES");
 

@@ -1,3 +1,22 @@
+2005-10-20  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: use the SUNW_Desc tag for the DESC in pkginfo
+	  if defined, otherwise use Summary; define the SUNW_PkgType
+	  tag for overriding the default usr/root values; use the
+	  SUNW_Rev tag to completely replace the REV part of the version,
+	  i.e. do not append the date after it.  Note: this is an
+	  incompatible change!  Existing uses of SUNW_Rev need to
+	  append .%(date +%Y.%m.%d.%H.%M.%S)
+
+	* rpm_spec.pm.in: add SUNW_PkgType to list of valid tags
+
+	Patch from Simford.Dong@Sun.Com.
+
+2005-10-10  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: fix bug where class action scripts are not
+	  copied in SOURCES
+
 2005-09-29  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: make some log messages clearer

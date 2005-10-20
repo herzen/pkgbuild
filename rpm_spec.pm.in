@@ -1025,6 +1025,7 @@ sub _process_tag ($$$) {
 		       "sunw_category", "sunw_hotline",
 		       "sunw_maxinst", "vendor", "docdir",
 		       "sunw_pkglist", "sunw_loc",
+		       "sunw_pkgtype", "sunw_desc",
 		       "sunw_copyright");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
 		      "buildconflicts", "prereq", "provides", "buildprereq");

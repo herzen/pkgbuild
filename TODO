@@ -9,3 +9,4 @@ Some things I'm planning fix/add:
  - support for building straight from CVS (?)
  - implement autoreqprov
  - implement BuildConflicts: /path/to/file
+ - implement RequireArch / RequireOS
