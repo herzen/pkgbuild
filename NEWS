@@ -1,3 +1,27 @@
+Version 1.0.1:
+
+	One minor incompatibility from eariler versions:
+
+	- The current date is no longer appended to SUNW_Rev.
+	  If you have a spec file with
+	    SUNW_Rev:    10.2.4
+	  change it to
+	    SUNW_Rev:    10.2.4.%(date +%Y.%m.%d.%H.%M)
+	  to get the same behaviour as in earlier versions.
+
+	Other changes:
+
+	- SUNW_PkgType tag defined.  Overrides the default (root or usr)
+	  PKGTYPE values.
+
+	Bugs fixed:
+
+	- fix bug in pkgtool where it did not copy the class action scripts
+	  to SOURCES.
+
+	- fix --with-foo and --without-foo options in pkgtool to be the same
+	  as in pkgbuild
+
 Version 1.0.0:
 	Incompatible changes since 0.9.x:
 
