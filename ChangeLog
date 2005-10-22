@@ -1,3 +1,10 @@
+2005-10-22  Laszlo Peter  <laca@sun.com>
+
+	* autogen.sh: fix automake/autoconf order
+	* configure.in: set version 1.0.1
+	* pkgtool.pl: fix --with-foo and --without-foo processing to be
+	  the same as in pkgbuild; add the build command to the log.
+
 2005-10-20  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: use the SUNW_Desc tag for the DESC in pkginfo

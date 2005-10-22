@@ -27,7 +27,7 @@
 
 use strict;
 use warnings;
-use Getopt::Long qw(:config gnu_getopt no_auto_abbrev);
+use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
 use config;
 
@@ -498,6 +498,16 @@ sub read_spec ($) {
 sub process_args {
     my $arg = shift;
     
+    if ($arg =~ /^--with-(.*)/) {
+	process_with ("with", $1);
+	return;
+    } elsif ($arg =~ /^--without-(.*)/) {
+	process_with ("without", $1);
+	return;
+    } elsif ($arg =~ /^-/) {
+	fatal ("Unknown option: $arg\n");
+    }
+
     if (not defined ($build_command)) {
 	if (($arg ne "build") and ($arg ne "build-order") and
 	    ($arg ne "build-only") and ($arg ne "build-install") and
@@ -1794,12 +1804,6 @@ sub run_build ($;$) {
 	$the_command = "$the_command --nodeps";
     }
 
-    my $save_log_name = $current_log;
-    msg_log ("INFO: Starting $build_engine build engine at " . `date`);
-    my $tempfile = "/tmp/$build_engine.out.$$";
-    msg_log ("INFO: Build engine output is written to $tempfile");
-    msg_log ("INFO: and will be appended to this log when completed.");
-    log_cmdout_starts ();
 # FIXME: ExclusiveArch?
     my $rpm_target = $defaults->get ('target');
     if (defined($rpm_target)) {
@@ -1810,6 +1814,14 @@ sub run_build ($;$) {
     if ($running_user eq "root") {
 	$command = "/bin/su $build_user -c \"$command\"";
     }
+
+    my $save_log_name = $current_log;
+    msg_log ("INFO: Build command: \"$command\"");
+    msg_log ("INFO: Starting $build_engine build engine at " . `date`);
+    my $tempfile = "/tmp/$build_engine.out.$$";
+    msg_log ("INFO: Build engine output is written to $tempfile");
+    msg_log ("INFO: and will be appended to this log when completed.");
+    log_cmdout_starts ();
 
     my $build_result;
     if ($interactive_mode) {
