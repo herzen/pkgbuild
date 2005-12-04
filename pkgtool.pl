@@ -954,9 +954,10 @@ sub is_provided ($) {
 	my $result = (! $?);
 	$pkginfo{$capability} = $result;
 	if ($result) {
-	    my $version = `pkginfo -l $capability'.*' | grep VERSION: | head -1`;
+	    # FIXME: should work if only SUNWfoo.2 is installed
+	    my $version = `pkgparam $capability VERSION`;
 	    chomp $version;
-	    $version =~ s/\s*VERSION:\s*([^,]+)(,|$).*/$1/;
+	    $version =~ s/([^,]+)(,|$).*/$1/;
             $pkginfo_version{$capability} = $version;
 	}
 	return $result;
@@ -981,10 +982,11 @@ sub is_installed ($) {
 	`pkginfo -q $pkg'.*'`;
 	my $result = (! $?);
 	$pkginfo{$pkg} = $result;
-	if ($result) {
-	    my $version = `pkginfo -l $pkg'.*' | grep VERSION: | head -1`;
+	if ($result) {	
+	    # FIXME: should work if only SUNWfoo.2 is installed
+	    my $version = `pkgparam $capability VERSION`;
 	    chomp $version;
-	    $version =~ s/\s*VERSION:\s*([^,]+)(,|$).*/$1/;
+	    $version =~ s/([^,]+)(,|$).*/$1/;
             $pkginfo_version{$pkg} = $version;
         }
 	return $result;
@@ -1508,6 +1510,7 @@ sub copy_sources ($) {
     my @class_scripts = $spec->get_class_script_names ();
     push (@sources, @class_scripts);
 
+    msg_info (0, "Finding sources");
     msg_info (2, "copying sources to $topdir/SOURCES");
 
     foreach my $src (@sources) {

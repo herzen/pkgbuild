@@ -1,3 +1,15 @@
+2005-12-03  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: speed up dependency checking by using pkgparam
+	  instead of grepping from pkginfo -l
+	
+	* rpm_spec.pm.in: add a new macro called
+	  _invalid_patches_terminate_build: if set to 0 (default is 1),
+	  patches that don't apply are ignored (warning printed).  Makes it
+	  easier to build from CVS snapshots; fix %{!? to be the same as
+	  %{?!, implement more thorough syntax checking in %{? type conditional
+	  expressions
+
 2005-10-22  Laszlo Peter  <laca@sun.com>
 
 	* autogen.sh: fix automake/autoconf order

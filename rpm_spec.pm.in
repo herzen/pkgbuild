@@ -198,6 +198,7 @@ sub new ($;$$) {
 	$self->{_defines}->{nil} = "";
 	$self->{_defines}->{find_lang} = "echo WARNING: find_lang not implemented";
 	$self->{_defines}->{_unpackaged_files_terminate_build} = 1;
+	$self->{_defines}->{_invalid_patches_terminate_build} = 1;
     }
 
     if (defined ($predef_ref)) {
@@ -327,7 +328,9 @@ sub _do_eval ($$$@) {
 		shift (@chrs);
 		return $self->_do_eval_sp ($preeval, $str, $1, @chrs);
 	    } elsif ($chr eq "?") {  # %{?
-		return $self->_do_eval_cond ($preeval, $str, "{", @chrs);
+		return $self->_do_eval_cond ($preeval, $str, "{", 0, @chrs);
+	    } elsif ($chr eq "!") {  # %{!
+		return $self->_do_eval_cond ($preeval, $str, "{", 1, @chrs);
 	    } elsif ($chr =~ /[a-zA-Z_]/) {
 		return $self->_do_eval_var ($preeval, $str, "{", "$chr", @chrs);
 	    } elsif ($chr eq "}") {
@@ -631,23 +634,39 @@ sub _do_eval_sp ($$$$@) {  # %{S:n} or %{P:n}
     }
 }
 
-sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar} or %{?!.*}
+sub _do_eval_cond ($$$$$@) {  # %?foo or %{?foo} or %{?foo:bar} or %{?!.*}
     my $self = shift;
     my $preeval = shift;
     my $str = shift;
     my $delimiter = shift;
+    my $pre_negate = shift;
     my @chrs = @_;
 
-    my $negate = 0;
     my $varname = "";
     my $chr = "";
+    my $negate = $pre_negate;
+    my $cond = '?';
     while (@chrs) {
 	$chr = shift (@chrs);
 	if ($chr =~ /[a-zA-Z0-9_]/) {
 	    $varname = "$varname$chr";
 	    next;
 	}
-	if ($chr eq "!") {
+	if ($pre_negate == 1) {
+	    if ($chr ne '?') {
+		$self->_set_error ("Syntax error after !: $str%{!$varname$chr");
+		return $str;
+	    }
+	    $cond = '!?';
+	    $pre_negate = 0;
+	    next;
+	}
+	if ($chr eq '!') {
+	    if ($negate == 1) {
+		$self->_set_error ("Syntax error at ! in $str%{$cond$varname$chr");
+		return $str;
+	    }
+	    $cond = '?!';
 	    $negate = 1;
 	    next;
 	}
@@ -662,7 +681,8 @@ sub _do_eval_cond ($$$$@) {  # %?foo or %{?foo} or %{?foo:bar} or %{?!.*}
 	    unshift (@chrs, $chr);
 	    last;
 	}
-	$varname = "$varname$chr";
+	$self->_set_error ("Invalid character \"$chr\" in $str%$delimiter$cond$varname$chr");
+	return $str;
     }
     if (not @chrs and defined ($delimiter) and ($chr ne "}")) {
 	$self->_set_error ("Unterminated {: $str%{?$varname");
@@ -1757,6 +1777,12 @@ sub _process_macro ($$$$$$) {
 	    } else {
 		    $macro_expansion .= 
 			"$uncompress | @PATCH@ $patch_opts";
+	    }
+	    if ($self->eval ("%_invalid_patches_terminate_build") eq "0") {
+		$macro_expansion = "$macro_expansion --dry-run && \\\n"  .
+		    "$macro_expansion || \\\n" .
+		    "echo 'WARNING: Patch #$num ($val) FAILED'\n";
+		    $macro_expansion =~ s/echo 'Patch #/echo 'Testing patch #/;
 	    }
 
 	    $macro_expansion = $self->eval ("$macro_expansion");

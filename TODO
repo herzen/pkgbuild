@@ -1,6 +1,6 @@
 Some things I'm planning fix/add:
- - support all rpm 4 spec file elements
- - fix/implement version checking (currently dependencies are on pkg names only)
+ - support all rpm 4 spec file elements (need to figure out what's missing)
+ - fix/implement version checking (currently dependencies check pkg names only)
  - add support for SVr4 "space files", see space(4) on Solaris
  - on Linux, generate plain rpm spec files and call rpmbuild to do the build
  - .rcfile support
