@@ -14,6 +14,10 @@ Version 1.0.1:
 	- SUNW_PkgType tag defined.  Overrides the default (root or usr)
 	  PKGTYPE values.
 
+	- _invalid_patches_terminate_build macro added: if set to 0
+           (default is 1), patches that don't apply are ignored and a
+           warning is printed
+
 	Bugs fixed:
 
 	- fix bug in pkgtool where it did not copy the class action scripts
@@ -21,6 +25,11 @@ Version 1.0.1:
 
 	- fix --with-foo and --without-foo options in pkgtool to be the same
 	  as in pkgbuild
+
+	- speed up dependency checking in pkgtool (starts building much
+	  faster)
+
+	- fix rpm_spec.pm to handle %{!?foo:bar} (same as %{?!foo:bar})
 
 Version 1.0.0:
 	Incompatible changes since 0.9.x:
