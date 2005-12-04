@@ -984,7 +984,7 @@ sub is_installed ($) {
 	$pkginfo{$pkg} = $result;
 	if ($result) {	
 	    # FIXME: should work if only SUNWfoo.2 is installed
-	    my $version = `pkgparam $capability VERSION`;
+	    my $version = `pkgparam $pkg VERSION`;
 	    chomp $version;
 	    $version =~ s/([^,]+)(,|$).*/$1/;
             $pkginfo_version{$pkg} = $version;
