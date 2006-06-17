@@ -1,3 +1,8 @@
+2006-06-16  Laszlo Peter  <laca@sun.com>
+
+	* config.pm: tracker ID 1409033: applied patch from Damien Carbery
+	  for wrapping long lines in --dumprc
+
 2005-12-03  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: speed up dependency checking by using pkgparam

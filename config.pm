@@ -26,6 +26,7 @@
 
 use strict;
 use warnings;
+use Text::Wrap;
 
 package config;
 
@@ -277,7 +278,9 @@ sub dumprc ($) {
 	} elsif ($type eq '!') {
 	    $type = 'boolean';
 	}
-	print "# $key [$type]: " . $self->{'docs'}->{$key} . "\n";
+        # Break option description over multiple comment lines, for readability.
+        print Text::Wrap::wrap( '# ', '# ', "$key [$type]: " . $self->{'docs'}->{$key} ), "\n";
+
 	my $val = $self->get ($key);
 	if (defined ($val)) {
 	    my $defval = $self->get_default ($key);
