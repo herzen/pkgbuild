@@ -9,7 +9,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright (C) 2004, 2005 Sun Microsystems, Inc.
+#  Copyright (C) 2004, 2006 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -48,16 +48,18 @@ use overload ('""' => \&get_name);
 my %arch;
 my $os;
 my $os_rel;
-	      
-my $_default_topdir = "@TOPDIR@";
+
+my $_default_topdir = "$ENV{HOME}/packages";
 my $_topdir = $_default_topdir;
 my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 
-my $all_script_names = "pre|post|preun|postun|verifyscript|triggerin|triggerun|triggerpostun";
+# items in this list should not be prefixes of items later in the same list
+# i.e. pre|preun wrong,  preun|pre good.
+my $all_script_names = "preun|postun|pre|post|verifyscript|triggerin|triggerun|triggerpostun|check";
 my $all_block_names = "prep|build|install|clean|changelog|$all_script_names";
 my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use";
 
-sub init () {
+sub _init () {
     my $arch0 = `uname -p`;
     chomp ($arch0);
     if ($arch0 eq "unknown") {
@@ -82,6 +84,7 @@ sub init () {
 	}
     }
 
+    # get list of supported architectures, used for %ifarch
     if ($os eq "solaris") {
 	my $isainfo = `/usr/bin/isainfo`;
 	chomp ($isainfo);
@@ -95,6 +98,13 @@ sub init () {
 
 # Create a new rpm_spec object.
 # Return undef if the spec_file is not found
+# args:
+#   spec_file:   name of the spec file to read
+#   predef_ref:  reference to a list of 'name value' strings
+#                which are macros defined outside the spec file
+#                (typically on the command line)
+#   parent_spec: reference to an rpm_spec object; used when spec_file
+#                is %use'd by the parent_spec
 sub new ($;$$) {
     my $class = shift;
     my $spec_file = shift;
@@ -114,6 +124,8 @@ sub new ($;$$) {
 
     if ((not defined ($predef_ref) or not @$predef_ref) and
 	not defined $parent_spec) {
+	# the packagebase is a singleton object that represents all
+	# rpm_spec objects created by the running script
 	my $packagebase = new packagebase ();
 	my $spec = $packagebase->find_spec_by_file_name ($spec_file);
 	if (defined ($spec)) {
@@ -125,24 +137,42 @@ sub new ($;$$) {
     my $base_file_name = $spec_file;
     $base_file_name =~ s/^.*\/([^\/]*)$/$1/;
     $self->{_base_file_name} = $base_file_name;
+    # _loaded set to 1 when the spec file is fully loaded
     $self->{_loaded} = 0;
+    # _being_loaded set to 1 while being loaded to avoid infinite recursion
     $self->{_being_loaded} = 0;
+    # _defines is an associative array of name value pairs
     $self->{_defines} = {};
+    # _specs_used is an associative array of names of %use'd spec files
+    # and references to the corresponding rpm_spec objects.
+    # note: the parent_spec of those rpm_spec objects will be this rpm_spec
     $self->{_specs_used} = {};
+    # blocks are multiple line sections of a spec file, e.g. %description,
+    # %prep, %build, %install, %pre, %post, %changelog...
     $self->{_blocks} = {};
+    # _classes assignes i/r class actions scripts to  pkgmap object classes
+    # names
     $self->{_classes} = {};
+    # spec file processing is inside a %if*... %endif conditional
     $self->{_in_conditional} = 0;
+    # parent rpm_spec, if this rpm_spec is %use'd
     $self->{_parent_spec} = $parent_spec;
+    # ref to a list of files %include'd (needed for source packages, etc)
     my @inc;
     $self->{_includes} = \@inc;
 
     if (defined ($parent_spec)) {
+        # if this is a %use'd rpm_spec inherit the macros from the parent
 	my $parent_def_ref = $parent_spec->{_defines};
 	$self->{_defines} = {%$parent_def_ref};
 	delete ($self->{_defines}->{_build_src_dir_name});
     } else {
-	$self->{_defines}->{_pkgbuild} = "pkgbuild";
-	$self->{_defines}->{_pkgbuild_version} = "@PKGBUILD_VERSION@";
+	# default macros
+	# FIXME: most of these should probably come from a system wide
+	# macros file, like /usr/lib/rpm/macros
+	$self->{_defines}->{_pkgbuild} = 'pkgbuild';
+	$self->{_defines}->{_is_pkgbuild} = '1';
+	$self->{_defines}->{_pkgbuild_version} = '@PKGBUILD_VERSION@';
 	$self->{_defines}->{buildroot} = "/";
 	$self->{_defines}->{_target} = "i586";
 	$self->{_defines}->{_sysconfdir} = "/etc";
@@ -201,6 +231,8 @@ sub new ($;$$) {
 	$self->{_defines}->{_invalid_patches_terminate_build} = 1;
     }
 
+    # process predefined macros (those defined on the command line
+    # with --define or --with-foo, etc...)
     if (defined ($predef_ref)) {
 	foreach my $predef (@$predef_ref) {
 	    next if not defined $predef;
@@ -208,7 +240,6 @@ sub new ($;$$) {
 		$self->{_defines}->{$1} = $2;
 	    } else {
 		$self->{error} = "invalid definition $predef";
-		return undef;
 	    }
 	}
     }
@@ -218,6 +249,8 @@ sub new ($;$$) {
     my @packages = ($main_package);
     $self->{_packages} = \@packages;
 
+    # rpm_spec's that are not child specs and don't have predefines
+    # are added to the packagebase for reuse.
     if ((not defined ($predef_ref) or not @$predef_ref) and
 	not defined $parent_spec) {
 	my $packagebase = new packagebase ();
@@ -228,54 +261,80 @@ sub new ($;$$) {
     return $self;
 }
 
+# evaluate/expand macros in the given string
+# (safe to use while loading the spec file)
 sub eval ($$) {
     my $self = shift;
     my $str = shift;
 
-    my $def;
-    my $val;
-    my $name;
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    return $str;
+	}
+    }
 
     if (not defined ($str)) {
 	return undef;
     }
 
+    # spec file comments are ignored
     if ($str =~ /^#/) {
 	return $str;
     }
 
+    # no % in the string means nothing to do
     if (index ($str, "%") == -1) {
 	return $str;
     }
 
+    # find all "%keyword"s in $str; if they contain uppercase chars
+    # convert to lowercase for ease of use later on
+    foreach my $found_keyword ($str =~ /%($all_keywords)/gi) {
+      my $lc_keyword = lc($found_keyword);
+      $str =~ s/%$found_keyword/%$lc_keyword/;
+    }
+ 
+    # split to a list of chars for easier parsing
     @chrs = split //, $str;
     return $self->_do_eval (0, "", @chrs);
 }
 
+# same as eval, but not everything is evaluated,
+# for example in an expression like this:
+#    %{!?_prefix:#}%define mylibdir %{_prefix}/lib
+# if _prefix is defined, this should be expanded to
+#    %define mylibdir %{_prefix}/lib
+# (note that the macro definition was NOT expanded, but the conditional
+# %? thingie was)
+# if _prefix is not defined, this should evaluate to
+#    #%define mylibdir %{_prefix}/lib
+# In the rest of the _do_eval_foo subroutines $preeval means that
+# we're doing this 'pre-evaluation' of the string
 sub _pre_eval ($$) {
     my $self = shift;
     my $str = shift;
-
-    my $def;
-    my $val;
-    my $name;
 
     if (not defined ($str)) {
 	return undef;
     }
 
+    # spec file comments are ignored
     if ($str =~ /^#/) {
 	return $str;
     }
 
+    # no % in the string means nothing to do
     if (index ($str, "%") == -1) {
 	return $str;
     }
 
+    # split to a list of chars for easier parsing
     @chrs = split //, $str;
     return $self->_do_eval (1, "", @chrs);
 }
 
+# the result string is built in $str (parts of the original string
+# that have been parsed) and @chrs is the list of chars to be parsed
 sub _do_eval ($$$@) {
     my $self = shift;
     my $preeval = shift;
@@ -803,7 +862,7 @@ sub _eat_lines ($$) {
 	if (not defined $line) {
 	    last;
 	}
-	if ($line =~ /^\s*%if(arch|os)/) {
+	if ($line =~ /^\s*%if(arch|os|narch|nos\s)/) {
 	    $depth++;
 	} elsif ($line =~ /^\s*%if\s/) {
 	    $depth++;
@@ -864,18 +923,18 @@ sub _get_next_line ($$) {
 	return undef;
     }
 
-    if ($line =~ /^%if(arch|os|narch|nos|\s)/) {
+    if ($line =~ /^\s*%if(arch|os|narch|nos|\s)/) {
 	my $cond = 0;
 	
-	if ($line =~ /^%ifarch\s+(\S.*)/) {
+	if ($line =~ /^\s*%ifarch\s+(\S.*)/) {
 	    $cond = _match_arch ("$1");
-	} elsif ($line =~ /^%ifnarch\s+(\S.*)/) {
+	} elsif ($line =~ /^\s*%ifnarch\s+(\S.*)/) {
 	    $cond = not _match_arch ("$1");
-	} elsif ($line =~ /^%ifos\s+(\S.*)/) {
+	} elsif ($line =~ /^\s*%ifos\s+(\S.*)/) {
 	    $cond = _match_os ("$1");
-	} elsif ($line =~ /^%ifnos\s+(\S.*)/) {
+	} elsif ($line =~ /^\s*%ifnos\s+(\S.*)/) {
 	    $cond = not _match_os ("$1");
-	} elsif ($line =~ /^%if\s+(\S.*)/) {
+	} elsif ($line =~ /^\s*%if\s+(\S.*)/) {
 	    $cond = $self->eval ($1);
 	    $cond =~ s/-(.*)/$1/;
 	    if (not _is_number ($cond)) {
@@ -959,6 +1018,16 @@ sub _process_use ($$$) {
     my $specdir = $self->get_value_of ("_specdir");
     my $spec = new rpm_spec ("$specdir/$fname", undef, $self);
     if (not defined ($spec)) {
+	my $specpath=$self->get_value_of ("__pkgbuild_spec_path");
+	if (defined ($specpath)) {
+	    my @specdirs = split /:+/, $specpath;
+	    foreach my $altspecdir (@specdirs) {
+		$spec = new rpm_spec ("$altspecdir/$fname", undef, $self);
+		last if defined ($spec);
+	    }
+	}
+    }
+    if (not defined ($spec)) {
 	$self->_set_error ("Could not open file $specdir/$fname", $fhandle);
 	return 0;
     }
@@ -968,8 +1037,6 @@ sub _process_use ($$$) {
 	$self->_set_error ($spec->{error}, $fhandle);
 	return 0;
     }
-
-    $spec = new rpm_spec ("$specdir/$fname", undef, $self);
 
     $self->{_specs_used}->{$name} = \$spec;
 
@@ -997,7 +1064,20 @@ sub _process_include ($$$$@) {
     $fname = $self->eval ($fname);
     my $fname0 = $fname;
     if (not $fname =~ /^\//) {
-	$fname = "$specdir/$fname";
+	if (-f "$specdir/$fname") {
+	    $fname = "$specdir/$fname";
+	} else {
+	    my $specpath=$self->get_value_of ("__pkgbuild_spec_path");
+	    if (defined ($specpath)) {
+		my @specdirs = split /:+/, $specpath;
+		foreach my $altspecdir (@specdirs) {
+		    if (-f "$altspecdir/$fname") {
+			$fname = "$altspecdir/$fname";
+			last;
+		    }
+		}
+	    }
+	}
     }
     my $inc_fhandle = "SPEC_FILE" . $file_id++;
     open $inc_fhandle, "<$fname" or
@@ -1046,7 +1126,9 @@ sub _process_tag ($$$) {
 		       "sunw_maxinst", "vendor", "docdir",
 		       "sunw_pkglist", "sunw_loc",
 		       "sunw_pkgtype", "sunw_desc",
-		       "sunw_copyright");
+		       "sunw_copyright",
+		       "sunw_pkg_allzones", "sunw_pkg_hollow",
+		       "sunw_pkg_thiszone");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
 		      "buildconflicts", "prereq", "provides", "buildprereq");
     my @ord_tags = ( "source", "patch" );
@@ -1140,9 +1222,9 @@ sub _process_package ($$$) {
     my $mainpkg_ref = \$self->{_packages}[0];
     my $package_name;
 
-    if ($line =~ /\s*%[pP][aA][cC][kK][aA][gG][eE]\s+-n\s+(\S+)\s*$/) {
+    if ($line =~ /\s*%package\s+-n\s+(\S+)\s*$/) {
 	$package_name = $1;
-    } elsif ($line =~ /\s*%[pP][aA][cC][kK][aA][gG][eE]\s+(\S+)\s*$/) {
+    } elsif ($line =~ /\s*%package\s+(\S+)\s*$/) {
 	$package_name = $$mainpkg_ref->get_tag ("name") . "-" . $1;
     } else {
 	$self->_set_error ("invalid %package directive: $line", $fhandle);
@@ -2668,5 +2750,5 @@ sub get_error ($) {
     }
 }
 
-init();
+_init();
 1;

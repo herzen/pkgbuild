@@ -1,3 +1,62 @@
+2006-08-16  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: updated for 1.1.0
+	* TODO: updated
+	* config.pm: add lots of comments; enhance to allow adding
+	  to existing values, see NEWS for more details
+	* configure.in: bump to 1.1.0; set the default prefix to
+	  /opt/pkgbuild; use AC_PROG_PERL instead of pipes and greps;
+	  remove the --with-topdir and --enable-sticky-dirs options;
+	  add spectool and m4/Makefile
+	* get_rpm_topdir: update to work without %_topdir existing
+	* m4/Makefile.am: (new): add perl.m4 to EXTRA_DIST
+	* m4/perl.m4: (new): AC_PROG_PERL macro
+	* pkgbuild.pl.in: 
+	  - use standard perl functions instead of system() calls for
+	    lots of stuff, thanks to Damien for his advice;
+	  - add support for SUNW_PKG_ALLZONES, SUNW_PKG_THISZONE,
+	    SUNW_PKG_HOLLOW pkginfo fields, required for zones support; 
+	  - when creating depend files, read the pkg name from the
+	    pkgnames file instead if the pkg is not installed
+	  - report a warning if %files contains absolute symlinks
+	    and report and error if an absolute symlink points to
+	    $RPM_BUILD_ROOT
+	  - normalise file names in %files lists to avoid incorrectly
+	    reporting unpackaged files, fixes #1490310
+	* pkgbuild.spec.in: update the default prefix to /opt/pkgbuild;
+	  remove the --with-topdir and --enable-sticky-dirs options;
+	  remove the %post and %postun scripts
+	* pkgnames: (new): Solaris pkg abbrevs and names, to be used
+	  in depend files in case the pkg isn't installed
+	* pkgtool.in: don't look for pkgbuild in the PATH, but use
+	  the one in the configured prefix; don't let the user run
+	  pkgtool as root on Solaris; don't check for Software Installation
+	  profile either, it's done within pkgtool.pl now
+	* pkgtool.pl:
+	  - use standard perl functions instead of system() calls or
+	    regex operations for lots of stuff, thanks to Damien for
+	    his advice;
+	  - define the topdir rc file setting
+	  - make the other dirs like sourcedirs, tarballdirs, specdirs
+	    use the value of topdir in their default values;
+	  - check if the user has the Software Installation profile
+	    and print an error message if they try to install/uninstall
+	    packages but they don't have the profile;
+	  - automatically create the directories under %_topdir as needed;
+	  - implement install-pkgs
+	* rpm_spec.pm.in: 
+	  - add lots of comments
+	  - make _default_topdir default to $HOME/packages
+	  - fix bug where %ifnarch and %ifnos nested within other
+	    %if conditionals cause parsing problems
+	  - add support for SUNW_PKG_ALLZONES, SUNW_PKG_THISZONE,
+	    SUNW_PKG_HOLLOW pkginfo fields, required for zones support; 
+	  - make all %foo directives case insensitive
+	* spectool.in: (new) wrapper script that calls spectool.pl
+	* spectool.pl: (new) script for extracting info from spec files
+	  see spectool --help for more details
+	* Makefile.am: add m4 subdir; don't create topdir on install
+
 2006-06-16  Laszlo Peter  <laca@sun.com>
 
 	* config.pm: tracker ID 1409033: applied patch from Damien Carbery

@@ -30,14 +30,20 @@ use Text::Wrap;
 
 package config;
 
-# Create a new rpm_file object.
+# Create a new config object.
 sub new ($) {
     my $class = shift;
     my $self = {};
+    # default values of keys
     my %defvals = ();
+    # values read from rc files
     my %rcvals = ();
+    # values set using the set() method, typically values from the command line
     my %clvals = ();
+    # a type assigned to each value key
+    # valid types: 's' = string, 'n' = number, '!' = bool
     my %valid_keys = ();
+    # descriptions of the keys
     my %docs = ();
     $self->{'valid_keys'} = \%valid_keys;
     $self->{'defvals'} = \%defvals;
@@ -48,6 +54,7 @@ sub new ($) {
     return (bless $self, $class);
 }
 
+# check that a given value is valid for a given key type
 sub _is_type ($$) {
     my $type = shift;
     my $val = shift;
@@ -70,6 +77,12 @@ sub _is_type ($$) {
     }
 }
 
+# define a new setting:
+#   key     = the key of the setting
+#   type    = valid type of value for this setting:
+#             's' = string, 'n' = number, '!' = bool
+#   docs    = description of the setting
+#  [defval] = optional default value
 sub add ($$$$;$) {
     my $self = shift;
     my $key = shift;
@@ -100,6 +113,10 @@ sub add ($$$$;$) {
     }
 }
 
+# get the value of the key
+# values set using 'set' are considered first,
+# then values set using an rc file
+# finally the default values
 sub get ($$) {
     my $self = shift;
     my $key = shift;
@@ -109,20 +126,21 @@ sub get ($$) {
     }
 
     if (defined ($self->{'clvals'}->{$key})) {
-	return ($self->{'clvals'}->{$key});
+	return ($self->_deref_keys($self->{'clvals'}->{$key}));
     }
 
     if (defined ($self->{'rcvals'}->{$key})) {
-	return ($self->{'rcvals'}->{$key});
+	return ($self->_deref_keys($self->{'rcvals'}->{$key}));
     }
 
     if (defined ($self->{'defvals'}->{$key})) {
-	return ($self->{'defvals'}->{$key});
+	return ($self->_deref_keys($self->{'defvals'}->{$key}));
     }
 
     return undef;
 }
 
+# set the value for a given key
 sub set ($$$) {
     my $self = shift;
     my $key = shift;
@@ -141,13 +159,15 @@ sub set ($$$) {
     return 0;
 }
 
+# forget all values read from rc files
 sub norc ($) {
     my $self = shift;
     my %rcvals = ();
     $self->{'rcvals'} = \%rcvals;
 }
 
-sub _deref ($$$) {
+# substitutes the values of variables and keys
+sub _deref_vars ($$$) {
     my $self = shift;
     my $str = shift;
     my $varref = shift;
@@ -162,9 +182,58 @@ sub _deref ($$$) {
 	$str =~ s/\${$var}/$val/g;
     }
 
+    my $all_keys = $self->{valid_keys};
+    foreach my $key (keys %$all_keys) {
+	next if not defined $key;
+	my $val;
+	if (defined ($self->{'clvals'}->{$key})) {
+	    $val = $self->{'clvals'}->{$key};
+	} elsif (defined ($self->{'rcvals'}->{$key})) {
+	    $val = $self->{'rcvals'}->{$key};
+	} elsif (defined ($self->{'defvals'}->{$key})) {
+	    $val = $self->{'defvals'}->{$key};
+	}
+
+	$str =~ s/\${$key}/$val/g;
+    }
+ 
+   return $str;
+}
+
+# substitutes the values of keys into default values
+# variables in default values have this form: %{foo}
+sub _deref_keys ($$) {
+    my $self = shift;
+    my $str = shift;
+
+    if (not defined ($str)) {
+	return undef;
+    }
+
+    while ($str =~ /%{([a-zA-Z]+)}/) {
+	my $var = $1;
+	if (defined ($self->{valid_keys}->{$var})) {
+	    my $val = $self->get ($var);
+	    $str =~ s/%{$var}/$val/g;
+	} else {
+	    $str =~ s/%{$var}/%PeRcEnT{$var}/g;
+	}
+    }
+    $str =~ s/%PeRcEnT/%/g;
+
     return $str;
 }
 
+# read values of settings from an rc file
+# rc files look like this:
+#    ,-----------------------------------.
+#    |#comment line                      |
+#    |key1: value1                       |
+#    |key2: value2                       |
+#    |VARIABLE1 = foo                    |
+#    |key3: ${VARIABLE1}                 |
+#    |key4: ${value2}:bar                |
+#    `-----------------------------------'
 sub readrc ($$) {
     my $self = shift;
     my $fname = shift;
@@ -190,7 +259,7 @@ sub readrc ($$) {
     while ($line) {
 	if ($line =~ /^\s*([a-zA-Z][a-zA-Z_0-9]*)\s*:\s*"([^"]*)"\s*$/) {
             my $key = lc ($1);
-            my $value = $self->_deref ($2, \%vars);
+            my $value = $self->_deref_vars ($2, \%vars);
             if (defined ($self->{'valid_keys'}->{$key})) {
                 if (_is_type ($self->{'valid_keys'}->{$key}, $value)) {
 	            $self->{'rcvals'}->{$key} = $value;
@@ -202,7 +271,7 @@ sub readrc ($$) {
             }
         } elsif ($line =~ /^\s*([a-zA-Z][a-zA-Z_0-9]*)\s*:\s*(.+)\s*$/) {
 	    my $key = lc ($1);
-            my $value = $self->_deref ($2, \%vars);
+            my $value = $self->_deref_vars ($2, \%vars);
             if (defined ($self->{'valid_keys'}->{$key})) {
                 if (_is_type ($self->{'valid_keys'}->{$key}, $value)) {
 	            $self->{'rcvals'}->{$key} = $value;
@@ -215,11 +284,11 @@ sub readrc ($$) {
         } elsif ($line =~ /^\s*([A-Z_]+)\s*=\s*"([^"]*)"\s*$/) {
 	    my $var = $1;
 	    my $val = $2;
-	    $vars{$var} = $self->_deref ($val, \%vars);
+	    $vars{$var} = $self->_deref_vars ($val, \%vars);
         } elsif ($line =~ /^\s*([A-Z_]+)\s*=\s*(\S+)\s*$/) {
 	    my $var = $1;
 	    my $val = $2;
-	    $vars{$var} = $self->_deref ($val, \%vars);
+	    $vars{$var} = $self->_deref_vars ($val, \%vars);
 	} elsif ($line =~ /^\s*no([a-zA-Z][a-zA-Z0-9_]*)\s*$/){
 	    my $key = lc ($1);
             if (defined ($self->{'valid_keys'}->{$key})) {
@@ -254,17 +323,39 @@ sub readrc ($$) {
     return 1;
 }
 
+# return the default value for a key
 sub get_default ($$) {
     my $self = shift;
     my $key = shift;
 
     if (defined ($self->{'valid_keys'}->{$key})) {
-	return $self->{'defvals'}->{$key};
+	return $self->_deref_keys ($self->{'defvals'}->{$key});
     }
 
     return undef;
 }
 
+# return 1 if the setting equals to its default value, 0 if different,
+# undef if the setting is not defined
+sub is_default ($$) {
+    my $self = shift;
+    my $key = shift;
+
+    my $value = $self->get ($key);
+    if (not defined ($self->{'valid_keys'}->{$key})) {
+	return undef;
+    }
+    if (defined ($self->{'clvals'}->{$key})) {
+	return 0;
+    }
+    if (defined ($self->{'rcvals'}->{$key})) {
+	return 0;
+    }
+    return 1;
+}
+
+# print all keys and values in a rc file format suitable for loading with
+# the readrc method
 sub dumprc ($) {
     my $self = shift;
 
@@ -278,17 +369,15 @@ sub dumprc ($) {
 	} elsif ($type eq '!') {
 	    $type = 'boolean';
 	}
-        # Break option description over multiple comment lines, for readability.
+
+        # Break option description over multiple comment lines for readability.
         print Text::Wrap::wrap( '# ', '# ', "$key [$type]: " . $self->{'docs'}->{$key} ), "\n";
 
 	my $val = $self->get ($key);
-	if (defined ($val)) {
-	    my $defval = $self->get_default ($key);
-	    if (defined ($defval) and $val eq $defval) {
-		print "# $key:\t$val\n";
-	    } else {
-		print "$key:\t$val\n";
-	    }
+	if ($self->is_default ($key)) {
+	    print "# $key:\t$val\n";
+	} else {
+	    print "$key:\t$val\n";
 	}
 	print "\n";
     }

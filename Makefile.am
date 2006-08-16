@@ -2,7 +2,7 @@ AUTOMAKE_OPTIONS = dist-bzip2
 
 topdir = @TOPDIR@
 
-#SUBDIRS = tests
+SUBDIRS = m4
 
 gen_modules =        rpm_spec.pm
 gen_module_sources = rpm_spec.pm.in
@@ -14,13 +14,15 @@ plain_modules = \
 all_modules = $(gen_modules) $(plain_modules)
 
 pkgbuilddir = $(PKGBUILD_LIBDIR)
-pkgbuild_DATA = $(all_modules) get_rpm_topdir
+pkgbuild_DATA = $(all_modules) get_rpm_topdir pkgnames
 pkgbuild_SCRIPTS = \
 	pkgbuild.pl \
 	pkgbuild-postprocess \
+	spectool.pl \
 	pkgtool.pl
 bin_SCRIPTS = \
 	pkgbuild \
+	spectool \
 	pkgtool
 
 EXTRA_DIST= $(plain_modules) $(gen_module_sources) \
@@ -28,37 +30,8 @@ EXTRA_DIST= $(plain_modules) $(gen_module_sources) \
 	pkgbuild.spec \
 	TODO \
 	get_rpm_topdir \
+	spectool.in \
+	spectool.pl \
 	pkgtool.pl \
-	pkgbuild-postprocess
-
-if ENABLE_STICKY_DIRS
-DIRMODE=1777
-else
-DIRMODE=644
-endif
-
-install-data-local:
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/BUILD
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/SPECS
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/SOURCES
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/PKGS
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/SPKGS
-	$(INSTALL) -m 755 -d $(DESTDIR)$(topdir)/PKGMAPS
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/PKGMAPS/proto
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/PKGMAPS/pkginfo
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/PKGMAPS/depend
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/PKGMAPS/copyright
-	$(INSTALL) -m $(DIRMODE) -d $(DESTDIR)$(topdir)/PKGMAPS/scripts
-
-uninstall-local:
-	DIR=$(DESTDIR)$(topdir)/BUILD; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/SPECS; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/SOURCES; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/PKGS; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/SPKGS; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/PKGMAPS/proto; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/PKGMAPS/pkginfo; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/PKGMAPS/depend; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/PKGMAPS/copyright; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/PKGMAPS/scripts; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
-	DIR=$(DESTDIR)$(topdir)/PKGMAPS; rmdir $$DIR || echo "WARNING: $$DIR not empty; not removing"
+	pkgbuild-postprocess \
+	pkgnames

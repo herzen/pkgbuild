@@ -1,20 +1,17 @@
 dnl Process this file with autoconf to create configure.
 AC_INIT(pkgbuild.pl.in)
-PKGBUILD_VERSION=1.0.1
+PKGBUILD_VERSION=1.1.0
 AC_SUBST(PKGBUILD_VERSION)
 
 AM_INIT_AUTOMAKE(pkgbuild, $PKGBUILD_VERSION)
-AC_PREFIX_DEFAULT(/opt)
+AC_PREFIX_DEFAULT(/opt/pkgbuild)
 
 AC_PATH_PROG(PERL, perl)
 if test -z "$PERL"; then
    AC_MSG_ERROR([perl not found, you need perl to use pkgbuild])
 fi
 
-if test -z "`$PERL -v | fgrep 'v5.' 2> /dev/null`" -a -z "`$PERL -v | fgrep 'version 5.' 2> /dev/null`"; then
-   AC_MSG_ERROR([perl 5.x required for pkgbuild])
-fi
-AC_SUBST(PERL)
+AC_PROG_PERL(5.004)
 
 AC_PATH_PROGS([PATCH],[gpatch patch])
 AC_MSG_CHECKING([if $PATCH is GNU patch])
@@ -67,11 +64,11 @@ test "x${prefix}" = xNONE && prefix=$ac_default_prefix
 PKGBUILD_LIBDIR="${prefix}/lib/pkgbuild-${PKGBUILD_VERSION}"
 AC_SUBST(PKGBUILD_LIBDIR)
 
-AC_ARG_WITH(topdir, [  --with-topdir=dir       set %topdir to dir. [default: PREFIX/src/packages]], TOPDIR="$with_topdir", TOPDIR="$prefix/src/packages")
-AC_SUBST(TOPDIR)
-
-AC_ARG_ENABLE(sticky-dirs, [  --enable-sticky-dirs    set the sticky bit on the directories under %topdir], enable_sticky_dirs=no, enable_sticky_dirs=yes)
-AM_CONDITIONAL(ENABLE_STICKY_DIRS, test x$enable_sticky_dirs=xyes)
+AC_ARG_WITH(topdir, [  --with-topdir=dir       Obsolete.], 
+		    [AC_MSG_ERROR([
+The --with-topdir option is now obsolete.
+Each user has their own topdirs.  The default location is \$HOME/packages,
+use .pkgtoolrc to change it.])], : )
 
 #tests/Makefile
 #tests/SOURCES/Makefile
@@ -79,9 +76,11 @@ AM_CONDITIONAL(ENABLE_STICKY_DIRS, test x$enable_sticky_dirs=xyes)
 #tests/do-test.pl
 AC_OUTPUT([
 Makefile
+m4/Makefile
 pkgbuild
 pkgbuild.pl
 rpm_spec.pm
 pkgbuild.spec
 pkgtool
+spectool
 ])

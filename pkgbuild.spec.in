@@ -2,9 +2,8 @@
 # Use pkgbuild --define 'pkgbuild_prefix /path/to/dir'
 # to define a different one.
 
-%{?!pkgbuild_prefix:%define pkgbuild_prefix /opt}
+%{?!pkgbuild_prefix:%define pkgbuild_prefix /opt/pkgbuild}
 %define _prefix %{pkgbuild_prefix}
-%{?!pkgbuild_topdir:%define pkgbuild_topdir %pkgbuild_prefix/src/packages}
 
 Name:         pkgbuild
 License:      GPL
@@ -38,85 +37,23 @@ Most features and some extensions of the spec format are implemented.
 %setup -q -n pkgbuild-%version
 
 %build
-./configure --prefix=%{pkgbuild_prefix}			\
-	    --enable-sticky-dirs                        \
-            --with-topdir=%{pkgbuild_topdir}
+./configure --prefix=%{pkgbuild_prefix}
 make
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
-rm -rf $RPM_BUILD_ROOT%{pkgbuild_topdir}
-rm -rf $RPM_BUILD_ROOT%{pkgbuild_prefix}/src
 
 %clean
 rm -rf $RPM_BUILD_ROOT
-
-%post
-%ifnos solaris
-PKG_INSTALL_ROOT=
-%endif
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/BUILD
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGS
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/SPKGS
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/SOURCES
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/SPECS
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/copyright
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/depend
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/pkginfo
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/proto
-mkdir -p $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/scripts
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/BUILD}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGS}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/SPKGS}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/SOURCES}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/SPECS}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/copyright}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/depend}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/pkginfo}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/proto}}
-%{?build_user:%{?build_group:chown %{build_user}:%{build_group} $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/scripts}}
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/BUILD
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGS
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/SPKGS
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/SOURCES
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/SPECS
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/copyright
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/depend
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/pkginfo
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/proto
-chmod 1777 $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/scripts
-
-exit 0
-
-%postun
-%ifos solaris
-rmopt=-sp
-%else
-PKG_INSTALL_ROOT=
-rmopt=--ignore-fail-on-non-empty
-%endif
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/BUILD
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGS
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/SPKGS
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/SOURCES
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/SPECS
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/copyright
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/depend
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/pkginfo
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/proto
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS/scripts
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir/PKGMAPS
-/usr/bin/rmdir $rmopt $PKG_INSTALL_ROOT%pkgbuild_topdir
-
-exit 0
 
 %files
 %defattr (-, root, bin)
 %attr (0755, root, bin) %{_bindir}
 %attr (0755, root, bin) %{_libdir}
-%{?_pkgbuild:%defattr (?, ?, ?)}
 
 %changelog
+* Fri Aug 11 2006 - <laca@sun.com>
+- delete topdir stuff, we have per-user topdirs now
 * Mon Aug 08 2005 - <laca@sun.com>
 - add GNU Patch dependency
 * Thu Dec 09 2004 - <laca@sun.com>

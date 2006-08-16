@@ -1,3 +1,74 @@
+Version 1.1.0:
+
+	Bugs fixed:
+
+	- in 1.0.1 source packages did not include the %use'd spec files
+
+	- prep mode no longer checks the dependencies (Dermot McCluskey)
+
+	- in download mode, wget times out after 60 sec
+
+        - directives like %package are now case insensitive to follow
+          rpm's behaviour
+
+	- text wrapping implemented for --dumprc (Damien Carbery)
+
+	- fixed bug where nested %if and %ifnarch or %ifnos
+	  conditionals confused the parser at the %endif line
+
+	- do not include a copy of the class action script when using
+          system (/usr/sadm/install/scripts) CASs.
+
+        New features:
+
+        - building as root is no longer supported, instead each user can
+          have their own %_topdir.  This defaults to $HOME/packages but
+          can be redefined with one of:
+
+		.pkgtoolrc  (topdir: /path/to/topdir)
+		pkgtool --topdir /path/to/topdir
+		pkgbuild --define '%_topdir /path/to/topdir'
+
+	  The --with-topdir configure option has been removed, also the
+	  --enable-sticky-dirs option.
+
+	  Users need the Software Installation profile to be able to
+	  install/uninstall packages.  Lacking that, they will still be
+	  able to use modes like build-only, prep, download, which
+	  do not involve installing/uninstalling packages.
+
+        - spectool is a new script that is useful for extracting information
+          from spec file, for example:
+
+		% spectool get_sources gimp.spec
+		ftp://ftp.gimp.org/pub/gimp/help/gimp-help-2-0.10.tar.gz
+		ftp://ftp.gimp.org/pub/gimp/v2.3/gimp-2.3.9.tar.bz2
+		% spectool eval '%version' gimp.spec
+		2.3.9
+
+	  Useful for scripting.  Use spectool --help for more details
+	  about usage.  Will write a man page at some stage...
+
+	- .pkgtoolrc has been enhanced to allow appending to existing
+          settings.  Example:
+
+		tarballdirs: ${tarballdirs}:/path/to/my/tarballs
+
+	- install-pkgs mode is now implemented
+
+        - when creating the depend file, pkgbuild uses the list of Solaris
+          package names for packages that are not installed on the system.
+	  The list is a simple text file:
+
+		%_libdir/pkgbuild-%version/pkgnames
+
+        - added support for pkginfo tags required for supporting Zones:
+	  SUNW_pkg_allzones, SUNW_pkg_hollow, SUNW_pkg_thiszone
+
+	- report a warning if %files contains absolute symlinks
+	  and report and error if an absolute symlink points to
+	  $RPM_BUILD_ROOT
+
 Version 1.0.1:
 
 	One minor incompatibility from eariler versions:

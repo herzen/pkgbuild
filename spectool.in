@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  The pkgbuild build engine
+#  A tool for extracting various info from rpm spec files
 #
 #  Copyright (C) 2004, 2005 Sun Microsystems, Inc.
 #
@@ -27,33 +27,6 @@
 
 origwd=`pwd`;
 mydir=$(cd $(dirname $0); pwd);
+pkgbuild_dir="$mydir/../lib/pkgbuild-@PKGBUILD_VERSION@"
 
-if [ `uname -s` = SunOS ]; then
-    /usr/bin/id | /usr/bin/grep '^uid=0(' > /dev/null 2>&1
-    if [ $? = 0 ]; then
-	echo "Building as root is dangerous and is no longer supported."
-	echo "Please use a non-privileged account for running pkgtool."
-	echo "When using pkgtool modes that involve package installation, you need an"
-	echo "account with the 'Software Installation' profile.  See the user_attr(4)"
-	echo "and profiles(1) man pages for more details."
-	exit 1
-    fi
-fi
-
-pkgbuild_libdir="@PKGBUILD_LIBDIR@"
-
-if [ ! -f "$pkgbuild_libdir/pkgbuild.pl" ]; then
-    echo "ERROR: pkgbuild not found." 1>&2
-    exit 1
-fi
-
-pkgbuild_prefix="$pkgbuild_libdir/../.."
-pkgbuild_prefix=$(cd "${mydir}/.."; pwd)
-
-if [ ! -x "$pkgbuild_prefix/bin/pkgbuild" ]; then
-    echo "ERROR: pkgbuild not found." 1>&2
-    exit 1
-fi
-
-# pass in the full path to pkgbuild as the first arg
-exec perl -I "$pkgbuild_libdir" $pkgbuild_libdir/pkgtool.pl "$pkgbuild_prefix/bin/pkgbuild" "${@}"
+exec @PERL@ -I $pkgbuild_dir $pkgbuild_dir/spectool.pl "${@}"

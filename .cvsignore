@@ -13,3 +13,5 @@ build-all
 install-sh
 missing
 pkgbuild.spec
+pkgtool
+spectool

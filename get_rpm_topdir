@@ -9,6 +9,7 @@ Summary: get the value of %_topdir
 Group: dummy
 License: GPL
 
+%define _builddir /tmp
 %description
 dummy
 

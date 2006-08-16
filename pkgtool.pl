@@ -30,6 +30,8 @@ use warnings;
 use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
 use config;
+use File::Copy;
+use File::Basename;
 
 # --------- global vars ----------------------------------------------------
 # config settings
@@ -49,7 +51,7 @@ my $spec_counter = 0;
 my @specs_to_build = ();
 my @build_status;
 my @status_details;
-my @remove_list = ();
+my @pkg_list = ();
 
 my %all_specs;
 my %provider;
@@ -58,14 +60,19 @@ my %warned_about;
 # --------- defaults -------------------------------------------------------
 my $defaults;
 my @predefs = ();
+my $build_engine_name = "pkgbuild";
+my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
-my $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
+my $topdir = "$ENV{HOME}/packages";
 
 sub process_defaults () {
     my $default_spec_dir = "$topdir/SPECS";
     $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
 
     $defaults = config->new ();
+    $defaults->add ('topdir', 's',
+		    'root of the build and packaging area',
+		    "$topdir");
     $defaults->add ('target', 's', 
 		    'the value of the --target option passed on to rpm');
     $defaults->add ('logdir', 's',
@@ -76,16 +83,16 @@ sub process_defaults () {
 		    'file:///tmp');
     $defaults->add ('tarballdirs', 's',
 		    'colon (:) separated list of directories where source tarballs are searched for',
-		    "$topdir/SOURCES");
+		    "%{topdir}/SOURCES");
     $defaults->add ('sourcedirs', 's',
 		    'colon (:) separated list of directories where extra sources (not tarballs) are searched for',
-		    "$topdir/SOURCES");
+		    "%{topdir}/SOURCES");
     $defaults->add ('specdirs', 's',
 		    'colon (:) separated list of directories where spec files are searched for',
-		    "$topdir/SPECS");
+		    "%{topdir}/SPECS");
     $defaults->add ('patchdirs', 's',
 		    'colon (:) separated list of directories where source patches are searched for',
-		    "$topdir/SOURCES");
+		    "%{topdir}/SOURCES");
     $defaults->add ('nightly', '!',
 		    'suffix the Release rpm tag with the date (specified by date_format)',
 		    0);
@@ -136,7 +143,7 @@ sub process_defaults () {
 		    0);
     $defaults->add ('download_to', 's',
 		    'save downloaded files in the given directory.',
-		    "$topdir/SOURCES");
+		    "%{topdir}/SOURCES");
 }
 
 # --------- utility functions ----------------------------------------------
@@ -155,6 +162,33 @@ sub find_in_path ($) {
 	}
     }
     return undef;
+}
+
+# return 1 if the current user has the Software Installation profile
+# return 0 otherwise
+sub can_install () {
+    my $cmdout = `profiles`;
+    if ($cmdout =~ /(^|\n)Software Installation\n/) {
+	return 1
+    }
+    return 0
+}
+
+sub cannot_install_error ($$;$) {
+    my $mode = shift;
+    my $doing_what = shift;
+    my $other_mode = shift;
+
+    print "You need the Software Installation profile in order to install\n";
+    print "or remove packages.  See the profiles(1) and user_attr(4) man pages\n";
+    print "for more information\n\n";
+    print "The \"$mode\" command involves $doing_what packages.\n";
+    print "Cannot continue.\n\n";
+    if (defined ($other_mode)) {
+	print "You may want to try the \"$other_mode\" command instead.\n";
+	print "Use \"pkgtool --help\" for more information about the \"other_mode\" command\n";
+    }
+    exit (1);
 }
 
 my $wget;
@@ -176,7 +210,10 @@ sub wget_in_path () {
     }
 }
 
+# init: set up some global variables.
+# call this before any other function.
 sub init () {
+    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
     $arch = `uname -p`;
     chomp ($arch);
     if ($arch eq "unknown") {
@@ -201,13 +238,17 @@ sub init () {
     }
 
     if ($os eq "solaris") {
-	$build_engine = "pkgbuild";
+	$build_engine_name = "pkgbuild";
+	$build_engine = $pkgbuild_path;
     } elsif (defined (find_in_path ("rpmbuild"))) {
 	$build_engine = "rpmbuild";
+	$build_engine_name = "rpmbuild";
     } elsif (defined (find_in_path ("rpm"))) {
 	$build_engine = "rpm";
+	$build_engine_name = "rpm";
     } else {
-	$build_engine = "pkgbuild";
+	$build_engine_name = "pkgbuild";
+	$build_engine = $pkgbuild_path;
     }
 }
 
@@ -358,6 +399,13 @@ sub msg_log ($) {
     }
 }
 
+sub fatal ($) {
+    my $message = shift;
+    
+    print STDERR "$message\n";
+    exit (1);
+}
+
 sub find_file ($) {
     my $glob = shift;
     
@@ -449,6 +497,26 @@ sub get_address_from_file ($$) {
     $address =~ s/\s//g;
     close ADDR_FILE;
     return $address;
+}
+
+# I couldn't find a standard perl implementation of mkdir -p so
+# this is simple a recursive implementation
+sub mkdir_p ($);
+
+sub mkdir_p ($) {
+    my $dir = shift;
+
+    if (-d $dir) {
+	return 1;
+    }
+
+    my $pdir = dirname ($dir);
+    if (! -d $pdir) {
+	mkdir_p ($pdir) or return 0;
+    }
+
+    mkdir ($dir) or return 0;
+    return 1;
 }
 
 # --------- functions to process the command line args ---------------------
@@ -553,6 +621,9 @@ sub process_options {
     our $opt_live_summary = 1;
     our $verbose = $defaults->get ('verbose');
 
+    $defaults->readrc ("$ENV{'HOME'}/.pkgtoolrc");
+    $defaults->readrc ('./.pkgtoolrc');
+
     GetOptions ('v|verbose+' => \$verbose,
 		'debug=n' => sub { shift; $defaults->set ('debug', shift); },
 		'q|quiet' => sub { $verbose = 0; },
@@ -573,7 +644,7 @@ sub process_options {
 		'srpm-url=s' => sub { shift; $defaults->set ('srpm_url', shift); },
 		'target=s' => sub { shift; $defaults->set ('target', shift); },
 		'deps!' => sub { shift; $defaults->set ('deps', shift); },
-		'rc!' => \$read_rc,
+		'rc!' => sub { shift; $read_rc = shift; if (not $read_rc) { $defaults->norc(); } },
 		'interactive!' => sub { shift; $defaults->set ('interactive', shift); },
 		'tarballdirs|tarballdir|tar|tarballs|tardirs|t=s' => sub { shift; $defaults->set ('tarballdirs', shift); },
 		'good-build-dir|substitutes=s',
@@ -584,6 +655,10 @@ sub process_options {
 		    my $def = shift;
 		    @predefs = ( @predefs, $def );
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
+		    my $orig_topdir = $defaults->get ('topdir');
+		    if ($orig_topdir ne $topdir) {
+			$defaults->set ('topdir', $topdir);
+		    }
 		},
 		'with=s' => \&process_with,
 		'without=s' => \&process_with,
@@ -594,25 +669,37 @@ sub process_options {
 		    shift; 
 		    $topdir = shift;
 		    @predefs = ( @predefs, "_topdir $topdir" );
+		    $defaults->set ('topdir', $topdir);
 		},
 		'full-path' => \$full_path,
 		'help' => \&usage,
 		'dumprc' => sub { $defaults->dumprc (); exit (0); }, 
 		'pkgbuild' => sub { 
 		    $defaults->set ('build_engine', 'pkgbuild');
-		    $build_engine = 'pkgbuild';
+		    $build_engine_name = 'pkgbuild';
+		    $build_engine = $pkgbuild_path;
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
+		    my $orig_topdir = $defaults->get ('topdir');
+		    if ($orig_topdir ne $topdir) {
+			$defaults->set ('topdir', $topdir);
+		    }
 		},
 		'rpmbuild' => sub {
 		    if (defined (find_in_path ('rpmbuild'))) {
 			$build_engine = 'rpmbuild';
+			$build_engine_name = 'rpmbuild';
 		    } elsif (defined (find_in_path ('rpm'))) {
 			$build_engine = 'rpm';
+			$build_engine_name = 'rpm';
 		    } else {
 			fatal ('rpm/rpmbuild not found in the PATH');
 		    }
-		    $defaults->set ('build_engine', $build_engine);
+		    $defaults->set ('build_engine', $build_engine_name);
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
+		    my $orig_topdir = $defaults->get ('topdir');
+		    if ($orig_topdir ne $topdir) {
+			$defaults->set ('topdir', $topdir);
+		    }
 		},
 		'download' => sub { shift; $defaults->set ('download', shift); },
 		'download-to=s' => sub {
@@ -621,11 +708,6 @@ sub process_options {
 		    $defaults->set ('download', 1);
 		},
 		'<>' => \&process_args);
-      
-    if ($read_rc) {
-	$defaults->readrc ("$ENV{'HOME'}/.pkgtoolrc");
-	$defaults->readrc ('./.pkgtoolrc');
-    }
 
     for my $spec_name (@specs_to_read) {
 	read_spec ($spec_name) unless not defined ($spec_name);
@@ -780,11 +862,11 @@ Commands:
 
     install-order  Print the rpms in the order they should be installed
 	
-    install-pkgs   (not implemented yet): install the packages defined
-                   by the spec files listed on the command line from
-                   the PKGS directory.  No build is done.  Useful to
-                   install packages previously built using the build-only
-                   command.
+    install-pkgs   install the packages defined by the spec files listed
+                   on the command line from the PKGS directory.  No build
+                   is done.  Useful to install packages previously built
+                   using the build-only command, or built manually using
+                   pkgbuild.
 	
     uninstall-pkgs Uninstall all packages defined in the spec files listed
 	           on the command line. (runs rpm --erase --nodeps on
@@ -1058,8 +1140,11 @@ sub install_good_pkgs ($) {
     }
 
     if (defined ($the_good_rpms_copy_dir)) {
-	`mkdir -p $the_good_rpms_copy_dir`;
-	`cp @rpms $the_good_rpms_copy_dir`;
+	if (mkdir_p ($the_good_rpms_copy_dir)) {
+	    foreach my $rpm (@rpms) {
+		copy ($rpm, $the_good_rpms_copy_dir);
+	    }
+	}
     }
 
     return 1;
@@ -1154,14 +1239,14 @@ sub print_spec ($) {
     print $spec->get_file_name() . "\n";
 }
 
-sub push_to_remove_list ($) {
+sub push_to_pkg_list ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
 
     my @pkgs =  $spec->get_package_names ();
     foreach my $pkg (@pkgs) {
 	my @d = ($spec_id, $pkg);
-	unshift (@remove_list, \@d);
+	unshift (@pkg_list, \@d);
     }
 }
 
@@ -1313,9 +1398,15 @@ sub find_spec ($) {
 sub copy_spec ($$) {
     my $spec = shift;
     my $spec_file = shift;
+    my $spec_id = $all_specs{$spec->get_file_name ()};
 
     my $base_name = $spec_file;
     $base_name =~ s/^.*\/([^\/]+)/$1/;
+    mkdir_p ("$topdir/SPECS") or
+	$build_status[$spec_id]="ERROR",
+	$status_details[$spec_id]="failed to create directory $topdir/SPECS",
+	msg_error ("Failed to create directory $topdir/SPECS"),
+	return 0;
     my $target = "$topdir/SPECS/$base_name";
 
     msg_info (2, "copying spec file $spec_file to the SPECS dir");
@@ -1326,7 +1417,6 @@ sub copy_spec ($$) {
 	my $the_nightly_date = `date "+$the_nightly_date_format"`;
 	if ($? > 0) {
 	    msg_error ("incorrect date format: $the_nightly_date_format");
-	    my $spec_id = $all_specs{$spec->get_file_name ()};
 	    msg_error ("Assertion failed: copy_spec: can't find spec_id for $spec_file") unless defined $spec_id;
 	    $build_status[$spec_id] = 'ERROR';
 	    $status_details[$spec_id] = "incorrect nightly date format: $the_nightly_date";
@@ -1334,13 +1424,11 @@ sub copy_spec ($$) {
 	}
 
 	open SPEC_OUT, ">$target";
-	my $msg=`cp $spec_file /tmp/.pkgtool.tmp.$$ 2>&1`;
-	if ($? > 0) {
+	if (not copy ($spec_file, "/tmp/.pkgtool.tmp.$$")) {
 	    msg_error ("failed to copy $spec_file to $target");
-	    my $spec_id = $all_specs{$spec->get_file_name ()};
 	    msg_error ("Assertion failed: copy_spec: can't find spec_id for $spec_file (2)") unless defined $spec_id;
 	    $build_status[$spec_id] = 'FAILED';
-	    $status_details[$spec_id] = "cound not copy spec file: $msg";
+	    $status_details[$spec_id] = "cound not copy spec file to $target";
 	    return 0;
 	}
 	open SPEC_IN, "</tmp/.pkgtool.tmp.$$";
@@ -1359,12 +1447,11 @@ sub copy_spec ($$) {
 	close SPEC_IN;
 
 	`rm -f /tmp/.pkgtool.tmp.$$`;
-	my @predefs = ();
+	my @prdefs = ();
 	my $rpm_target = $defaults->get ('target');
 	if (defined $rpm_target) {
-	    @predefs = ("_target $rpm_target");
+	    @prdefs = ("_target $rpm_target");
 	}
-	my $spec_id = $all_specs{$spec->get_file_name ()};
 	delete ($all_specs{$spec->get_file_name ()});
 	msg_error ("Assertion failed: copy_spec: can't find spec_id for $spec_file (3)") unless defined $spec_id;
 	my $spec = rpm_spec->new ($target, $rpm_target);
@@ -1373,13 +1460,11 @@ sub copy_spec ($$) {
     } else {
 	`cmp -s $spec_file $target`;
 	if ($? != 0) {  # the files differ
-	    my $msg=`cp -f $spec_file $target 2>&1`;
-	    if ($? > 0) {
+	    if (not copy ($spec_file, $target)) {
 		msg_error "failed to copy $spec_file to $target";
-		my $spec_id = $all_specs{$spec->get_file_name ()};
 		msg_error ("Assertion failed: copy_spec: can't find spec_id for $spec_file (3)") unless defined $spec_id;
 		$build_status[$spec_id] = 'FAILED';
-		$status_details[$spec_id] = "failed to copy spec file: $msg";
+		$status_details[$spec_id] = "failed to copy spec file to $target";
 		return 0;
 	    }
 	} else {
@@ -1457,7 +1542,7 @@ sub wget_source ($$$) {
 
     msg_info (0, "Downloading source $src");
 
-    my $wget_command = "$wget -nd -nH -P $download_dir $src 2>&1";
+    my $wget_command = "$wget -nd -nH -P -T 60 $download_dir $src 2>&1";
     msg_info (2, "Running $wget_command");
     my $wget_output = `$wget_command`;
     chomp ($wget_output);
@@ -1478,14 +1563,12 @@ sub wget_source ($$$) {
 	$src_path =~ s/^.*\/([^\/]+)/$1/;
 	msg_info (1, "Source $src_path saved in $download_dir");
 	$src_path = "$download_dir/$src_path";
-	my $msg=`cp -f $src_path $target 2>&1`;
-	if ($? > 0) {
-	    msg_error ("failed to copy $src_path to $target");
-	    $build_status[$spec_id] = 'ERROR';
-	    $status_details[$spec_id] = $msg;
-	    return 0;
+	if (not copy ($src_path, $target)) {
+	    msg_warning (0, "failed to copy $src_path to $target");
+	} else {
+	    # FIXME
+	    `chmod a+r $target`;
 	}
-	`chmod a+r $target`;
     }
 
     return 1;
@@ -1537,11 +1620,15 @@ sub copy_sources ($) {
 	`cmp -s $src_path $target`;
 
 	if ($? != 0) {  # the files differ
-	    my $msg=`cp -f $src_path $target 2>&1`;
-	    if ($? > 0) {
+	    mkdir_p ("$topdir/SOURCES") or
+		$build_status[$spec_id]="ERROR",
+		$status_details[$spec_id]="failed to create directory $topdir/SOURCES",
+		msg_error ("Failed to create directory $topdir/SOURCES"),
+		return 0;
+	    if (not copy ($src_path, $target)) {
 		msg_error ("failed to copy $src_path to $target");
 		$build_status[$spec_id] = 'ERROR';
-		$status_details[$spec_id] = $msg;
+		$status_details[$spec_id] = "failed to copy $src_path to $target";
 		return 0;
 	    }
 	}
@@ -1591,11 +1678,15 @@ sub copy_patches ($) {
 	`cmp -s $patch_path $target`;
 
 	if ($? != 0) {  # the files differ
-	    my $msg=`cp -f $patch_path $target 2>&1`;
-	    if ($? > 0) {
+	    mkdir_p ("$topdir/SOURCES") or
+		$build_status[$spec_id]="ERROR",
+		$status_details[$spec_id]="failed to create directory $topdir/SOURCES",
+		msg_error ("Failed to create directory $topdir/SOURCES"),
+		return 0;
+	    if (not copy ($patch_path, $target)) {
 		msg_error "failed to copy $patch_path to $target";
 		$build_status[$spec_id] = 'ERROR';
-		$status_details[$spec_id] = $msg;
+		$status_details[$spec_id] = "failed to copy $patch_path to $target";
 		return 0;
 	    }
 	} else {
@@ -1706,8 +1797,12 @@ sub build_spec ($$$) {
 	foreach my $dep (@dependencies) {
 	    $dep =~ s/ .*//;
 	    
-	    $this_result = check_dependency ($spec_id, $dep,
-					     \&build_spec, \&warn_always, ($build_only, $prep_only));
+	    if (not $prep_only) {
+		$this_result = check_dependency ($spec_id, $dep,
+						 \&build_spec, \&warn_always, ($build_only, $prep_only));
+	    } else {
+		$this_result = 1;
+	    }
 	    if (!$this_result) {
 		if (defined ($the_good_build_dir)) {
 		    msg_info (0, "Attempting to use a known good package");
@@ -1732,7 +1827,7 @@ sub build_spec ($$$) {
 
     if ($live_summary) {
 	$build_status[$spec_id] = 'BEING_BUILT';
-	$status_details[$spec_id] = "$build_engine running";
+	$status_details[$spec_id] = "$build_engine_name running";
 	print_live_status;
     }
 
@@ -1772,14 +1867,28 @@ sub run_build ($;$) {
     my $base_name = $spec->get_base_file_name ();
     my $log_name = "$base_name";
     $log_name = get_log_name ($spec_id);
-    my $builddir = $spec->get_value_of ("_topdir");
+
+    my $builddir = $spec->get_value_of ("_builddir");
+    mkdir_p ($builddir) or
+	msg_error ("failed to create directory $builddir"),
+	$build_status[$spec_id]="ERROR",
+	$status_details[$spec_id]="failed to create directory $builddir",
+	return 0;
     my $build_user = getpwuid ((stat($builddir))[4]);
+    foreach my $dir ("PKGS", "SPKGS", "PKGMAPS/copyright", "PKGMAPS/depend",
+		     "PKGMAPS/pkginfo", "PKGMAPS/proto", "PKGMAPS/scripts") {
+	mkdir_p ("$topdir/$dir") or
+	    msg_error ("failed to create directory $topdir/$dir"),
+	    $build_status[$spec_id]="ERROR",
+	    $status_details[$spec_id]="failed to create directory $topdir/$dir",
+	    return 0;
+    }
     chomp (my $id = `id`);
     $id =~ s/^uid=([0-9]*).*/$1/;
     my $running_user = getpwuid ($id);    
     my $command;
 
-    msg_info (0, "Running $build_engine $build_mode $base_name ($spec)");
+    msg_info (0, "Running $build_engine_name $build_mode [...] $base_name ($spec)");
     my $the_log_dir = $defaults->get ('logdir');
     msg_info (1, "Log file: $the_log_dir/$log_name");
 
@@ -1789,10 +1898,10 @@ sub run_build ($;$) {
 	$the_command = "$build_engine --nodeps";
     }
     my $interactive_mode = $defaults->get ('interactive');
-    if ($interactive_mode and ($build_engine eq "pkgbuild")) {
+    if ($interactive_mode and ($build_engine_name eq "pkgbuild")) {
 	$the_command = "$the_command --interactive";
     }
-    if ($build_engine eq "pkgbuild") {
+    if ($build_engine_name eq "pkgbuild") {
 	my $pkgformat = $defaults->get ('pkgformat');
 	if ($pkgformat ne 'filesystem' and $pkgformat ne 'fs') {
 	    $the_command = "$the_command --pkgformat $pkgformat";
@@ -1820,8 +1929,8 @@ sub run_build ($;$) {
 
     my $save_log_name = $current_log;
     msg_log ("INFO: Build command: \"$command\"");
-    msg_log ("INFO: Starting $build_engine build engine at " . `date`);
-    my $tempfile = "/tmp/$build_engine.out.$$";
+    msg_log ("INFO: Starting $build_engine_name build engine at " . `date`);
+    my $tempfile = "/tmp/$build_engine_name.out.$$";
     msg_log ("INFO: Build engine output is written to $tempfile");
     msg_log ("INFO: and will be appended to this log when completed.");
     log_cmdout_starts ();
@@ -1836,15 +1945,15 @@ sub run_build ($;$) {
 	`$command > $tempfile 2>&1`;
 	$build_result = $?; 
     }
-    system ("sed -e 's/^/$build_engine: /' $tempfile >> $the_log_dir/$log_name 2>&1; rm -f $tempfile");
+    system ("sed -e 's/^/$build_engine_name: /' $tempfile >> $the_log_dir/$log_name 2>&1; rm -f $tempfile");
     log_cmdout_ends ($save_log_name);
-    msg_log ("INFO: $build_engine $build_mode finished at " . `date`);
+    msg_log ("INFO: $build_engine_name $build_mode finished at " . `date`);
 
     if ($build_result) {
 	msg_error ("$spec FAILED");
 	msg_info (0, "Check the build log in $save_log_name for details");
 	$build_status[$spec_id] = "FAILED";
-	$status_details[$spec_id] = "$build_engine build failed";
+	$status_details[$spec_id] = "$build_engine_name build failed";
 	return 0;
     }
 
@@ -1958,7 +2067,7 @@ sub make_admin_file ($) {
 # --------- uninstall-pkgs command -----------------------------------------
 sub do_uninstall_pkgs () {
     for (my $i = 0; $i <= $#specs_to_build; $i++) {
-	print_order ($i, \&push_to_remove_list);
+	print_order ($i, \&push_to_pkg_list);
     }
 
     my $adminfile = "/tmp/pkg.admin.$$";
@@ -1974,7 +2083,7 @@ sub do_uninstall_pkgs () {
     }
     my $verbose = $defaults->get ('verbose');
     my $remove_status;
-    foreach my $ref (@remove_list) {
+    foreach my $ref (@pkg_list) {
 	my ($spec_id, $pkg_to_remove) = @$ref;
 	if (is_installed ($pkg_to_remove)) {
 	    msg_info (0, "Uninstalling $pkg_to_remove");
@@ -2009,6 +2118,72 @@ sub do_uninstall_pkgs () {
 	    msg_info (0, "Package $pkg_to_remove is not installed");
 	    if ($build_status[$spec_id] eq "PASSED") {
 		$build_status[$spec_id] = "NOT INSTLD";
+	    }
+	}
+    }
+    if ($os eq "solaris") {
+	unlink ($adminfile);
+    }
+    if ($verbose > 0) {
+	print_status;
+    }
+}
+
+sub do_install_pkgs () {
+    for (my $i = 0; $i <= $#specs_to_build; $i++) {
+	print_order ($i, \&push_to_pkg_list);
+    }
+
+    @pkg_list = reverse (@pkg_list);
+    my $adminfile = "/tmp/pkg.admin.$$";
+    my $pkgsdir = $specs_to_build[0]->get_value_of ("_topdir") . "/PKGS";    
+    my $command;
+    my $pkgadd;
+    if ($os eq "solaris") {
+	make_admin_file ($adminfile);
+	$command = "pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir 2>&1";
+	$pkgadd = "pkgadd";
+    } else {
+	$command = "rpm -v --upgrade 2>&1";
+	$pkgadd = "rpm";
+    }
+    my $verbose = $defaults->get ('verbose');
+    my $install_status;
+    foreach my $ref (@pkg_list) {
+	my ($spec_id, $pkg_to_install) = @$ref;
+	if (is_installed ($pkg_to_install)) {
+	    msg_info (0, "$pkg_to_install is already installed.");
+	    if ($build_status[$spec_id] eq "PASSED") {
+		$build_status[$spec_id] = "SKIPPED";
+	    }
+	} else {
+	    msg_info (0, "Installing package $pkg_to_install");
+	    my $cmd_out = `$command $pkg_to_install 2>&1`;
+	    chomp ($cmd_out);
+	    $install_status = $?;
+	    if ($install_status > 0) {
+		$build_status[$spec_id] = "FAILED";
+		$status_details[$spec_id] = $cmd_out;
+		$exit_val++;
+	    } else {
+		msg_info (1, "Successfully installed $pkg_to_install");
+		if ($build_status[$spec_id] ne "FAILED") {
+		    $build_status[$spec_id] = "INSTALLED";
+		}
+	    }
+	    if ($cmd_out ne "") {
+		if ($install_status > 0) {
+		    $cmd_out =~ s/\n(.)/\nERROR: $pkgadd: $1/;
+		} else {
+		    $cmd_out =~ s/\n(.)/\nINFO: $pkgadd: $1/;
+		}
+		if ($verbose > 1 or ($verbose > 0 and $install_status > 0)) {
+		    if ($install_status > 0) {
+			msg_error ($cmd_out);
+		    } else {
+			msg_info (1, $cmd_out);
+		    }
+		}
 	    }
 	}
     }
@@ -2072,7 +2247,7 @@ sub get_specs_used ($) {
 my %specs_copied;
 
 sub copy_specs () {
-    msg_info (0, "Copying spec files to SPECS directory");
+    msg_info (0, "Copying %use'd or %include'd spec files to SPECS directory");
     for (my $spec_id = 0; $spec_id <= $#specs_to_build; $spec_id++) {
         my $spec = $specs_to_build[$spec_id];
 	my $fname = $spec->get_file_name ();
@@ -2184,17 +2359,27 @@ sub main {
     }
     
     if ($build_command eq "build") {
+	can_install || cannot_install_error ("uninstall-pkgs", "installing",
+					     "build-only");
 	do_build;
     } elsif ($build_command eq "build-install") {
+	can_install || cannot_install_error ("uninstall-pkgs", "installing",
+					     "build-only");
 	do_build;
     } elsif ($build_command eq "build-only") {
 	do_build (1);
     } elsif ($build_command eq "prep") {
+	# ignore dependencies if only doing %prep
+	$defaults->set ('deps', 0);
 	do_build (1, 1);
     } elsif ($build_command eq "spkg") {
 	do_build (1, 2);
     } elsif ($build_command eq "uninstall-pkgs") {
+	can_install || cannot_install_error ("uninstall-pkgs", "removing");
 	do_uninstall_pkgs;
+    } elsif ($build_command eq "install-pkgs") {
+	can_install || cannot_install_error ("uninstall-pkgs", "installing");
+	do_install_pkgs;
     } elsif ($build_command eq "build-order") {
 	do_build_order;
     } elsif ($build_command eq "install-order") {
@@ -2205,6 +2390,9 @@ sub main {
 
     exit ($exit_val);
 }
+
+$pkgbuild_path = shift (@ARGV);
+$build_engine = $pkgbuild_path;
 
 init;
 main;

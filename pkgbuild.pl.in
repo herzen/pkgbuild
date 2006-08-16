@@ -1,5 +1,13 @@
 #!@PERL@
 #
+@WARNING_MESSAGE_L1@
+@WARNING_MESSAGE_L2@
+@WARNING_MESSAGE_L3@
+@WARNING_MESSAGE_L4@
+@WARNING_MESSAGE_L5@
+@WARNING_MESSAGE_L6@
+@WARNING_MESSAGE_L7@
+#
 #  The pkgbuild build engine
 #
 #  Copyright (C) 2004, 2005 Sun Microsystems, Inc.
@@ -25,18 +33,11 @@
 #  Authors:  Laszlo Peter  <laca@sun.com>
 #
 
-@WARNING_MESSAGE_L1@
-@WARNING_MESSAGE_L2@
-@WARNING_MESSAGE_L3@
-@WARNING_MESSAGE_L4@
-@WARNING_MESSAGE_L5@
-@WARNING_MESSAGE_L6@
-@WARNING_MESSAGE_L7@
-
 #use strict;
 use warnings;
 use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
+use File::Basename;
 
 my $myname = "pkgbuild";
 my $myversion = "@PKGBUILD_VERSION@";
@@ -607,6 +608,26 @@ sub get_script_header ($) {
     return $script;
 }
 
+# I couldn't find a standard perl implementation of mkdir -p so
+# this is simple a recursive implementation
+sub mkdir_p ($);
+
+sub mkdir_p ($) {
+    my $dir = shift;
+
+    if (-d $dir) {
+	return 1;
+    }
+
+    my $pdir = dirname ($dir);
+    if (! -d $pdir) {
+	mkdir_p ($pdir) or return 0;
+    }
+
+    mkdir ($dir) or return 0;
+    return 1;
+}
+
 my $file_id = 0;
 sub open_tempfile ($) {
     my $spec = shift;
@@ -618,6 +639,7 @@ sub open_tempfile ($) {
     my $the_file_id = ++$file_id;
     my $fhandle = "TEMP_FILE" . $the_file_id;
     my $fname = "pkgbuild-tmp-$the_file_id.$$";
+    mkdir_p ($tempdir);
     open $fhandle, ">$tempdir/$fname" or
 	fatal ("failed to create temporary file $tempdir/$fname");
     return ($fhandle, "$tempdir/$fname");
@@ -737,6 +759,21 @@ sub make_pkginfo ($$) {
     }
     print $fhandle "CATEGORY=$category\n";
 
+    my $zone_stuff = $package->get_tag ('SUNW_Pkg_AllZones');
+    if (defined ($zone_stuff)) {
+	print $fhandle "SUNW_PKG_ALLZONES=$zone_stuff\n";
+    }
+
+    $zone_stuff = $package->get_tag ('SUNW_Pkg_Hollow');
+    if (defined ($zone_stuff)) {
+	print $fhandle "SUNW_PKG_HOLLOW=$zone_stuff\n";
+    }
+
+    $zone_stuff = $package->get_tag ('SUNW_Pkg_ThisZone');
+    if (defined ($zone_stuff)) {
+	print $fhandle "SUNW_PKG_THISZONE=$zone_stuff\n";
+    }
+
     my $vendor = $package->get_tag ('Vendor');
     print $fhandle "VENDOR=$vendor\n" if $vendor;
 
@@ -832,13 +869,20 @@ sub make_depend ($$) {
 	    next;
 	}
 	my $pkgname = `/usr/bin/pkginfo '$dep.*' 2>/dev/null | head -1`;
-	$pkgname =~ s/^\S*\s*$dep\s*(\S.*)$/$1/;
-	if ($? != 0) {
-	    message ("warning: could not find out the description of "
-		     . "package $dep", "omitting from depend file");
-	    next;
-	}
 	chomp ($pkgname);
+	if ($pkgname ne '') {
+	    $pkgname =~ s/^\S*\s*$dep\s*(\S.*)$/$1/;
+        } else {
+	    $pkgname = `grep "^${dep}:" "@PKGBUILD_LIBDIR@/pkgnames" | head -1`;
+	    chomp ($pkgname);
+	    if ($pkgname ne '') {
+		$pkgname =~ s/^${dep}:(.*)/$1/;
+	    } else {
+		message ("warning: could not find the description of "
+			 . "package $dep", "omitting from depend file");
+		next;
+	    }
+	}
 	print $fhandle "P $dep $pkgname\n"; 
     }
 
@@ -905,9 +949,6 @@ sub make_scripts ($$) {
 	if (not defined $script) {
 	    my $err = $package->get_error ();
 	    return undef if defined $err;
-	    if ( -f "/usr/sadm/install/scripts/i.$class_name" ) {
-		$retstr = $retstr . "i i.$class_name=/usr/sadm/install/scripts/i.$class_name\n";
-	    }
 	} else {
 	    open $fhandle, ">$scriptdir/i.$class_name" or
 		fatal ("failed to create file $scriptdir/i.$class_name");
@@ -919,9 +960,6 @@ sub make_scripts ($$) {
 	if (not defined $script) {
 	    my $err = $package->get_error ();
 	    return undef if defined $err;
-	    if ( -f "/usr/sadm/install/scripts/r.$class_name" ) {
-		$retstr = $retstr . "i r.$class_name=/usr/sadm/install/scripts/r.$class_name\n";
-	    }
 	} else {
 	    open $fhandle, ">$scriptdir/r.$class_name" or
 		fatal ("failed to create file $scriptdir/r.$class_name");
@@ -965,9 +1003,11 @@ sub get_file_type ($) {
     }
 }
 
-sub get_proto_line ($$$$$$$) {
+# FIXME: this is ugly as hell
+sub get_proto_line ($$$$$$$$) {
     my $file = shift;
     my $class_name = shift;
+    my $buildroot = shift;
     my $fname = shift;
     my $basedir = shift;
     my $def_mode = shift;
@@ -1056,6 +1096,11 @@ sub get_proto_line ($$$$$$$) {
 	$protoline = "v $class_name $relpath=/dev/null $mode $user $group";
     } elsif ($type eq 's') {
 	my $linkpoint = readlink ($fname);
+	if ($linkpoint =~ /^$buildroot/) {
+	    fatal ("ERROR: /$fname is an absolute symlink that points to \$RPM_BUILD_ROOT");
+	} elsif ($linkpoint =~ /^\//) {
+	    print "WARNING: $fname is an absolute symlink\n";
+	}
 	$protoline = "$type none $relpath=$linkpoint";
     } elsif ($type =~ /(c|b)/) {
 	fatal ('device special files not implemented');
@@ -1141,6 +1186,7 @@ sub get_proto_hash ($) {
 	    if (not defined ($file_info{$fname})) {
 		my $pline = get_proto_line ($file,
 					    $class_name,
+					    $buildroot,
 					    $fname, 
 					    $basedir,
 					    $attribs[0],
@@ -1165,6 +1211,7 @@ sub get_proto_hash ($) {
 		   not defined ($default_dirs{$parent_dir})) {
 		my $pline = get_proto_line (undef,
 					    "none",
+					    $buildroot,
 					    $parent_dir,
 					    $basedir,
 					    $defattr[0],
@@ -1211,6 +1258,7 @@ sub make_solaris_pkg ($$) {
     }
     my %files = %$files_ref;
     foreach my $file (keys %files) {
+	$file =~ s/^\/+//;
 	$all_files{$file} = "$package";
     }
     if (not %files) {
@@ -1453,7 +1501,11 @@ sub make_src_package ($) {
 	next if not $fname;
 	if (not $fname =~ /\//) {
 	    print $fhandle "f none $specdir/$fname=$topdir/SPECS/$fname 644 root other\n";
-	}
+        } else {
+            my $basefname = $fname;
+            $basefname =~ s/^.*\/([^\/]+)/$1/;
+            print $fhandle "f none $specdir/$basefname=$fname 644 root root\n";
+        }
     }
     my $base_spec_name = $this_spec_file;
     $base_spec_name =~ s/^.*\/([^\/]*)$/$1/;
