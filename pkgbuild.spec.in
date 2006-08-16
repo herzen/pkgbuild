@@ -1,4 +1,4 @@
-# The default install prefix is /opt
+# The default install prefix is /opt/pkgbuild
 # Use pkgbuild --define 'pkgbuild_prefix /path/to/dir'
 # to define a different one.
 
