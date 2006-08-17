@@ -22,7 +22,8 @@ BuildRoot:    %{_tmppath}/%{name}-%{version}-build
 %{?_pkgbuild:SUNW_BaseDir:              %{pkgbuild_prefix}}
 
 %ifos Solaris
-Requires:     SUNWpl5u
+Requires:     SUNWbash
+Requires:     SUNWperl584core
 Requires:     SUNWgpch
 %else
 Requires:     perl >= 5.0.0

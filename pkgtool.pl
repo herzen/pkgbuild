@@ -1542,7 +1542,7 @@ sub wget_source ($$$) {
 
     msg_info (0, "Downloading source $src");
 
-    my $wget_command = "$wget -nd -nH -P -T 60 $download_dir $src 2>&1";
+    my $wget_command = "$wget -nd -nH -P $download_dir -T 60 $src 2>&1";
     msg_info (2, "Running $wget_command");
     my $wget_output = `$wget_command`;
     chomp ($wget_output);
