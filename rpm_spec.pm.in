@@ -48,6 +48,7 @@ use overload ('""' => \&get_name);
 my %arch;
 my $os;
 my $os_rel;
+my $logname;
 
 my $_default_topdir = "$ENV{HOME}/packages";
 my $_topdir = $_default_topdir;
@@ -94,6 +95,11 @@ sub _init () {
 	    $arch{$isa} = 1;
 	}
     }
+
+    $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
+    chomp ($logname);
+    # FIXME: use mkdir_p
+    `mkdir -p /var/tmp/pkgbuild-${logname}`;
 }
 
 # Create a new rpm_spec object.
@@ -198,7 +204,7 @@ sub new ($;$$) {
 	$self->{_defines}->{_global_cflags} = "-O2 -g -pipe";
 	$self->{_defines}->{optflags} = "%{_global_cflags}";
 	$self->{_defines}->{_var} = "/var";
-	$self->{_defines}->{_tmppath} = "%{_var}/tmp";
+	$self->{_defines}->{_tmppath} = "%{_var}/tmp/pkgbuild-${logname}";
 	$self->{_defines}->{_usr} = "/usr";
 	$self->{_defines}->{_usrsrc} = "%{_usr}/src";
 

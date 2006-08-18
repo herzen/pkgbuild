@@ -709,6 +709,10 @@ sub process_options {
 		},
 		'<>' => \&process_args);
 
+    $topdir = $defaults->get ('topdir');
+    if (not $defaults->is_default ('topdir')) {
+	@predefs = ( @predefs, "_topdir $topdir" );
+    }
     for my $spec_name (@specs_to_read) {
 	read_spec ($spec_name) unless not defined ($spec_name);
     }
@@ -2073,10 +2077,12 @@ sub do_uninstall_pkgs () {
     my $adminfile = "/tmp/pkg.admin.$$";
     my $command;
     my $pkgrm;
+    my $suffix = '';
     if ($os eq "solaris") {
 	make_admin_file ($adminfile);
 	$command = "pfexec /usr/sbin/pkgrm -a $adminfile -n 2>&1";
 	$pkgrm = "pkgrm";
+	$suffix = "'.*'"
     } else {
 	$command = "rpm -v --erase --nodeps 2>&1";
 	$pkgrm = "rpm";
@@ -2087,7 +2093,7 @@ sub do_uninstall_pkgs () {
 	my ($spec_id, $pkg_to_remove) = @$ref;
 	if (is_installed ($pkg_to_remove)) {
 	    msg_info (0, "Uninstalling $pkg_to_remove");
-	    my $cmd_out = `$command $pkg_to_remove 2>&1`;
+	    my $cmd_out = `$command $pkg_to_remove$suffix 2>&1`;
 	    chomp ($cmd_out);
 	    $remove_status = $?;
 	    if ($remove_status > 0) {

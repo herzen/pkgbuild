@@ -1,3 +1,11 @@
+2006-08-17  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: uninstall all instances of packages when running
+	  uninstall-pkgs; add $topdir to the --define options passed to
+	  pkgbuild if topdir is non-default
+	* rpm_spec.pm.in: make the default _tmppath per-user:
+	  /var/tmp/pkgbuild-$USER
+
 2006-08-16  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.spec.in: fix dependencies

@@ -37,6 +37,10 @@ Version 1.1.0:
 	  able to use modes like build-only, prep, download, which
 	  do not involve installing/uninstalling packages.
 
+	- %{_tmppath} now defaults to /var/tmp/pkgbuild-$USER so that
+	  multiple users on the same machine can build at the same
+	  time.
+
         - spectool is a new script that is useful for extracting information
           from spec file, for example:
 
