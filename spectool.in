@@ -29,4 +29,4 @@ origwd=`pwd`;
 mydir=$(cd $(dirname $0); pwd);
 pkgbuild_dir="$mydir/../lib/pkgbuild-@PKGBUILD_VERSION@"
 
-exec @PERL@ -I $pkgbuild_dir $pkgbuild_dir/spectool.pl "${@}"
+exec @PERL@ -I $pkgbuild_dir $pkgbuild_dir/spectool.pl "$pkgbuild_prefix/bin/pkgbuild" "${@}"

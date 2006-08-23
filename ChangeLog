@@ -1,3 +1,22 @@
+2006-08-22  Laszlo Peter  <laca@sun.com>
+
+	* .cvsignore: add macros
+	* Makefile.am: add macros, macros.in
+	* NEWS: update; add info about .pkgbuildmacros
+	* config.pm: avoid infinite loop if % appears in a setting
+	* configure.in: add macros to AC_OUTPUT and define ARCH
+	* macros.in: (new) default macro definitions
+	* pkgbuild.pl.in: s/i585/i586/
+	* pkgtool.pl: remove topdir config option; use .pkgbuildmacros
+	  instead; use /bin/profile instead of just profile to avoid
+	  picking up /usr/sfw/bin/profile; s/i585/i586/
+	* rpm_spec.pm.in: read default macros from LIBDIR/macros and
+	  $HOME/.pkgbuildmacros; s/i585/i586/
+	* spectool.in: pass in the full path to pkgbuild on the command
+	  line
+	* spectool.pl: call pkgbuild with the full path; remove topdir
+	  config parameter
+
 2006-08-17  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: uninstall all instances of packages when running

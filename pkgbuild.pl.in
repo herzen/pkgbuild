@@ -63,7 +63,7 @@ sub init () {
     if ($arch eq "unknown") {
 	$arch = `uname -m`;
 	chomp ($arch);
-	if ($arch eq 'i585') {
+	if ($arch eq 'i586') {
 	    $arch = 'i386';
 	} elsif ($arch eq 'i686') {
 	    $arch = 'i386';

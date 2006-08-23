@@ -40,8 +40,9 @@ my @specs = ();
 my $spec_counter = 0;
 my @predefs = ();
 my $defaults;
+my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
-my $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
+my $topdir = "$ENV{HOME}/packages";
 my $read_rc = 1;
 my $exit_val = 0;
 # --------- messages -------------------------------------------------------
@@ -79,12 +80,10 @@ sub msg_warning ($$) {
 
 # --------- functions to process the command line args ---------------------
 sub process_defaults () {
+    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
     my $default_spec_dir = "$topdir/SPECS";
 
     $defaults = config->new ();
-    $defaults->add ('topdir', 's',
-		    'root of the build and packaging area',
-		    "$topdir");
     $defaults->add ('target', 's', 
 		    'the value of the --target option passed on to rpm');
     $defaults->add ('logdir', 's',
@@ -620,5 +619,8 @@ sub main {
 
     exit ($exit_val);
 }
+
+$pkgbuild_path = shift (@ARGV);
+$build_engine = $pkgbuild_path;
 
 main;

@@ -14,7 +14,10 @@ plain_modules = \
 all_modules = $(gen_modules) $(plain_modules)
 
 pkgbuilddir = $(PKGBUILD_LIBDIR)
-pkgbuild_DATA = $(all_modules) get_rpm_topdir pkgnames
+pkgbuild_DATA = $(all_modules) \
+	get_rpm_topdir \
+	pkgnames \
+	macros
 pkgbuild_SCRIPTS = \
 	pkgbuild.pl \
 	pkgbuild-postprocess \
@@ -34,4 +37,5 @@ EXTRA_DIST= $(plain_modules) $(gen_module_sources) \
 	spectool.pl \
 	pkgtool.pl \
 	pkgbuild-postprocess \
-	pkgnames
+	pkgnames \
+	macros.in

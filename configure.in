@@ -61,6 +61,9 @@ AC_SUBST(WARNING_MESSAGE_L7)
 
 test "x${prefix}" = xNONE && prefix=$ac_default_prefix
 
+ARCH=`uname -p`
+AC_SUBST(ARCH)
+
 PKGBUILD_LIBDIR="${prefix}/lib/pkgbuild-${PKGBUILD_VERSION}"
 AC_SUBST(PKGBUILD_LIBDIR)
 
@@ -83,4 +86,5 @@ rpm_spec.pm
 pkgbuild.spec
 pkgtool
 spectool
+macros
 ])

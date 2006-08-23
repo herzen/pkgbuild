@@ -70,9 +70,6 @@ sub process_defaults () {
     $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
 
     $defaults = config->new ();
-    $defaults->add ('topdir', 's',
-		    'root of the build and packaging area',
-		    "$topdir");
     $defaults->add ('target', 's', 
 		    'the value of the --target option passed on to rpm');
     $defaults->add ('logdir', 's',
@@ -167,7 +164,7 @@ sub find_in_path ($) {
 # return 1 if the current user has the Software Installation profile
 # return 0 otherwise
 sub can_install () {
-    my $cmdout = `profiles`;
+    my $cmdout = `/bin/profiles`;
     if ($cmdout =~ /(^|\n)Software Installation\n/) {
 	return 1
     }
@@ -219,7 +216,7 @@ sub init () {
     if ($arch eq "unknown") {
 	$arch = `uname -m`;
 	chomp ($arch);
-	if ($arch eq 'i585') {
+	if ($arch eq 'i586') {
 	    $arch = 'i386';
 	} elsif ($arch eq 'i686') {
 	    $arch = 'i386';
@@ -614,6 +611,8 @@ sub process_with ($$) {
 
 sub process_options {
     
+    my $default_topdir = $topdir;
+
     Getopt::Long::Configure ("bundling");
       
     our $opt_good_build_dir;
@@ -655,10 +654,6 @@ sub process_options {
 		    my $def = shift;
 		    @predefs = ( @predefs, $def );
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
-		    my $orig_topdir = $defaults->get ('topdir');
-		    if ($orig_topdir ne $topdir) {
-			$defaults->set ('topdir', $topdir);
-		    }
 		},
 		'with=s' => \&process_with,
 		'without=s' => \&process_with,
@@ -669,7 +664,6 @@ sub process_options {
 		    shift; 
 		    $topdir = shift;
 		    @predefs = ( @predefs, "_topdir $topdir" );
-		    $defaults->set ('topdir', $topdir);
 		},
 		'full-path' => \$full_path,
 		'help' => \&usage,
@@ -679,10 +673,6 @@ sub process_options {
 		    $build_engine_name = 'pkgbuild';
 		    $build_engine = $pkgbuild_path;
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
-		    my $orig_topdir = $defaults->get ('topdir');
-		    if ($orig_topdir ne $topdir) {
-			$defaults->set ('topdir', $topdir);
-		    }
 		},
 		'rpmbuild' => sub {
 		    if (defined (find_in_path ('rpmbuild'))) {
@@ -696,10 +686,6 @@ sub process_options {
 		    }
 		    $defaults->set ('build_engine', $build_engine_name);
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
-		    my $orig_topdir = $defaults->get ('topdir');
-		    if ($orig_topdir ne $topdir) {
-			$defaults->set ('topdir', $topdir);
-		    }
 		},
 		'download' => sub { shift; $defaults->set ('download', shift); },
 		'download-to=s' => sub {
@@ -709,8 +695,7 @@ sub process_options {
 		},
 		'<>' => \&process_args);
 
-    $topdir = $defaults->get ('topdir');
-    if (not $defaults->is_default ('topdir')) {
+    if ($topdir ne $default_topdir) {
 	@predefs = ( @predefs, "_topdir $topdir" );
     }
     for my $spec_name (@specs_to_read) {

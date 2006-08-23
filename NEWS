@@ -8,7 +8,7 @@ Version 1.1.0:
 
 	- in download mode, wget times out after 60 sec
 
-        - directives like %package are now case insensitive to follow
+        - directives like %package are now case insensitive following
           rpm's behaviour
 
 	- text wrapping implemented for --dumprc (Damien Carbery)
@@ -21,11 +21,21 @@ Version 1.1.0:
 
         New features:
 
+	- basic support for macros; no parametrised macro support yet,
+          but simple macros can be defined in $HOME/.pkgbuildmacros.
+	  An example for using this is redefining %_topdir.  To do so,
+	  create a .pkgbuildmacros file that contains the following line:
+
+		%_topdir /path/to/topdir
+
+	  The default macro definitions for %_prefix, %_bindir, etc are
+          now in %_libdir/pkgbuild-<version>/macros
+
         - building as root is no longer supported, instead each user can
           have their own %_topdir.  This defaults to $HOME/packages but
           can be redefined with one of:
 
-		.pkgtoolrc  (topdir: /path/to/topdir)
+		.pkgbuildmacros  (%_topdir /path/to/topdir)
 		pkgtool --topdir /path/to/topdir
 		pkgbuild --define '%_topdir /path/to/topdir'
 

@@ -49,6 +49,7 @@ my %arch;
 my $os;
 my $os_rel;
 my $logname;
+my %default_macros;
 
 my $_default_topdir = "$ENV{HOME}/packages";
 my $_topdir = $_default_topdir;
@@ -66,7 +67,7 @@ sub _init () {
     if ($arch0 eq "unknown") {
 	$arch0 = `uname -m`;
 	chomp ($arch0);
-	if ($arch0 eq 'i585') {
+	if ($arch0 eq 'i586') {
 	    $arch0 = 'i386';
 	} elsif ($arch0 eq 'i686') {
 	    $arch0 = 'i386';
@@ -98,7 +99,13 @@ sub _init () {
 
     $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
     chomp ($logname);
-    # FIXME: use mkdir_p
+
+    _read_macros ('@PKGBUILD_LIBDIR@/macros');
+    if (-f "$ENV{'HOME'}/.pkgbuildmacros") {
+	_read_macros ("$ENV{'HOME'}/.pkgbuildmacros");
+    }
+
+    # FIXME: should really be mkdir_p %{tmppath}
     `mkdir -p /var/tmp/pkgbuild-${logname}`;
 }
 
@@ -173,68 +180,8 @@ sub new ($;$$) {
 	$self->{_defines} = {%$parent_def_ref};
 	delete ($self->{_defines}->{_build_src_dir_name});
     } else {
-	# default macros
-	# FIXME: most of these should probably come from a system wide
-	# macros file, like /usr/lib/rpm/macros
-	$self->{_defines}->{_pkgbuild} = 'pkgbuild';
-	$self->{_defines}->{_is_pkgbuild} = '1';
-	$self->{_defines}->{_pkgbuild_version} = '@PKGBUILD_VERSION@';
-	$self->{_defines}->{buildroot} = "/";
-	$self->{_defines}->{_target} = "i586";
-	$self->{_defines}->{_sysconfdir} = "/etc";
-	$self->{_defines}->{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
-	$self->{_defines}->{_prefix} = "/usr";
-	$self->{_defines}->{_exec_prefix} = "%{_prefix}";
-	$self->{_defines}->{_bindir} = "%{_exec_prefix}/bin";
-	$self->{_defines}->{_lib} = "lib";
-	$self->{_defines}->{_libdir} = "%{_exec_prefix}/%{_lib}";
-	$self->{_defines}->{_libexecdir} = "%{_exec_prefix}/libexec";
-	$self->{_defines}->{_sbindir} = "%{_exec_prefix}/sbin";
-	$self->{_defines}->{_sharedstatedir} = "%{_prefix}/com";
-	$self->{_defines}->{_datadir} = "%{_prefix}/share";
-	$self->{_defines}->{_includedir} = "%{_prefix}/include";
-	$self->{_defines}->{_oldincludedir} = "/usr/include";
-	$self->{_defines}->{_infodir} = "/usr/share/info";
-	$self->{_defines}->{_mandir} = "/usr/share/man";
-	$self->{_defines}->{_localstatedir} = "/var";
-	$self->{_defines}->{_defaultdocdir} = "%_prefix/doc";
-	$self->{_defines}->{_docdir} = "%_datadir/doc";
-	$self->{_defines}->{__libtoolize} = "libtoolize";
-    
-	$self->{_defines}->{_global_cflags} = "-O2 -g -pipe";
-	$self->{_defines}->{optflags} = "%{_global_cflags}";
-	$self->{_defines}->{_var} = "/var";
-	$self->{_defines}->{_tmppath} = "%{_var}/tmp/pkgbuild-${logname}";
-	$self->{_defines}->{_usr} = "/usr";
-	$self->{_defines}->{_usrsrc} = "%{_usr}/src";
-
-	$self->{_defines}->{_topdir} = $_topdir;
-	$self->{_defines}->{_builddir} = "%{_topdir}/BUILD";
-	$self->{_defines}->{_rpmdir} = "%{_topdir}/RPMS";
-	$self->{_defines}->{_sourcedir} = "%{_topdir}/SOURCES";
-	$self->{_defines}->{_specdir} = "%{_topdir}/SPECS";
-	$self->{_defines}->{_srcrpmdir} = "%{_topdir}/SRPMS";
-
-	$self->{_defines}->{makeinstall} = "make \\\n" .
-	    "    prefix=%{?buildroot:%{buildroot}}%{_prefix} \\\n" .
-	    "    exec_prefix=%{?buildroot:%{buildroot}}%{_exec_prefix} \\\n" .
-	    "    bindir=%{?buildroot:%{buildroot}}%{_bindir} \\\n" .
-            "    sbindir=%{?buildroot:%{buildroot}}%{_sbindir} \\\n" .
-            "    sysconfdir=%{?buildroot:%{buildroot}}%{_sysconfdir} \\\n" .
-            "    datadir=%{?buildroot:%{buildroot}}%{_datadir} \\\n" .
-            "    includedir=%{?buildroot:%{buildroot}}%{_includedir} \\\n" .
-            "    libdir=%{?buildroot:%{buildroot}}%{_libdir} \\\n" .
-            "    libexecdir=%{?buildroot:%{buildroot}}%{_libexecdir} \\\n" .
-            "    localstatedir=%{?buildroot:%{buildroot}}%{_localstatedir} \\\n" .
-            "    sharedstatedir=%{?buildroot:%{buildroot}}%{_sharedstatedir} \\\n" .
-            "    mandir=%{?buildroot:%{buildroot}}%{_mandir} \\\n" .
-            "    infodir=%{?buildroot:%{buildroot}}%{_infodir} \\\n" .
-            "        install";
-	$self->{_defines}->{pkgbuild_postprocess} = "${_pkgbuild_libdir}/pkgbuild-postprocess";
-	$self->{_defines}->{nil} = "";
-	$self->{_defines}->{find_lang} = "echo WARNING: find_lang not implemented";
-	$self->{_defines}->{_unpackaged_files_terminate_build} = 1;
-	$self->{_defines}->{_invalid_patches_terminate_build} = 1;
+	# fill with values read from the macros file in _read_macros()
+	$self->{_defines} = {%default_macros};
     }
 
     # process predefined macros (those defined on the command line
@@ -265,6 +212,106 @@ sub new ($;$$) {
     }
 
     return $self;
+}
+
+# read defaults from the macros file
+sub _read_macros ($) {
+    my $fname = shift;
+
+    $default_macros{__logname} = $logname;
+    $default_macros{__homedir} = $ENV{'HOME'};
+    if (not open MACROS, "<$fname") {
+	print "WARNING: Could not open macros file $fname for reading.\nWill use hardcoded defaults.\n";
+	# fallback default macros
+	$default_macros{_pkgbuild} = 'pkgbuild';
+	$default_macros{_is_pkgbuild} = '1';
+	$default_macros{_pkgbuild_version} = '@PKGBUILD_VERSION@';
+	$default_macros{buildroot} = "/";
+	$default_macros{_target} = "i586";
+	$default_macros{_sysconfdir} = "/etc";
+	$default_macros{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
+	$default_macros{_prefix} = "/usr";
+	$default_macros{_exec_prefix} = "%{_prefix}";
+	$default_macros{_bindir} = "%{_exec_prefix}/bin";
+	$default_macros{_lib} = "lib";
+	$default_macros{_libdir} = "%{_exec_prefix}/%{_lib}";
+	$default_macros{_libexecdir} = "%{_exec_prefix}/libexec";
+	$default_macros{_sbindir} = "%{_exec_prefix}/sbin";
+	$default_macros{_sharedstatedir} = "%{_prefix}/com";
+	$default_macros{_datadir} = "%{_prefix}/share";
+	$default_macros{_includedir} = "%{_prefix}/include";
+	$default_macros{_oldincludedir} = "%{_prefix}/include";
+	$default_macros{_infodir} = "%{_datadir}/info";
+	$default_macros{_mandir} = "%{_datadir}/man";
+	$default_macros{_localstatedir} = "%{_prefix}/var";
+	$default_macros{_defaultdocdir} = "%_prefix/doc";
+	$default_macros{_docdir} = "%{_datadir}/doc";
+	$default_macros{__libtoolize} = "libtoolize";
+    
+	$default_macros{_global_cflags} = "-O2 -g -pipe";
+	$default_macros{optflags} = "%{_global_cflags}";
+	$default_macros{_var} = "/var";
+	$default_macros{_tmppath} = "%{_var}/tmp/pkgbuild-${logname}";
+	$default_macros{_usr} = "/usr";
+	$default_macros{_usrsrc} = "%{_usr}/src";
+
+	$default_macros{_topdir} = $_topdir;
+	$default_macros{_builddir} = "%{_topdir}/BUILD";
+	$default_macros{_rpmdir} = "%{_topdir}/RPMS";
+	$default_macros{_sourcedir} = "%{_topdir}/SOURCES";
+	$default_macros{_specdir} = "%{_topdir}/SPECS";
+	$default_macros{_srcrpmdir} = "%{_topdir}/SRPMS";
+
+	$default_macros{makeinstall} = "make \\\n" .
+	    "    prefix=%{?buildroot:%{buildroot}}%{_prefix} \\\n" .
+	    "    exec_prefix=%{?buildroot:%{buildroot}}%{_exec_prefix} \\\n" .
+	    "    bindir=%{?buildroot:%{buildroot}}%{_bindir} \\\n" .
+            "    sbindir=%{?buildroot:%{buildroot}}%{_sbindir} \\\n" .
+            "    sysconfdir=%{?buildroot:%{buildroot}}%{_sysconfdir} \\\n" .
+            "    datadir=%{?buildroot:%{buildroot}}%{_datadir} \\\n" .
+            "    includedir=%{?buildroot:%{buildroot}}%{_includedir} \\\n" .
+            "    libdir=%{?buildroot:%{buildroot}}%{_libdir} \\\n" .
+            "    libexecdir=%{?buildroot:%{buildroot}}%{_libexecdir} \\\n" .
+            "    localstatedir=%{?buildroot:%{buildroot}}%{_localstatedir} \\\n" .
+            "    sharedstatedir=%{?buildroot:%{buildroot}}%{_sharedstatedir} \\\n" .
+            "    mandir=%{?buildroot:%{buildroot}}%{_mandir} \\\n" .
+            "    infodir=%{?buildroot:%{buildroot}}%{_infodir} \\\n" .
+            "        install";
+	$default_macros{pkgbuild_postprocess} = "${_pkgbuild_libdir}/pkgbuild-postprocess";
+	$default_macros{nil} = "";
+	$default_macros{find_lang} = "echo WARNING: find_lang not implemented";
+	$default_macros{_unpackaged_files_terminate_build} = 1;
+	$default_macros{_invalid_patches_terminate_build} = 1;
+    } else {
+	my $line;
+	my $lineno = 0;
+	while ($line = <MACROS>) {
+	    ++$lineno;
+	    chomp ($line);
+	    next if $line =~ /^\s*#/;
+	    next if $line =~ /^\s*$/;
+	    $line =~ s/\\\\/\\/g;
+	    if ($line =~ /^\s*%(\S+)\s*(.*)$/) {
+		my $macro_name = $1;
+		my $macro_def = $2;
+		while ($macro_def =~ /\\$/) {
+		    $line = <MACROS>;
+		    chomp ($line);
+		    ++$lineno;
+		    if (not defined ($line)) {
+			print "WARNING: $fname ($lineno): unexpected end of file\n";
+		    }
+		    $macro_def =~ s/\\$//;
+		    $line =~ s/\\\\/\\/g;
+		    $macro_def = $macro_def . "\n" . $line;
+		}
+		$macro_def =~ s/\s*$//;
+		$default_macros{$macro_name} = "$macro_def";
+	    } else {
+		print "WARNING: $fname ($lineno): syntax error\n";
+	    }
+	}
+    }
 }
 
 # evaluate/expand macros in the given string

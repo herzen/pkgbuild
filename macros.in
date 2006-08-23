@@ -1,0 +1,142 @@
+%_pkgbuild 		pkgbuild
+%_is_pkgbuild 		1
+%_pkgbuild_version 	@PKGBUILD_VERSION@
+%buildroot 		%{_tmppath}/%{name}-%{version}-build
+%_target 		@ARCH@
+%_initrddir		%{_sysconfdir}/init.d
+
+#==============================================================================
+# ---- A macro that expands to nothing.
+#
+%nil                    %{!?nil}
+
+#==============================================================================
+# ---- filesystem macros.
+#
+%_usr                   /usr
+%_usrsrc                %{_usr}/src
+%_var                   /var
+
+#==============================================================================
+# ---- Generally useful path macros.
+#
+%__awk                  gawk
+%__bzip2                /usr/bin/bzip2
+%__cat                  /bin/cat
+%__chgrp                /bin/chgrp
+%__chmod                /bin/chmod
+%__chown                /bin/chown
+%__cp                   /bin/cp
+%__cpio                 /bin/cpio
+%__file                 /usr/bin/file
+%__gpg                  /usr/bin/gpg
+%__grep                 /bin/grep
+%__gzip                 /bin/gzip
+%__id                   /usr/bin/id
+%__install              @INSTALL@
+%__ln_s                 ln -s
+%__make                 /usr/bin/make
+%__mkdir                /bin/mkdir
+%__mkdir_p              /bin/mkdir -p
+%__mv                   /bin/mv
+%__patch                /usr/bin/gpatch
+%__perl                 /usr/perl5/bin/perl
+%__pgp                  /usr/bin/pgp
+%__python               /usr/bin/python
+%__rm                   /bin/rm
+%__rsh                  /usr/bin/rsh
+%__sed                  /bin/sed
+%__ssh                  /usr/bin/ssh
+%__tar                  /bin/tar
+%__unzip                /usr/bin/unzip
+
+#==============================================================================
+# ---- Build system path macros.
+#
+%__ar                   /usr/ccs/bin/ar
+%__as                   /usr/ccs/bin/as
+%__cc                   /usr/sfw/bin/gcc
+%__cpp                  /usr/lib/cpp
+%__cxx                  /usr/sfw/bin/g++
+%__ld                   /usr/ccs/bin/ld
+%__nm                   /usr/ccs/bin/nm
+%__objcopy              /usr/bin/objcopy
+%__objdump              /usr/bin/objdump
+%__ranlib               ranlib
+%__remsh                %{__rsh}
+%__strip                /usr/ccs/bin/strip
+
+# XXX avoid failures if tools are not installed when rpm is built.
+%__libtoolize           libtoolize
+%__aclocal              aclocal
+%__autoheader           autoheader
+%__automake             automake
+%__autoconf             autoconf
+
+%_builddir              %{_topdir}/BUILD
+%_buildshell            /bin/bash
+%_bzip2bin              %{__bzip2}
+%_defaultdocdir         %{_usr}/doc
+%_gzipbin               %{__gzip}
+%_instchangelog         5
+%_pgpbin                %{__pgp}
+%_rpmdir                %{_topdir}/RPMS
+%_pkgdir                %{_topdir}/PKGS
+%_sourcedir             %{_topdir}/SOURCES
+%_specdir               %{_topdir}/SPECS
+%_srcrpmdir             %{_topdir}/SRPMS
+%_srcpkgdir             %{_topdir}/SPKGS
+%_tmppath               %{_var}/tmp/pkgbuild-%__logname
+%_topdir                %{__homedir}/packages
+%_unzipbin              %{__unzip}
+%__check_files          /bin/true %{buildroot}
+%_unpackaged_files_terminate_build      1
+%_missing_doc_files_terminate_build     1
+%_use_internal_dependency_generator     1
+%__find_provides        /bin/true
+%__find_requires        /bin/true
+
+#==============================================================================
+# ---- configure macros.
+#       Macro(s) slavishly copied from autoconf's config.status.
+#
+%_prefix                /usr
+%_exec_prefix           %{_prefix}
+%_bindir                %{_exec_prefix}/bin
+%_sbindir               %{_exec_prefix}/sbin
+%_libexecdir            %{_exec_prefix}/libexec
+%_datadir               %{_prefix}/share
+%_sysconfdir            %{_prefix}/etc
+%_sharedstatedir        %{_prefix}/com
+%_localstatedir         %{_prefix}/var
+%_lib                   lib
+%_libdir                %{_exec_prefix}/%{_lib}
+%_includedir            %{_prefix}/include
+%_oldincludedir         /usr/include
+%_infodir               %{_datadir}/info
+%_mandir                %{_datadir}/man
+%_docdir		%{_datadir}/doc
+
+%_global_cflags		-O2 -g -pipe
+%optflags		%{_global_cflags}
+
+%makeinstall \
+  make \\\
+        prefix=%{?buildroot:%{buildroot}}%{_prefix} \\\
+        exec_prefix=%{?buildroot:%{buildroot}}%{_exec_prefix} \\\
+        bindir=%{?buildroot:%{buildroot}}%{_bindir} \\\
+        sbindir=%{?buildroot:%{buildroot}}%{_sbindir} \\\
+        sysconfdir=%{?buildroot:%{buildroot}}%{_sysconfdir} \\\
+        datadir=%{?buildroot:%{buildroot}}%{_datadir} \\\
+        includedir=%{?buildroot:%{buildroot}}%{_includedir} \\\
+        libdir=%{?buildroot:%{buildroot}}%{_libdir} \\\
+        libexecdir=%{?buildroot:%{buildroot}}%{_libexecdir} \\\
+        localstatedir=%{?buildroot:%{buildroot}}%{_localstatedir} \\\
+        sharedstatedir=%{?buildroot:%{buildroot}}%{_sharedstatedir} \\\
+        mandir=%{?buildroot:%{buildroot}}%{_mandir} \\\
+        infodir=%{?buildroot:%{buildroot}}%{_infodir} \\\
+  install
+
+%pkgbuild_postprocess	%__pkgbuild_libdir/pkgbuild-postprocess
+%find_lang		echo WARNING: find_lang not implemented
+%_invalid_patches_terminate_build 1

@@ -262,6 +262,7 @@ sub readrc ($$) {
             my $value = $self->_deref_vars ($2, \%vars);
             if (defined ($self->{'valid_keys'}->{$key})) {
                 if (_is_type ($self->{'valid_keys'}->{$key}, $value)) {
+                    $value =~ s/%/%PeRcEnT/g;
 	            $self->{'rcvals'}->{$key} = $value;
                 } else {
                     print "WARNING: $fname: Incorrect value \"$value\" for option $key\n";
@@ -274,6 +275,7 @@ sub readrc ($$) {
             my $value = $self->_deref_vars ($2, \%vars);
             if (defined ($self->{'valid_keys'}->{$key})) {
                 if (_is_type ($self->{'valid_keys'}->{$key}, $value)) {
+                    $value =~ s/%/%PeRcEnT/g;
 	            $self->{'rcvals'}->{$key} = $value;
                 } else {
                     print "WARNING: $fname: Incorrect value \"$value\" for option $key\n";
@@ -284,10 +286,12 @@ sub readrc ($$) {
         } elsif ($line =~ /^\s*([A-Z_]+)\s*=\s*"([^"]*)"\s*$/) {
 	    my $var = $1;
 	    my $val = $2;
+	    $val =~ s/%/%PeRcEnT/g;
 	    $vars{$var} = $self->_deref_vars ($val, \%vars);
         } elsif ($line =~ /^\s*([A-Z_]+)\s*=\s*(\S+)\s*$/) {
 	    my $var = $1;
 	    my $val = $2;
+	    $val =~ s/%/%PeRcEnT/g;
 	    $vars{$var} = $self->_deref_vars ($val, \%vars);
 	} elsif ($line =~ /^\s*no([a-zA-Z][a-zA-Z0-9_]*)\s*$/){
 	    my $key = lc ($1);
