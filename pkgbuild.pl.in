@@ -1521,7 +1521,7 @@ sub make_src_package ($) {
 
     close ($fhandle);
 
-    my $spkgdir = $spec->eval ("$_srcpkgdir");
+    my $spkgdir = $spec->eval ("%_srcpkgdir");
     system ("/usr/bin/pkgmk -o -r / -d $spkgdir -f $protodir/$fname");
     my $retval = $?;
     if ($retval) {
