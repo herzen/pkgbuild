@@ -220,6 +220,7 @@ sub _read_macros ($) {
 
     $default_macros{__logname} = $logname;
     $default_macros{__homedir} = $ENV{'HOME'};
+    $default_macros{__pkgbuild_libdir} = '@PKGBUILD_LIBDIR@';
     if (not open MACROS, "<$fname") {
 	print "WARNING: Could not open macros file $fname for reading.\nWill use hardcoded defaults.\n";
 	# fallback default macros
@@ -258,9 +259,12 @@ sub _read_macros ($) {
 	$default_macros{_topdir} = $_topdir;
 	$default_macros{_builddir} = "%{_topdir}/BUILD";
 	$default_macros{_rpmdir} = "%{_topdir}/RPMS";
+	$default_macros{_pkgdir} = "%{_topdir}/PKGS";
 	$default_macros{_sourcedir} = "%{_topdir}/SOURCES";
 	$default_macros{_specdir} = "%{_topdir}/SPECS";
 	$default_macros{_srcrpmdir} = "%{_topdir}/SRPMS";
+	$default_macros{_srcpkgdir} = "%{_topdir}/SPKGS";
+	$default_macros{_pkgmapdir} = "%{_topdir}/PKGMAPS";
 
 	$default_macros{makeinstall} = "make \\\n" .
 	    "    prefix=%{?buildroot:%{buildroot}}%{_prefix} \\\n" .

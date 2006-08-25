@@ -1,3 +1,12 @@
+2006-08-24  Laszlo Peter  <laca@sun.com>
+
+	* macros.in: define _pkgmapdir, for completeness
+	* pkgbuild.pl.in: use _pkgmapdir for finding the copyright, depend,
+	  proto, etc directories; use _pkgdir to find PKGS, _srcpkgdir
+	  to find SPKGS; create the subdirectories under %_topdir as needed
+	* rpm_spec.pm.in: define defaults for __pkgbuild_libdir, 
+	  _pkgdir, _srcpkgdir, _pkgmapdir
+
 2006-08-22  Laszlo Peter  <laca@sun.com>
 
 	* .cvsignore: add macros

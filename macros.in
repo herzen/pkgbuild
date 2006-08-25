@@ -86,6 +86,7 @@
 %_specdir               %{_topdir}/SPECS
 %_srcrpmdir             %{_topdir}/SRPMS
 %_srcpkgdir             %{_topdir}/SPKGS
+%_pkgmapdir             %{_topdir}/PKGMAPS
 %_tmppath               %{_var}/tmp/pkgbuild-%__logname
 %_topdir                %{__homedir}/packages
 %_unzipbin              %{__unzip}

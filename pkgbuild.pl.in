@@ -827,7 +827,7 @@ sub make_copyright ($$;$) {
 	return undef;
     }
 
-    my $copyrightdir = $spec->eval ("%_topdir") . "/PKGMAPS/copyright";
+    my $copyrightdir = $spec->eval ("%_pkgmapdir") . "/copyright";
     if (defined $package) {
 	$pkgname = "$package";
     }
@@ -854,7 +854,7 @@ sub make_depend ($$) {
 
     my $fhandle = "pkginfo" . ++$file_id;
 
-    my $pkgdependdir = $spec->eval ("%_topdir") . "/PKGMAPS/depend";
+    my $pkgdependdir = $spec->eval ("%_pkgmapdir") . "/depend";
     my $fname = $package . ".depend";
     open $fhandle, ">$pkgdependdir/$fname" or
 	fatal ("failed to create file $pkgdependdir/$fname");
@@ -895,7 +895,7 @@ sub make_scripts ($$) {
     my $package = shift;
 
     my $retstr = "";
-    my $scriptdir = $spec->eval ("%_topdir") . "/PKGMAPS/scripts";
+    my $scriptdir = $spec->eval ("%_pkgmapdir") . "/scripts";
 
     my $pre = $package->get_block ("pre");
     if (defined ($pre)) {
@@ -1267,7 +1267,7 @@ sub make_solaris_pkg ($$) {
 
     my $fhandle = "proto" . ++$file_id;
 
-    my $protodir = $spec->eval ("%_topdir") . "/PKGMAPS/proto";
+    my $protodir = $spec->eval ("%_pkgmapdir") . "/proto";
     my $fname = $package . ".proto";
     open $fhandle, ">$protodir/$fname" or
 	fatal ("failed to create file $protodir/$fname");
@@ -1285,7 +1285,7 @@ sub make_solaris_pkg ($$) {
     }
     close ($fhandle);
 
-    my $pkgdir = $spec->eval ("%_topdir") . "/PKGS";
+    my $pkgdir = $spec->eval ("%_pkgdir");
     my $buildroot = $package->eval ("%buildroot");
     system ("/usr/bin/pkgmk -o -r $buildroot -d $pkgdir -f $protodir/$fname");
     my $retval = $?;
@@ -1369,7 +1369,7 @@ sub make_src_pkginfo ($$) {
 
     my $fhandle = "pkginfo" . ++$file_id;
 
-    my $pkginfodir = $spec->eval ("%_topdir") . "/PKGMAPS/pkginfo";
+    my $pkginfodir = $spec->eval ("%_pkgmapdir") . "/pkginfo";
     my $fname = $pkgname . ".pkginfo";
     open $fhandle, ">$pkginfodir/$fname" or
 	fatal ("failed to create file $pkginfodir/$fname");
@@ -1473,7 +1473,7 @@ sub make_src_package ($) {
 
     my $fhandle = "proto" . ++$file_id;
 
-    my $protodir = $spec->eval ("%_topdir") . "/PKGMAPS/proto";
+    my $protodir = $spec->eval ("%_pkgmapdir") . "/proto";
     my $fname = $src_pkg_name . ".proto";
     open $fhandle, ">$protodir/$fname" or
 	fatal ("failed to create file $protodir/$fname");
@@ -1521,7 +1521,8 @@ sub make_src_package ($) {
 
     close ($fhandle);
 
-    system ("/usr/bin/pkgmk -o -r / -d $topdir/SPKGS -f $protodir/$fname");
+    my $spkgdir = $spec->eval ("$_srcpkgdir");
+    system ("/usr/bin/pkgmk -o -r / -d $spkgdir -f $protodir/$fname");
     my $retval = $?;
     if ($retval) {
 	return 0;
@@ -1529,10 +1530,10 @@ sub make_src_package ($) {
 
     if ($pkgformat eq "datastream") {
 	my $dsname = "${src_pkg_name}-${base_pkg_version}.src.pkg";
-	system ("/usr/bin/pkgtrans -o -s $topdir/SPKGS $topdir/SPKGS/$dsname $src_pkg_name");
+	system ("/usr/bin/pkgtrans -o -s $spkgdir $spkgdir/$dsname $src_pkg_name");
 	$retval = $?;
 	if (not $retval) {
-	    system ("rm -rf $topdir/SPKGS/$src_pkg_name");
+	    system ("rm -rf $spkgdir/$src_pkg_name");
 	}
     }
 
@@ -1571,6 +1572,9 @@ sub main () {
 	    check_build_requires ($spec) or exit (1);
 	}
 	if ($build_command =~ /p/) {
+	    my $builddir = $spec->eval ("%_builddir");
+	    mkdir_p ($builddir) or 
+		fatal ("Failed to create directory $builddir");
 	    do_block ($spec, 'prep') or exit (1);
 	}
 	if ($build_command =~ /c/) {
@@ -1580,10 +1584,20 @@ sub main () {
 	    do_block ($spec, 'install') or exit (1);
 	}
 	if ($build_command =~ /[ba]/) {
+	    my $pkgdir = $spec->eval ("%_pkgdir");
+	    mkdir_p ($pkgdir) or fatal ("Failed to create directory $pkgdir");
+	    $pkgdir = $spec->eval ("%_pkgmapdir");
+	    foreach my $subdir ("copyright", "depend", "pkginfo", "proto",
+				"scripts") {
+		mkdir_p ("$pkgdir/$subdir")
+		    or fatal ("Failed to create directory $pkgdir/subdir");
+	    }
 	    make_packages ($spec) or 
 		fatal ($spec->get_error ());
 	}
 	if ($build_command =~ /[as]/) {
+	    $pkgdir = $spec->eval ("%_srcpkgdir");
+	    mkdir_p ($pkgdir) or fatal ("Failed to create directory $pkgdir");
 	    make_src_package ($spec) or
 		fatal ($spec->get_error ());
 	} 
