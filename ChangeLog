@@ -1,3 +1,5 @@
+	======== pkgbuild version 1.1.0 ========
+
 2006-08-24  Laszlo Peter  <laca@sun.com>
 
 	* macros.in: define _pkgmapdir, for completeness
