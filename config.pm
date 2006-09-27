@@ -77,6 +77,21 @@ sub _is_type ($$) {
     }
 }
 
+# define a key that cannot be changed in the rc file, only
+# programmatically
+sub define ($$$) {
+    my $self = shift;
+    my $key = shift;
+    my $val = shift;
+
+    if (defined ($self->{'valid_keys'}->{$key})) {
+	print "ERROR: option $key already defined as an rc setting\n";
+	return 0;
+    }
+
+    $self->{defines}->{$key} = $val;
+}
+
 # define a new setting:
 #   key     = the key of the setting
 #   type    = valid type of value for this setting:
@@ -215,6 +230,9 @@ sub _deref_keys ($$) {
 	if (defined ($self->{valid_keys}->{$var})) {
 	    my $val = $self->get ($var);
 	    $str =~ s/%{$var}/$val/g;
+	} elsif (defined ($self->{defines}->{$var})) {
+	    my $val = $self->{defines}->{$var};
+	    $str =~ s/%{$var}/$val/g;
 	} else {
 	    $str =~ s/%{$var}/%PeRcEnT{$var}/g;
 	}
@@ -259,26 +277,30 @@ sub readrc ($$) {
     while ($line) {
 	if ($line =~ /^\s*([a-zA-Z][a-zA-Z_0-9]*)\s*:\s*"([^"]*)"\s*$/) {
             my $key = lc ($1);
-            my $value = $self->_deref_vars ($2, \%vars);
+            my $value0 = $2;
+            my $value = $2;
+            $value =~ s/%/%PeRcEnT/g;
+            $value = $self->_deref_vars ($value, \%vars);
             if (defined ($self->{'valid_keys'}->{$key})) {
                 if (_is_type ($self->{'valid_keys'}->{$key}, $value)) {
-                    $value =~ s/%/%PeRcEnT/g;
 	            $self->{'rcvals'}->{$key} = $value;
                 } else {
-                    print "WARNING: $fname: Incorrect value \"$value\" for option $key\n";
+                    print "WARNING: $fname: Incorrect value \"$value0\" for option $key\n";
                 }
             } else {
                 print "WARNING: $fname: Unknown option \"$key\"\n";
             }
         } elsif ($line =~ /^\s*([a-zA-Z][a-zA-Z_0-9]*)\s*:\s*(.+)\s*$/) {
 	    my $key = lc ($1);
-            my $value = $self->_deref_vars ($2, \%vars);
+            my $value0 = $1;
+            my $value = $2;
+            $value =~ s/%/%PeRcEnT/g;
+            $value = $self->_deref_vars ($value, \%vars);
             if (defined ($self->{'valid_keys'}->{$key})) {
                 if (_is_type ($self->{'valid_keys'}->{$key}, $value)) {
-                    $value =~ s/%/%PeRcEnT/g;
 	            $self->{'rcvals'}->{$key} = $value;
                 } else {
-                    print "WARNING: $fname: Incorrect value \"$value\" for option $key\n";
+                    print "WARNING: $fname: Incorrect value \"$value0\" for option $key\n";
                 }
             } else {
                 print "WARNING: $fname: Unknown option \"$key\"\n";

@@ -1,3 +1,16 @@
+Version 1.1.1:
+
+	Bugs fixed:
+
+	- fix bug introduced in 1.1.0 where %{_topdir} is not expanded
+	  in configuration settings like download_to
+
+	Improvements:
+
+	- the %patch macro uses the %_patch_options macro (when defined)
+	  to specify additional options; use the %_patch_options macro
+	  to define patch policies like --fuzz=0 or --context
+
 Version 1.1.0:
 
 	Bugs fixed:

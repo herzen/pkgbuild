@@ -1,3 +1,14 @@
+	======== pkgbuild version 1.1.1 ========
+
+2006-09-26  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: update
+	* config.pm: fix bug introduced in 1.1.0 where %{_topdir} is not
+	  expanded in configuration settings like download_to
+	* configure.in: bump version number
+	* pkgtool.pl: define %{topdir} 
+	* rpm_spec.pm.in: make %patch use %_patch_options
+
 	======== pkgbuild version 1.1.0 ========
 
 2006-08-24  Laszlo Peter  <laca@sun.com>

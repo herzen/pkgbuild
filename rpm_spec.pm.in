@@ -1897,7 +1897,7 @@ sub _process_macro ($$$$$$) {
 		$uncompress = "gzip -d < $val";
 	    }
 	    
-	    my $patch_opts = '';
+	    my $patch_opts = ' %{?_patch_options} ';
 	    if (defined ($macro_opts{'p'})) {
 		$patch_opts = $patch_opts . " -p $macro_opts{'p'}";
 	    } else {

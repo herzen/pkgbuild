@@ -70,6 +70,7 @@ sub process_defaults () {
     $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
 
     $defaults = config->new ();
+    $defaults->define ('topdir', $topdir);
     $defaults->add ('target', 's', 
 		    'the value of the --target option passed on to rpm');
     $defaults->add ('logdir', 's',
