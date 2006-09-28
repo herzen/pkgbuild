@@ -57,13 +57,17 @@ my %all_specs;
 my %provider;
 my %warned_about;
 
+my $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
+chomp ($logname);
+my $_homedir = $ENV{HOME};
+
 # --------- defaults -------------------------------------------------------
 my $defaults;
 my @predefs = ();
 my $build_engine_name = "pkgbuild";
 my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
-my $topdir = "$ENV{HOME}/packages";
+my $topdir = "$_homedir/packages";
 
 sub process_defaults () {
     my $default_spec_dir = "$topdir/SPECS";
@@ -233,6 +237,24 @@ sub init () {
 	if ($os_rel =~ /^5\./) {
 	    $os = 'solaris';
 	}
+    }
+
+    my $uid;
+    if (-x "/usr/xpg4/bin/id") {
+	$uid = `/usr/xpg4/bin/id -u`;
+	chomp ($uid);
+    } else {
+	$uid = `LC_ALL=C /bin/id`;
+	chomp ($uid);
+	$uid =~ s/^[^=]+=([0-9]+)\(.*$/$1/;
+    }
+    
+    if ($uid eq (getpwnam($logname))[2]) {
+	$_homedir = (getpwnam($logname))[7];
+    } else {
+	# logname is incorrect, look up the uid
+	$logname = (getpwuid($uid))[0];
+	$_homedir = (getpwuid($uid))[7];
     }
 
     if ($os eq "solaris") {
@@ -621,7 +643,7 @@ sub process_options {
     our $opt_live_summary = 1;
     our $verbose = $defaults->get ('verbose');
 
-    $defaults->readrc ("$ENV{'HOME'}/.pkgtoolrc");
+    $defaults->readrc ("$_homedir/.pkgtoolrc");
     $defaults->readrc ('./.pkgtoolrc');
 
     GetOptions ('v|verbose+' => \$verbose,

@@ -42,7 +42,10 @@ my @predefs = ();
 my $defaults;
 my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
-my $topdir = "$ENV{HOME}/packages";
+my $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
+chomp ($logname);
+my $_homedir = $ENV{HOME};
+my $topdir = "${_homedir}/packages";
 my $read_rc = 1;
 my $exit_val = 0;
 # --------- messages -------------------------------------------------------
@@ -76,6 +79,26 @@ sub msg_warning ($$) {
     my $message = shift;
     
     print_message ($min_verbose, "WARNING: $message");
+}
+
+sub init () {
+    my $uid;
+    if (-x "/usr/xpg4/bin/id") {
+	$uid = `/usr/xpg4/bin/id -u`;
+	chomp ($uid);
+    } else {
+	$uid = `LC_ALL=C /bin/id`;
+	chomp ($uid);
+	$uid =~ s/^[^=]+=([0-9]+)\(.*$/$1/;
+    }
+    
+    if ($uid eq (getpwnam($logname))[2]) {
+	$_homedir = (getpwnam($logname))[7];
+    } else {
+	# logname is incorrect, look up the uid
+	$logname = (getpwuid($uid))[0];
+	$_homedir = (getpwuid($uid))[7];
+    }
 }
 
 # --------- functions to process the command line args ---------------------
@@ -263,7 +286,7 @@ sub process_options {
 		'<>' => \&process_args);
       
     if ($read_rc) {
-	$defaults->readrc ("$ENV{'HOME'}/.pkgtoolrc");
+	$defaults->readrc ("${_homedir}/.pkgtoolrc");
 	$defaults->readrc ('./.pkgtoolrc');
     }
 
@@ -623,4 +646,5 @@ sub main {
 $pkgbuild_path = shift (@ARGV);
 $build_engine = $pkgbuild_path;
 
+init;
 main;

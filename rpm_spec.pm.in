@@ -48,10 +48,12 @@ use overload ('""' => \&get_name);
 my %arch;
 my $os;
 my $os_rel;
-my $logname;
+my $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
+chomp ($logname);
 my %default_macros;
 
-my $_default_topdir = "$ENV{HOME}/packages";
+my $_homedir = $ENV{HOME};
+my $_default_topdir = "${_homedir}/packages";
 my $_topdir = $_default_topdir;
 my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 
@@ -97,12 +99,27 @@ sub _init () {
 	}
     }
 
-    $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
-    chomp ($logname);
+    my $uid;
+    if (-x "/usr/xpg4/bin/id") {
+	$uid = `/usr/xpg4/bin/id -u`;
+	chomp ($uid);
+    } else {
+	$uid = `LC_ALL=C /bin/id`;
+	chomp ($uid);
+	$uid =~ s/^[^=]+=([0-9]+)\(.*$/$1/;
+    }
+
+    if ($uid eq (getpwnam($logname))[2]) {
+	$_homedir = (getpwnam($logname))[7];
+    } else {
+	# logname is incorrect, look up the uid
+	$logname = (getpwuid($uid))[0];
+	$_homedir = (getpwuid($uid))[7];
+    }
 
     _read_macros ('@PKGBUILD_LIBDIR@/macros');
-    if (-f "$ENV{'HOME'}/.pkgbuildmacros") {
-	_read_macros ("$ENV{'HOME'}/.pkgbuildmacros");
+    if (-f "${_homedir}/.pkgbuildmacros") {
+	_read_macros ("${_homedir}/.pkgbuildmacros");
     }
 
     # FIXME: should really be mkdir_p %{tmppath}
@@ -219,7 +236,7 @@ sub _read_macros ($) {
     my $fname = shift;
 
     $default_macros{__logname} = $logname;
-    $default_macros{__homedir} = $ENV{'HOME'};
+    $default_macros{__homedir} = ${_homedir};
     $default_macros{__pkgbuild_libdir} = '@PKGBUILD_LIBDIR@';
     if (not open MACROS, "<$fname") {
 	print "WARNING: Could not open macros file $fname for reading.\nWill use hardcoded defaults.\n";

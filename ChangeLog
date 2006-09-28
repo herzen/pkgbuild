@@ -1,5 +1,12 @@
 	======== pkgbuild version 1.1.1 ========
 
+2006-09-28  Laszlo Peter  <laca@sun.com>
+
+	* rpm_spec.pm.in: attempt to find the real home directory of the
+	  user so that the correct rc files are used
+	* pkgtool.pl: same again
+	* spectool.pl: same again
+
 2006-09-26  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update
