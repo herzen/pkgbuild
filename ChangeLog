@@ -1,5 +1,10 @@
 2007-03-08  Laszlo Peter  <laca@sun.com>
 
+	* rpm_spec.pm.in: fix 1661513 Unitialized value warning in
+	  find_package_by_name function; based on Damien's patch.
+
+2007-03-08  Laszlo Peter  <laca@sun.com>
+
 	* configure.in: bump to 1.1.2
 	* pkgtool.in: use @PERL@ instead of "perl" found in the PATH
 	* pkgtool.pl: add new config setting: source_mirrors -- list

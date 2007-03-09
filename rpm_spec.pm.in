@@ -1400,6 +1400,8 @@ sub find_package_by_name ($) {
     my $self = shift;
     my $name = shift;
 
+    return if not defined ($name);
+
     my $ref = $self->{_packages};
     foreach my $package (@$ref) {
 	if ($package->get_tag ("name") eq $name) {
