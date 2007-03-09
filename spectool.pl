@@ -48,6 +48,7 @@ my $_homedir = $ENV{HOME};
 my $topdir = "${_homedir}/packages";
 my $read_rc = 1;
 my $exit_val = 0;
+my $full_path = 0;
 # --------- messages -------------------------------------------------------
 sub print_message ($$) {
     my $min_verbose = shift;
@@ -178,6 +179,8 @@ sub process_defaults () {
     $defaults->add ('download_to', 's',
 		    'save downloaded files in the given directory.',
 		    "%{topdir}/SOURCES");
+    $defaults->add ('source_mirrors', 's',
+		    'comma-separated list of mirror sites for source downloads');
 }
 
 sub add_spec ($) {
@@ -227,7 +230,8 @@ sub process_args {
 	process_with ("without", $1);
 	return;
     } elsif ($arg =~ /^-/) {
-	fatal ("Unknown option: $arg\n");
+	msg_error ("Unknown option: $arg\n");
+        exit (1);
     }
 
     if (not defined ($spec_command)) {
@@ -243,6 +247,13 @@ sub process_args {
 	    add_spec ($arg);
 	}
     }
+}
+
+sub process_pkgformat ($$) {
+    shift;
+    my $pkgformat = shift;
+
+    $defaults->set ('pkgformat', $pkgformat);
 }
 
 sub process_with ($$) {
@@ -277,6 +288,8 @@ sub process_options {
 		},
 		'with=s' => \&process_with,
 		'without=s' => \&process_with,
+		'pkgformat=s' => \&process_pkgformat,
+		'full-path' => \$full_path,
 		'rpmdir|rpm|topdir|r=s' => sub { 
 		    shift; 
 		    $topdir = shift;
@@ -455,12 +468,22 @@ sub do_get_packages () {
 }
 
 sub do_get_package_names () {
+    my $pkgformat = $defaults->get('pkgformat');
+    if ($pkgformat eq 'ds' || $pkgformat eq 'datastream') {
+	$pkgformat = '1';
+    } else {
+	$pkgformat = undef;
+    }
     for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
 	} else {
-	    my @pkgs = $spec->get_package_names ();
+	    my @pkgs = $spec->get_package_names ($pkgformat);
+	    if ($full_path) {
+		my $pkgdir = $spec->get_value_of ('_topdir') . "/PKGS";
+		map $_="$pkgdir/$_", @pkgs;
+	    }
 	    print_result ($spec, @pkgs);
 	}
     }

@@ -170,6 +170,9 @@ sub get_name ($) {
     if (not defined ($self->{_tags}->{name})) {
 	return undef;
     }
+    if (defined ($self->{_tags}->{sunw_pkg})) {
+	return $self->{_tags}->{sunw_pkg};
+    }
     return $self->{_tags}->{name};
 }
 

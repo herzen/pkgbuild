@@ -45,7 +45,8 @@ sub get_name ($);
 
 use overload ('""' => \&get_name);	  
 
-my %arch;
+my %all_archs;
+my $arch;
 my $os;
 my $os_rel;
 my $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
@@ -64,18 +65,18 @@ my $all_block_names = "prep|build|install|clean|changelog|$all_script_names";
 my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use";
 
 sub _init () {
-    my $arch0 = `uname -p`;
-    chomp ($arch0);
-    if ($arch0 eq "unknown") {
-	$arch0 = `uname -m`;
-	chomp ($arch0);
-	if ($arch0 eq 'i586') {
-	    $arch0 = 'i386';
-	} elsif ($arch0 eq 'i686') {
-	    $arch0 = 'i386';
+    $arch = `uname -p`;
+    chomp ($arch);
+    if ($arch eq "unknown") {
+	$arch = `uname -m`;
+	chomp ($arch);
+	if ($arch eq 'i586') {
+	    $arch = 'i386';
+	} elsif ($arch eq 'i686') {
+	    $arch = 'i386';
 	}
     }
-    $arch{$arch0} = 1;
+    $all_archs{$arch} = 1;
 
     $os = `uname -s`;
     chomp ($os);
@@ -95,7 +96,7 @@ sub _init () {
 	my @isas = split / /, $isainfo;
 	foreach my $isa (@isas) {
 	    next if not defined $isa;
-	    $arch{$isa} = 1;
+	    $all_archs{$isa} = 1;
 	}
     }
 
@@ -104,7 +105,7 @@ sub _init () {
 	$uid = `/usr/xpg4/bin/id -u`;
 	chomp ($uid);
     } else {
-	$uid = `LC_ALL=C /bin/id`;
+	$uid = `LC_ALL=C /usr/bin/id`;
 	chomp ($uid);
 	$uid =~ s/^[^=]+=([0-9]+)\(.*$/$1/;
     }
@@ -961,7 +962,7 @@ sub _match_arch ($) {
     my @archs = split /[\s,]+/, $str;
     foreach my $a (@archs) {
 	next if not defined $a;
-	if (defined ($arch{$a})) {
+	if (defined ($all_archs{$a})) {
 	    return 1;
 	}
     }
@@ -2537,9 +2538,21 @@ sub get_pkgs ($) {
     return @pkgs;
 }
 
-sub get_package_names ($) {
+sub get_package_names ($;$) {
     my $self = shift;
-    return $self->get_pkgs ();
+    my $datastream = shift;
+
+    if (not $datastream) {
+	return $self->get_pkgs ();
+    } else {
+	my $pkg_ref = $self->{_packages};
+	my @ds_pkg_names;
+	for my $pkg (@$pkg_ref) {
+	    my $version = $self->eval ('%version');
+	    push (@ds_pkg_names, "$pkg-$version.${arch}.pkg");
+	}
+	return @ds_pkg_names;
+    }
 }
 
 sub get_value_of ($$) {

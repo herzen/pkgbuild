@@ -1,3 +1,16 @@
+2007-03-08  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: bump to 1.1.2
+	* pkgtool.in: use @PERL@ instead of "perl" found in the PATH
+	* pkgtool.pl: add new config setting: source_mirrors -- list
+	  of tarball mirror sites to try if the original source in
+	  unavailable.  Fix handling datastream packages.
+	* rpm_package.pm: return SUNW_pkg as the string value of a
+	  package, if defined.
+	* rpm_spec.pm.in: fixes for datastream packages
+	* spectool.pl: add source_mirrors setting for symmetry;
+	  add pkgformat options and fix handling datastream pkgs.
+
 	======== pkgbuild version 1.1.1 ========
 
 2006-09-28  Laszlo Peter  <laca@sun.com>

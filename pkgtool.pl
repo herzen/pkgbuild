@@ -2,7 +2,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright (C) 2004, 2005 Sun Microsystems, Inc.
+#  Copyright 2007 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -60,6 +60,9 @@ my %warned_about;
 my $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
 chomp ($logname);
 my $_homedir = $ENV{HOME};
+
+# defined if the pkgformat is datastream
+my $ds;
 
 # --------- defaults -------------------------------------------------------
 my $defaults;
@@ -146,6 +149,8 @@ sub process_defaults () {
     $defaults->add ('download_to', 's',
 		    'save downloaded files in the given directory.',
 		    "%{topdir}/SOURCES");
+    $defaults->add ('source_mirrors', 's',
+		    'comma-separated list of mirror sites for source downloads');
 }
 
 # --------- utility functions ----------------------------------------------
@@ -157,7 +162,7 @@ sub find_in_path ($) {
     my $executable = shift;
     my $PATH = $ENV{PATH};
     $PATH = "/bin:/usr/bin" unless defined $PATH;
-    my @path = split /:/, $PATH;
+    my @path = split /[:]/, $PATH;
     foreach my $dir (@path) {
 	if ( -x "$dir/$executable" ) {
 	    return "$dir/$executable";
@@ -244,7 +249,7 @@ sub init () {
 	$uid = `/usr/xpg4/bin/id -u`;
 	chomp ($uid);
     } else {
-	$uid = `LC_ALL=C /bin/id`;
+	$uid = `LC_ALL=C /usr/bin/id`;
 	chomp ($uid);
 	$uid =~ s/^[^=]+=([0-9]+)\(.*$/$1/;
     }
@@ -562,7 +567,7 @@ sub read_spec ($) {
 	$spec = rpm_spec->new ($spec_name, \@predefs);
     } else {
 	if (not $spec_name =~ /^\//) {
-	    my @the_spec_dirlist = split /:/, $defaults->get ('specdirs');
+	    my @the_spec_dirlist = split /[:]/, $defaults->get ('specdirs');
 	    foreach my $specdir (@the_spec_dirlist) {
 		next if not defined $specdir;
 		$spec = rpm_spec->new ("$specdir/$spec_name", \@predefs);
@@ -617,7 +622,12 @@ sub process_pkgformat ($$) {
     shift;
     my $pkgformat = shift;
 
-    $defaults->set ('pkgformat', $pkgformat);
+    if ($pkgformat =~ /(ds|datastream|fs|filesystem)/) {
+	$defaults->set ('pkgformat', $pkgformat);
+    } else {
+	msg_error ("invalid value for --pkgformat");
+	exit (1);
+    }
 }
 
 sub process_with ($$) {
@@ -715,6 +725,10 @@ sub process_options {
 		    shift;
 		    $defaults->set ('download_to', shift);
 		    $defaults->set ('download', 1);
+		},
+		'source_mirrors=s' => sub {
+		    shift;
+		    $defaults->set ('source_mirrors', shift);
 		},
 		'<>' => \&process_args);
 
@@ -1009,11 +1023,13 @@ sub print_status_html {
 	    my $the_rpm_url = $defaults->get ('rpm_url');
 	    if (defined ($the_rpm_url)) {
 		print SUM_LOG "  <TD>package: \n";
-		my @pkgs = $specs_to_build[$i]-> get_package_names ();
+		my @pkgs = $specs_to_build[$i]-> get_package_names ($ds);
 		my $ctr = 1;
 		for my $pkg (@pkgs) {
 		    if ($os eq "solaris") {
-			$pkg = "$pkg.tar.gz";
+			if (not $ds) {
+			    $pkg = "$pkg.tar.gz";
+			}
 		    }
 		    print SUM_LOG "    <A HREF=\"$the_rpm_url/$pkg\">[$ctr]</a> \n";
 		    $ctr++;
@@ -1191,7 +1207,7 @@ sub install_pkgs ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
     
-    my @pkgs = $spec->get_pkgs ();
+    my @pkgs = $spec->get_package_names ($ds);
     my $verbose = $defaults->get ('verbose');
     if ($verbose > 0) {
 	map msg_info (0, "Installing $_\n"), @pkgs;
@@ -1204,7 +1220,12 @@ sub install_pkgs ($) {
 
 # FIXME: should install in dependency order
     foreach my $pkg (@pkgs) {
-	my $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir $pkg 2>&1`;
+	my $msg;
+	if (defined ($ds)) {
+	    $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir/$pkg all 2>&1`;
+	} else {
+	    $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir $pkg 2>&1`;
+	}
 	if ($? > 0) {
 	    unlink ($adminfile);
 	    msg_error "failed to install package: $msg";
@@ -1234,8 +1255,8 @@ sub print_rpms ($) {
 sub print_pkgs ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
-    
-    my @pkgs = $spec->get_pkgs ();
+
+    my @pkgs = $spec->get_package_names ($ds);
     if ($full_path) {
 	my $pkgdir = $spec->get_value_of ('_topdir') . "/PKGS";
 	map print("$pkgdir/$_\n"), @pkgs;
@@ -1255,7 +1276,7 @@ sub push_to_pkg_list ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
 
-    my @pkgs =  $spec->get_package_names ();
+    my @pkgs =  $spec->get_package_names ($ds);
     foreach my $pkg (@pkgs) {
 	my @d = ($spec_id, $pkg);
 	unshift (@pkg_list, \@d);
@@ -1386,7 +1407,7 @@ sub find_spec ($) {
     my $spec_file;
     if (not ($fname =~ /^\// or -f $fname)) {
 	msg_info (3, "Looking for spec file $fname");
-	my @the_spec_dirlist = split /:/, $defaults->get ('specdirs');
+	my @the_spec_dirlist = split /[:]/, $defaults->get ('specdirs');
 	foreach my $sdir (@the_spec_dirlist) {
 	    my $spath = "$sdir/$fname";
 	    if (! -f "$spath") {
@@ -1494,7 +1515,7 @@ sub find_source ($$) {
     my $is_tarball = 0;
     my $src_path;
 
-    my @the_tarball_dirlist = split /:/, $defaults->get ('tarballdirs');
+    my @the_tarball_dirlist = split /[:]/, $defaults->get ('tarballdirs');
     if ($src =~ /\.(tar\.gz|tgz|tar\.bz2|tar\.bzip2|zip|jar)$/) {
 	$is_tarball = 1;
 
@@ -1508,7 +1529,7 @@ sub find_source ($$) {
 	    }
 	}
     }
-    my @the_source_dirlist = split /:/, $defaults->get ('sourcedirs');
+    my @the_source_dirlist = split /[:]/, $defaults->get ('sourcedirs');
     foreach my $extsrcdir (@the_source_dirlist) {
 	$src_path = "$extsrcdir/$src";
 	if (! -f "$src_path") {
@@ -1540,12 +1561,15 @@ sub wget_source ($$$) {
     my $spec_id = shift;
     my $src = shift;
     my $target = shift;
+    my $protocol;
 
     if (! -x $wget) {
 	print "WARNING: assertion failed: wget_source();\n";	
     }
 
-    if (not $src =~ /^(http:\/\/|ftp:\/\/)/) {
+    if ($src =~ /^(http|ftp):\/\//) {
+	$protocol = $1;
+    } else {
 	return 0
     }
 
@@ -1559,11 +1583,47 @@ sub wget_source ($$$) {
     my $wget_output = `$wget_command`;
     chomp ($wget_output);
     my $retval = $?;
+    my $mirrors = $defaults->get('source_mirrors');
+    my @mirror_list = split /,\s*/, $mirrors;
 
     if ($retval != 0) {
-	$wget_output =~ s/\n/\nERROR: wget: /;
-	print "ERROR: wget: $wget_output\n";
-	msg_log ("ERROR: wget: $wget_output");
+        if (defined ($mirrors)) {
+	    $wget_output =~ s/\n/\nWARNING: wget: /g;
+	    msg_log ("WARNING: wget: $wget_output");
+	    msg_warning (0, "Download failed from primary site");
+	    my $base_src = basename ($src);
+	    foreach my $mirror (@mirror_list) {
+		msg_info (0, "Trying source mirror $mirror");
+		$wget_command = "$wget -nd -nH -P $download_dir -T 60 $mirror/$base_src 2>&1";
+		msg_info (2, "Running $wget_command");
+		$wget_output = `$wget_command`;
+		chomp ($wget_output);
+		$retval = $?;
+		if ($retval == 0) {
+		    $wget_output =~ s/\n/\nINFO: wget: /g;
+		    msg_info (0, "Download successful from mirror $mirror");
+		    msg_log ("INFO: wget: $wget_output");
+		    last;
+		} else {
+		    $wget_output =~ s/\n/\nWARNING: wget: /g;
+		    msg_warning (0, "Download failed from mirror $mirror");
+		    msg_log ("WARNING: wget: $wget_output");
+		}
+	    }
+        } else {
+	    $wget_output =~ s/\n/\nERROR: wget: /g;
+	    msg_log ("ERROR: wget: $wget_output");
+        }
+    } else {
+	$wget_output =~ s/\n/\nINFO: wget: /g;
+	msg_log ("INFO: wget: $wget_output");
+    }
+
+    if ($retval != 0) {
+	if (not defined ($ENV{"${protocol}_proxy"})) {
+	    msg_info (0, "Hint: if you are behind a firewall, you need to set the ${protocol}_proxy");
+	    msg_info (0, "environment variable.  See man -M /usr/sfw/man wget for details")
+	}
 	msg_error ("Download failed: $src");
 	$build_status[$spec_id] = 'ERROR';
 	$status_details[$spec_id] = "Download failed: $src";
@@ -1619,6 +1679,9 @@ sub copy_sources ($) {
 	    if ($defaults->get ("download") and wget_in_path ()) {
 		wget_source ($spec_id, $src, "$topdir/SOURCES") and next;
 	    }
+	    if (not $defaults->get ("download")) {
+		msg_info (0, "Hint: you need to use the --download option to enable automatic downloads");
+	    }
 	    $build_status[$spec_id] = 'FAILED';
 	    $status_details[$spec_id] = "Source $src not found";
 	    msg_error ($specs_to_build[$spec_id] . ": Source file $src not found");
@@ -1666,7 +1729,7 @@ sub copy_patches ($) {
 
 	msg_info (2, "looking for patch $patch");
 
-	my @the_patch_dirlist = split /:/, $defaults->get ('patchdirs');
+	my @the_patch_dirlist = split /[:]/, $defaults->get ('patchdirs');
 	foreach my $the_patch_dir (@the_patch_dirlist) {
 	    $patch_path = "$the_patch_dir/$patch";
 	    
@@ -2078,9 +2141,14 @@ sub make_admin_file ($) {
 
 # --------- uninstall-pkgs command -----------------------------------------
 sub do_uninstall_pkgs () {
+    my $save_ds = $ds;
+    # undefine $ds (meaning the pkg is datastream) so that only the
+    # package names are added to the pkg list not the datastream file names 
+    $ds = undef;
     for (my $i = 0; $i <= $#specs_to_build; $i++) {
 	print_order ($i, \&push_to_pkg_list);
     }
+    $ds = $save_ds;
 
     my $adminfile = "/tmp/pkg.admin.$$";
     my $command;
@@ -2155,10 +2223,10 @@ sub do_install_pkgs () {
     my $pkgadd;
     if ($os eq "solaris") {
 	make_admin_file ($adminfile);
-	$command = "pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir 2>&1";
+	$command = "pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir";
 	$pkgadd = "pkgadd";
     } else {
-	$command = "rpm -v --upgrade 2>&1";
+	$command = "rpm -v --upgrade";
 	$pkgadd = "rpm";
     }
     my $verbose = $defaults->get ('verbose');
@@ -2172,7 +2240,12 @@ sub do_install_pkgs () {
 	    }
 	} else {
 	    msg_info (0, "Installing package $pkg_to_install");
-	    my $cmd_out = `$command $pkg_to_install 2>&1`;
+	    my $cmd_out;
+	    if (defined ($ds)) {
+		$cmd_out = `$command/$pkg_to_install all 2>&1`;
+	    } else {
+		$cmd_out = `$command $pkg_to_install 2>&1`;
+	    }
 	    chomp ($cmd_out);
 	    $install_status = $?;
 	    if ($install_status > 0) {
@@ -2353,6 +2426,13 @@ sub process_specs () {
 sub main {
     process_defaults ();
     process_options ();
+
+    $ds = $defaults->get('pkgformat');
+    if ($ds eq 'ds' or $ds eq 'datastream') {
+	$ds = 1;
+    } else {
+	$ds = undef;
+    }
 
     my $summary_log = $defaults->get ('summary_log');
     if (defined ($summary_log) and -f $summary_log) {

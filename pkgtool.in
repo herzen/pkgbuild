@@ -56,4 +56,4 @@ if [ ! -x "$pkgbuild_prefix/bin/pkgbuild" ]; then
 fi
 
 # pass in the full path to pkgbuild as the first arg
-exec perl -I "$pkgbuild_libdir" $pkgbuild_libdir/pkgtool.pl "$pkgbuild_prefix/bin/pkgbuild" "${@}"
+exec @PERL@ -I "$pkgbuild_libdir" $pkgbuild_libdir/pkgtool.pl "$pkgbuild_prefix/bin/pkgbuild" "${@}"
