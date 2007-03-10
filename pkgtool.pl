@@ -565,6 +565,8 @@ sub read_spec ($) {
 
     if (-f $spec_name) {
 	$spec = rpm_spec->new ($spec_name, \@predefs);
+	# ignore duplicate specs
+	return if defined ($all_specs{$spec->get_file_name()});
     } else {
 	if (not $spec_name =~ /^\//) {
 	    my @the_spec_dirlist = split /[:]/, $defaults->get ('specdirs');
