@@ -1,3 +1,41 @@
+Version 1.1.2:
+
+	Bugs fixed:
+
+	- fix the bug where "pkgbuild build-only" did not include
+	  those packages in the depend file that were not installed
+	  (reported by Eric Boutilier)
+
+	- make "pkgtool build-only" look for "BuildRequires" dependencies
+	  only (and not "Requires" dependencies)
+	  (reported by Paul Cunningham)
+
+	- count DEP_FAILED packages as failed in the exit status of
+	  pkgtool (reported by Paul Cunningham)
+
+	- ignore duplicates if a spec file is listed multiple times
+          on the command line (reported by Damien Carbery)
+
+	- fix 1661513 Uninitialized value warning in find_package_by_name
+	  function (fix from Damien Carbery)
+
+        - make pkgtool use the configured perl ($PERL) instead of "perl".
+	  (reported by Paul Cunningham)
+
+	- datastream packaging fixes (build report links, pkgadd, etc)
+
+	New features:
+
+	- hard link support: use the %hard modifier in the %files list
+	  to turn symlinks into hard links ('l' type in the pkgmap)
+	  Example:
+
+	  %hard %{_bindir}/flac
+
+	- new configuration setting for .pkgtoolrc: source_mirrors --
+	  comma-separated list of urls where pkgtool should look for
+	  source tarballs if the primary download site fails.
+
 Version 1.1.1:
 
 	Bugs fixed:
