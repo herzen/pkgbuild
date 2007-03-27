@@ -1,3 +1,22 @@
+2007-03-26  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in:
+	  - fix bug where pkgtool build-only missed dependencies on
+	    non-installed packages as reported by Eric Boutilier.
+	  - implement hard links
+	* pkgtool.pl:
+	  - fix bug where pkgtool build-only was looking for both
+	    the BuildRequires and the Requires dependencies.
+	    build-install must look for both kinds, but build-only
+	    should only check BuildRequires dependencies.  Reported
+	    by Paul Cunningham.
+	  - count DEP_FAILED packages as failed in the return value
+	  - create a .pkgnames file in %_topdir for pkgbuild to pick
+	    up package descriptions from
+	* rpm_file.pm: implement hard links
+	* rpm_spec.pm.in: implement hard links (%hard modified in
+	    %files)
+
 2007-03-10  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: ignore duplicates if a spec file is listed mutliple

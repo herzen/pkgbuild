@@ -1318,18 +1318,21 @@ sub warn_once ($$$) {
 sub warn_never ($$$) {
 }
 
-sub get_dependencies ($@) {
+sub get_dependencies ($$@) {
     my $spec_id = shift;
+    my $build_only = shift;
     my @packages = @_;
     my $spec = $specs_to_build[$spec_id];
 
     my @dependencies = ();
     my @this_pkg_requires;
-    foreach my $pkg (@packages) {
-	@this_pkg_requires = $pkg->get_array ('requires');
-	next if not @this_pkg_requires or not defined $this_pkg_requires[0];
-	msg_debug (3, "adding \"@this_pkg_requires\" to the dependencies of $spec");
-	push (@dependencies, @this_pkg_requires);
+    if (not $build_only) {
+	foreach my $pkg (@packages) {
+	    @this_pkg_requires = $pkg->get_array ('requires');
+	    next if not @this_pkg_requires or not defined $this_pkg_requires[0];
+	    msg_debug (3, "adding \"@this_pkg_requires\" to the dependencies of $spec");
+	    push (@dependencies, @this_pkg_requires);
+	}
     }
 
     foreach my $pkg (@packages) {
@@ -1339,11 +1342,13 @@ sub get_dependencies ($@) {
 	push (@dependencies, @this_pkg_requires);
     }
 
-    foreach my $pkg (@packages) {
-	@this_pkg_requires = $pkg->get_array ('prereq');
-	next if not @this_pkg_requires or not defined $this_pkg_requires[0];
-	msg_debug (3, "adding \"@this_pkg_requires\" to the dependencies of $spec");
-	push (@dependencies, @this_pkg_requires);
+    if (not $build_only) {
+	foreach my $pkg (@packages) {
+	    @this_pkg_requires = $pkg->get_array ('prereq');
+	    next if not @this_pkg_requires or not defined $this_pkg_requires[0];
+	    msg_debug (3, "adding \"@this_pkg_requires\" to the dependencies of $spec");
+	    push (@dependencies, @this_pkg_requires);
+	}
     }
 
     return @dependencies;
@@ -1797,8 +1802,7 @@ sub do_build (;$$) {
 	    print_live_status;
 	}
 	if ($build_status[$i] ne "PASSED") {
-	    if ($build_status[$i] ne "DEP_FAILED"
-		and $build_status[$i] ne "SKIPPED") {
+	    if ($build_status[$i] ne "SKIPPED") {
 		$exit_val++;
 		mail_log ($i);
 	    }
@@ -1861,7 +1865,7 @@ sub build_spec ($$$) {
     }
 
     if ($check_deps) {
-	my @dependencies = get_dependencies ($spec_id, @packages);
+	my @dependencies = get_dependencies ($spec_id, $build_only, @packages);
 
 	my $this_result;
 	my $result = 1;
@@ -2073,7 +2077,7 @@ sub print_order ($&) {
     my $check_deps = $defaults->get ('deps');
     if ($check_deps) {
 	my @packages = $spec->get_packages ();
-	my @dependencies = get_dependencies ($spec_id, @packages);
+	my @dependencies = get_dependencies ($spec_id, 0, @packages);
 
 	if (@dependencies) {
 	    $build_status[$spec_id] = "DEP";
@@ -2424,6 +2428,93 @@ sub process_specs () {
     }
 }
 
+# merge new entries into the .pkgnames file
+sub pkgnames_merge ($$) {
+    my $pkgnames_file = shift;
+    my $new_entries = shift;
+
+    my %entries;
+
+    if (! open PKGNAMES, "<$pkgnames_file") {
+        msg_error ("Could not open file $pkgnames_file for reading");
+	return;
+    }
+
+    my $line;
+    # read entries from old .pkgnames file first
+    while ($line = <PKGNAMES>) {
+	chomp ($line);
+	if ($line =~ /^([^:]+):(.*)$/) {
+	    $entries{$1} = $2;
+	} else {
+	    msg_warning (1, "Invalid entry in .pkgnames file: $line");
+	}
+    }
+
+    close PKGNAMES;
+
+    if (! open PKGNAMES, "<$new_entries") {
+        msg_warning (0, "Could not open file $new_entries for reading");
+	return;
+    }
+
+    # New entries overwrite the old entries.
+    # This is important when package summaries change.
+    while ($line = <PKGNAMES>) {
+	chomp ($line);
+	if ($line =~ /^([^:]+):(.*)$/) {
+	    $entries{$1} = $2;
+	} else {
+	    msg_warning (1, "Invalid entry in .pkgnames file: $line");
+	}
+    }
+
+    close PKGNAMES;
+
+    # Write merged data in temp file first
+    if (! open PKGNAMES, ">${new_entries}") {
+	msg_warning (0, "Failed to open package names file ${pkgnames_file}.$$ for writing");
+	return;
+    }
+
+    foreach my $pkg (sort keys %entries) {
+	print PKGNAMES "$pkg:$entries{$pkg}\n";
+    }
+
+    close PKGNAMES;
+
+    # replace the real pkgnames file
+    system ("mv $new_entries $pkgnames_file");
+}
+
+# write a list of package names and summaries so that pkgbuild can
+# generate proper depend info for packages that are not currently installed
+sub write_pkgnames () {
+    my $pkgnames_file = "$topdir/.pkgnames";
+    # just in case
+    unlink ("${pkgnames_file}.$$");
+    # build a temporary pkgnames file first
+    if (! open PKGNAMES, ">${pkgnames_file}.$$") {
+	msg_warning (0, "Failed to open package names file ${pkgnames_file}.$$ for writing");
+	return;
+    }
+    for (my $spec_id = 0; $spec_id <= $#specs_to_build; $spec_id++) {
+	my @packages = $specs_to_build[$spec_id]->get_packages ();
+	foreach my $pkg (@packages) {
+	    next if not defined $pkg;
+	    print PKGNAMES "$pkg:" . $pkg->eval('%summary') . "\n";
+	}
+    }
+    close PKGNAMES;
+    # merge the old and the new pkgnames:
+    if (-f $pkgnames_file) {
+	pkgnames_merge ($pkgnames_file, "$pkgnames_file.$$");
+    } else {
+	# .pkgnames is created for the first time.
+	system ("mv $pkgnames_file.$$ $pkgnames_file");
+    }
+}
+
 # --------- main program ---------------------------------------------------
 sub main {
     process_defaults ();
@@ -2449,6 +2540,10 @@ sub main {
 
     copy_specs ();
     process_specs ();
+
+    # write of list of package names and summaries for pkgbuild
+    # to pick up names of dependenct packages from
+    write_pkgnames ();
 
     if (not defined ($build_command)) {
 	usage (1);

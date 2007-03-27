@@ -856,6 +856,7 @@ sub make_depend ($$) {
 
     my $pkgdependdir = $spec->eval ("%_pkgmapdir") . "/depend";
     my $fname = $package . ".depend";
+    my $topdir = $spec->eval ("%_topdir");
     open $fhandle, ">$pkgdependdir/$fname" or
 	fatal ("failed to create file $pkgdependdir/$fname");
 
@@ -863,24 +864,34 @@ sub make_depend ($$) {
 	if (not defined ($dep)) {
 	    next;
 	}
+	# look for a package defined in this spec file first
 	my $subpkg = $spec->find_package_by_name ($dep);
 	if (defined ($subpkg)) {
 	    print $fhandle "P $dep " . $subpkg->get_tag ("summary") . "\n";
 	    next;
 	}
+	# look for a packages installed on the system
 	my $pkgname = `/usr/bin/pkginfo '$dep.*' 2>/dev/null | head -1`;
 	chomp ($pkgname);
 	if ($pkgname ne '') {
 	    $pkgname =~ s/^\S*\s*$dep\s*(\S.*)$/$1/;
         } else {
-	    $pkgname = `grep "^${dep}:" "@PKGBUILD_LIBDIR@/pkgnames" | head -1`;
+	    # look in list of packages built by pkgtool on this system
+	    $pkgname = `grep "^${dep}:" "$topdir/.pkgnames" | head -1`;
 	    chomp ($pkgname);
 	    if ($pkgname ne '') {
 		$pkgname =~ s/^${dep}:(.*)/$1/;
 	    } else {
-		message ("warning: could not find the description of "
-			 . "package $dep", "omitting from depend file");
-		next;
+		# look in a predefined list of package names
+		$pkgname = `grep "^${dep}:" "@PKGBUILD_LIBDIR@/pkgnames" | head -1`;
+		chomp ($pkgname);
+		if ($pkgname ne '') {
+		    $pkgname =~ s/^${dep}:(.*)/$1/;
+		} else {
+		    message ("warning: could not find the description of "
+			     . "package $dep", "omitting from depend file");
+		    next;
+		}
 	    }
 	}
 	print $fhandle "P $dep $pkgname\n"; 
@@ -1101,7 +1112,11 @@ sub get_proto_line ($$$$$$$$) {
 	} elsif ($linkpoint =~ /^\//) {
 	    print "WARNING: $fname is an absolute symlink\n";
 	}
-	$protoline = "$type none $relpath=$linkpoint";
+	if ($file->is_hardlink()) {
+	    $protoline = "l none $relpath=$linkpoint";
+	} else {
+	    $protoline = "$type none $relpath=$linkpoint";
+	}
     } elsif ($type =~ /(c|b)/) {
 	fatal ('device special files not implemented');
     } else {

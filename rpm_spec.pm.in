@@ -2137,6 +2137,7 @@ sub _process_files ($$$;$) {
     my $is_doc = 0;
     my $is_config = 0;
     my $is_ghost = 0;
+    my $is_hardlink = 0;
     my @this_verify = (@all_verify);
     my $is_dir = 0;
     my $class_name = "none";
@@ -2192,6 +2193,11 @@ sub _process_files ($$$;$) {
 	    $eline =~ s/^\s*%ghost\s*\([^)]*\)\s*// or
 		$eline =~ s/^\s*%ghost\s*//;
 	    next;	    
+	} elsif ($eline =~ /^\s*%hard/) {
+	    $is_hardlink = 1;
+	    $eline =~ s/^\s*%hard\s*\([^)]*\)\s*// or
+		$eline =~ s/^\s*%hard\s*//;
+	    next;	    
 	} elsif ($eline =~ /^\s*%attr\s*\(\s*(-|\?|[0-9]+)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*,\s*(-|\?|[a-zA-Z][a-zA-Z0-9_-]*)\s*\)\s*/) {
 	    @this_attr = ($1, $2, $3);
 	    $eline =~ s/^\s*%attr\s*\([^\)]*\)\s*//;
@@ -2225,7 +2231,8 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^\s*(\/.*\S)\s*$/) {
 	    my $file = rpm_file->new ($1, \@this_attr, \@this_verify,
 				     not ($is_dir), $is_doc,
-				     $is_config, $class_name, $is_ghost);
+				     $is_config, $class_name, $is_ghost,
+		                     $is_hardlink);
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
 	    $self->_set_error ("File must begin with \"/\": $1", $fhandle);
@@ -2238,6 +2245,7 @@ sub _process_files ($$$;$) {
 	$is_doc = 0;
 	$is_config = 0;
         $is_ghost = 0;
+        $is_hardlink = 0;
 	@this_verify = (@all_verify);
 	$is_dir = 0;
         $class_name = "none";

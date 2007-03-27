@@ -15,7 +15,7 @@ Some things I'm planning fix/add:
  - implement RequireArch / RequireOS
  - rpm seems to accept %Package, check if all directives are indeed
    case insensitive and implement accordingly
- - %if foo == bar  (does this work with RPM?)
+ - %if foo == bar
  - version checking in requires/buildrequires
  - requires(pre|post|preun|postun)
  - requires: /path/to/file

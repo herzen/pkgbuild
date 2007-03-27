@@ -47,6 +47,7 @@ sub new ($$;$$$$$$$) {
     my $is_config = shift;
     my $class_name = shift;
     my $is_ghost = shift;
+    my $is_hardlink = shift;
     my $self = {};
 
     if (not @$attribs) {
@@ -80,12 +81,17 @@ sub new ($$;$$$$$$$) {
 	$is_ghost = 0;
     }
 
+    if (not defined $is_hardlink) {
+	$is_hardlink = 0;
+    }
+
     $self->{_glob} = $glob;
     $self->{_attributes} = $attribs;
     $self->{_verify} = $verify;
     $self->{_is_doc} = $is_doc;
     $self->{_is_config} = $is_config;
     $self->{_is_ghost} = $is_ghost;
+    $self->{_is_hardlink} = $is_hardlink;
     $self->{_is_recursive} = $is_recursive;
     if (defined ($class_name)) {
 	$self->{_class} = $class_name;
@@ -171,6 +177,12 @@ sub is_ghost ($) {
     my $self = shift;
 
     return $self->{_is_ghost};
+}
+
+sub is_hardlink ($) {
+    my $self = shift;
+
+    return $self->{_is_hardlink};
 }
 
 sub is_recursive ($) {
