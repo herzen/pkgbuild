@@ -1403,8 +1403,13 @@ sub find_package_by_name ($) {
     return if not defined ($name);
 
     my $ref = $self->{_packages};
+    my $pkgname;
     foreach my $package (@$ref) {
 	if ($package->get_tag ("name") eq $name) {
+	    return $package;
+	}
+	$pkgname = $package->get_tag ("sunw_pkg");
+	if (defined ($pkgname) and ($pkgname eq $name)) {
 	    return $package;
 	}
     }

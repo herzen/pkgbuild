@@ -1,3 +1,10 @@
+2007-03-29  Laszlo Peter  <laca@sun.com>
+
+	* rpm_spec.pm.in: fix find_package_by_name to check both Name
+	  and SUNW_Pkg.
+	* configure.in: bump version to 1.2.0 since there are new
+	  features not just bug fixes.
+
 2007-03-26  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in:
