@@ -1591,7 +1591,10 @@ sub wget_source ($$$) {
     chomp ($wget_output);
     my $retval = $?;
     my $mirrors = $defaults->get('source_mirrors');
-    my @mirror_list = split /,\s*/, $mirrors;
+    my @mirror_list;
+    if (defined $mirrors) {
+	@mirror_list = split /,\s*/, $mirrors;
+    }
 
     if ($retval != 0) {
         if (defined ($mirrors)) {

@@ -1,5 +1,9 @@
 2007-03-29  Laszlo Peter  <laca@sun.com>
 
+	* pkgtool.pl: fix warning when source_mirror is not set
+
+2007-03-29  Laszlo Peter  <laca@sun.com>
+
 	* rpm_spec.pm.in: fix find_package_by_name to check both Name
 	  and SUNW_Pkg.
 	* configure.in: bump version to 1.2.0 since there are new
