@@ -1,3 +1,5 @@
+	======== pkgbuild version 1.2.0 ========
+
 2007-03-29  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: fix warning when source_mirror is not set
