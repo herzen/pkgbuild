@@ -1,3 +1,8 @@
+2007-04-27  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: delete warning message when a non-tarball is found
+	  in the tarball dir and not in the source dir.
+
 2007-04-02  Laszlo Peter  <laca@sun.com>
 
 	* configure.in: post-release version bump

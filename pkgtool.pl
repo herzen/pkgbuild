@@ -1555,7 +1555,6 @@ sub find_source ($$) {
 		msg_info (3, "   $src not found in $srcdir");
 	    } else {
 		msg_info (3, "   $src found in $srcdir");
-		msg_warning (1, "$src is not expected to be in the tarball dir");
 		return $src_path;
 	    }
 	}
