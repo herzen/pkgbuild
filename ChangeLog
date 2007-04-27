@@ -1,5 +1,10 @@
 2007-04-27  Laszlo Peter  <laca@sun.com>
 
+	* configure.in: fix detecting GNU tar to work with gtar >= 1.15.1.
+	  Patch from Mike Bristow.  Fixes bug 1706401.
+
+2007-04-27  Laszlo Peter  <laca@sun.com>
+
 	* pkgtool.pl: delete warning message when a non-tarball is found
 	  in the tarball dir and not in the source dir.
 

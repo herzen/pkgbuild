@@ -33,6 +33,8 @@ AC_MSG_CHECKING([if $TAR is GNU tar])
 TAR_IS_GNU=no
 $TAR --version 2>/dev/null | grep 'Free Software Foundation' > /dev/null \
        && TAR_IS_GNU=yes
+$TAR --license 2>/dev/null | grep 'Free Software Foundation' > /dev/null \
+       && TAR_IS_GNU=yes
 $TAR --version 2>/dev/null | head -1 | grep '^tar ' > /dev/null \
        || TAR_IS_GNU=no
 AC_MSG_RESULT([$TAR_IS_GNU])
