@@ -1,5 +1,10 @@
 2007-04-27  Laszlo Peter  <laca@sun.com>
 
+	* rpm_spec.pm.in: expand macros in the filename argument of
+	  %files -f filename.  Patch by Mike Bristow, fixes bug 1708029.
+
+2007-04-27  Laszlo Peter  <laca@sun.com>
+
 	* configure.in: fix detecting GNU tar to work with gtar >= 1.15.1.
 	  Patch from Mike Bristow.  Fixes bug 1706401.
 

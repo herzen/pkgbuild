@@ -2073,6 +2073,8 @@ sub load_metafile ($$$) {
     my $mf_fhandle = "SPEC_FILE" . $file_id++;
     my $builddir = $self->eval ("%{_builddir}");
     my $dirname = $self->eval ("%{_build_src_dir_name}");
+    $fname = $self->eval($fname);
+
     if ($dirname eq "%{_build_src_dir_name}") {
 	$dirname = $self->eval ("%name-%version");
     }

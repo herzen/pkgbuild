@@ -5,6 +5,9 @@ Version 1.3.0:
 	- fix detecting GNU tar for versions >= 1.15.1.  Patch from
 	  Mike Bristow.
 
+	- expand macros in the argument of %files -f.  Patch from
+	  Mike Bristow.
+
 Version 1.2.0:
 
 	Bugs fixed:
