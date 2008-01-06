@@ -1,5 +1,10 @@
 2008-01-06  Laszlo Peter  <laca@sun.com>
 
+	* pkgtool.pl: add --tries=1 to wget options, fixes 1812491.
+	  Fix by Ananth Shrinivas S.
+
+2008-01-06  Laszlo Peter  <laca@sun.com>
+
 	* pkgbuild.pl.in: quote some strings in regexps to avoid perl
 	  runtime errors, fixes 1786439 (patch from Anonymous submitter)
 	* NEWS: update

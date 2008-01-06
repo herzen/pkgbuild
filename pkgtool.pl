@@ -2,7 +2,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright 2007 Sun Microsystems, Inc.
+#  Copyright 2008 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -1584,7 +1584,7 @@ sub wget_source ($$$) {
 
     msg_info (0, "Downloading source $src");
 
-    my $wget_command = "$wget -nd -nH -P $download_dir -T 60 $src 2>&1";
+    my $wget_command = "$wget -nd -nH -P $download_dir --tries=1 -T 60 $src 2>&1";
     msg_info (2, "Running $wget_command");
     my $wget_output = `$wget_command`;
     chomp ($wget_output);

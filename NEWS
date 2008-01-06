@@ -12,6 +12,9 @@ Version 1.3.0:
 
 	- [ 1786439 ] Regex characters need quoting
 
+	- [ 1812491 ] pkgtool with a unresponsive server takes too long
+          to timeout.  Bug report and fix from Ananth Shrinivas S.
+
 	New features:
 
 	- %error and %warning macros:
