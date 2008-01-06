@@ -331,7 +331,7 @@ sub usage (;$) {
     }
     
     print << "EOF";
-pkgtool [options] [command] specs...
+spectool [options] [command] specs...
 	
 Options:
 

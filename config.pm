@@ -242,7 +242,9 @@ sub _deref_keys ($$) {
     return $str;
 }
 
-# read values of settings from an rc file
+# readrc (obj, file_name [, ignore_unknown])
+#
+# read values of settings from an rc file (file_name)
 # rc files look like this:
 #    ,-----------------------------------.
 #    |#comment line                      |
@@ -252,9 +254,13 @@ sub _deref_keys ($$) {
 #    |key3: ${VARIABLE1}                 |
 #    |key4: ${value2}:bar                |
 #    `-----------------------------------'
-sub readrc ($$) {
+#
+# ignore_unknown is boolean, if undefined or 0 report errors about
+# unknown setting in the rc file, otherwise ignore them
+sub readrc ($$;$) {
     my $self = shift;
     my $fname = shift;
+    my $ignore_unknown = shift;
 
     if (! -f $fname) {
 	return 0;
@@ -288,7 +294,9 @@ sub readrc ($$) {
                     print "WARNING: $fname: Incorrect value \"$value0\" for option $key\n";
                 }
             } else {
-                print "WARNING: $fname: Unknown option \"$key\"\n";
+		if (not $ignore_unknown) {
+		    print "WARNING: $fname: Unknown option \"$key\"\n";
+		}
             }
         } elsif ($line =~ /^\s*([a-zA-Z][a-zA-Z_0-9]*)\s*:\s*(.+)\s*$/) {
 	    my $key = lc ($1);
@@ -303,7 +311,9 @@ sub readrc ($$) {
                     print "WARNING: $fname: Incorrect value \"$value0\" for option $key\n";
                 }
             } else {
-                print "WARNING: $fname: Unknown option \"$key\"\n";
+		if (not $ignore_unknown) {
+		    print "WARNING: $fname: Unknown option \"$key\"\n";
+		}
             }
         } elsif ($line =~ /^\s*([A-Z_]+)\s*=\s*"([^"]*)"\s*$/) {
 	    my $var = $1;
@@ -324,7 +334,9 @@ sub readrc ($$) {
                     print "WARNING: $fname: option $key is not boolean\n";
                 }
             } else {
-                print "WARNING: $fname: Unknown option \"$key\"\n";
+		if (not $ignore_unknown) {
+		    print "WARNING: $fname: Unknown option \"$key\"\n";
+		}
             }
 	} elsif ($line =~ /^\s*([a-zA-Z][a-zA-Z0-9_]*)\s*$/){
 	    my $key = lc ($1);
@@ -335,8 +347,10 @@ sub readrc ($$) {
                     print "WARNING: $fname: option $key is not boolean\n";
                 }
             } else {
-                print "WARNING: $fname: Unknown option \"$key\"\n";
-            }
+		if (not $ignore_unknown) {
+		    print "WARNING: $fname: Unknown option \"$key\"\n";
+		}
+	    }
 	} elsif ($line =~ /^\s*$/) {
 	    1;
 	} elsif ($line =~ /^\s*#/) {

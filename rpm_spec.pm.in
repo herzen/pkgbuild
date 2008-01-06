@@ -2303,6 +2303,11 @@ sub _process_top_level ($$$) {
 		or return 0;
 	} elsif ($eline =~ /^\s*\S+\s*:\s*\S+/) {
 	    $self->_process_tag ($fhandle, $eline) or return 0;
+	} elsif ($eline =~ /^\s*%error\s*(.*)/) {
+	    $self->_set_error ("ERROR: $1", $fhandle);
+	    return 0;
+	} elsif ($eline =~ /^\s*%warning\s*(.*)/) {
+	    print "WARNING: $1\n";
 	} else {
 	    $self -> _set_error ("syntax error", $fhandle);
 	    return 0;

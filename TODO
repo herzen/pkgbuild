@@ -1,4 +1,8 @@
 Some things I'm planning fix/add:
+ - bcond_with (http://www.redhat.com/archives/epel-devel-list/2007-July/msg00208.html)
+ - unlink the src tarball if wget download failed
+ - add .spec automatically to the args if the file is not found
+ - try and add the missing deps from the same dir if found
  - S8/S9 compatibility
  - %check scriptlet: http://rpm.org/max-rpm-snapshot/s1-rpm-inside-scripts.html#S3-RPM-INSIDE-CHECK-SCRIPT
  - pkgbuild -ta
@@ -20,6 +24,14 @@ Some things I'm planning fix/add:
  - requires(pre|post|preun|postun)
  - requires: /path/to/file
  - spec file lint
+ - implement a dependency generator
+ - %define __find_requires foo   <--- redefine dependency generator script
+ - %define _use_internal_dependency_generator 0
+ - rpm compat: only Name, Version and Release define %name, %version, %release
+   other Tags do not define macros (grrr....)
+ - %exclude modifier in %files
+ - bug: { } chars stripped from foo in %files -f foo
+ - %files -f %{foo} does not expand %{foo}
 
 Longer term plans:
  - commit triggered build system

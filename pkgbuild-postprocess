@@ -7,7 +7,7 @@ COMMENTS=
 VERBOSE=no
 
 usage() {
-  echo "set_ELF_comments.sh [options] [files...]"
+  echo "pkgbuild_postprocess [options] [files...]"
   echo 
   echo "Postprocess the list or directories (recursively): set sane"
   echo "permissions, strip binaries, replace .comments in ELF binaries"

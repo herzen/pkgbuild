@@ -1,3 +1,13 @@
+2008-01-06  Laszlo Peter  <laca@sun.com>
+
+	* TODO: updated
+	* config.pm: (readrc) add optional arg ignore_unknown: makes
+	  it silently ignore all settings in the rc file that is not
+	  defined.
+	* pkgtool.pl: do not send build failure emails for DEP_FAILED
+	  specs, plus some cosmetic changes
+	* rpm_spec.pm.in: define %error and %warning macros
+
 2007-04-27  Laszlo Peter  <laca@sun.com>
 
 	* rpm_spec.pm.in: expand macros in the filename argument of

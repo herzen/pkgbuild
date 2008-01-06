@@ -313,7 +313,7 @@ sub open_log ($) {
     
     $current_log = $log_filename;
     
-    msg_log ("--- log starts --- " . `date`);
+    msg_log ("--- date stamp --- " . `date`);
 }
 
 sub log_cmdout_starts () {
@@ -1678,11 +1678,8 @@ sub copy_sources ($) {
     msg_info (2, "copying sources to $topdir/SOURCES");
 
     foreach my $src (@sources) {
-	if (not defined ($src)) {
-	    next;
-	}
-	my $base_src = $src;
-	$base_src =~ s/^.*\/([^\/]+)/$1/;
+	next if not defined ($src);
+	my $base_src = basename ($src);
         $src_path = find_source ($spec_id, $base_src);
 	if (not defined ($src_path)) {
 	    if ($defaults->get ("download") and wget_in_path ()) {
@@ -1692,8 +1689,8 @@ sub copy_sources ($) {
 		msg_info (0, "Hint: you need to use the --download option to enable automatic downloads");
 	    }
 	    $build_status[$spec_id] = 'FAILED';
-	    $status_details[$spec_id] = "Source $src not found";
-	    msg_error ($specs_to_build[$spec_id] . ": Source file $src not found");
+	    $status_details[$spec_id] = "Source $base_src not found";
+	    msg_error ($specs_to_build[$spec_id] . ": Source file $base_src not found");
 	    return 0;
 	}
 
@@ -1732,18 +1729,16 @@ sub copy_patches ($) {
     my $patch_path;
     my $target;
     foreach my $patch (@patches) {
-	if (not defined ($patch)) {
-	    next;
-	}
-
-	msg_info (2, "looking for patch $patch");
+	next if not defined $patch;
+	my $patch_base_name = basename ($patch);
+	msg_info (2, "looking for patch $patch_base_name");
 
 	my @the_patch_dirlist = split /[:]/, $defaults->get ('patchdirs');
 	foreach my $the_patch_dir (@the_patch_dirlist) {
-	    $patch_path = "$the_patch_dir/$patch";
+	    $patch_path = "$the_patch_dir/$patch_base_name";
 	    
 	    if (! -f "$patch_path") {
-		msg_info (3, "   $patch not found in $patch_path");
+		msg_info (3, "   not found in $patch_path");
 	    } else {
 		msg_info (3, "   found in $patch_path");
 		last;
@@ -1751,13 +1746,19 @@ sub copy_patches ($) {
 	}
 
 	if (! -f "$patch_path") {
+	    # patch not found in the patch dirlist
+	    # try to download it from the net
+	    if ($defaults->get ("download") and wget_in_path ()) {
+		wget_source ($spec_id, $patch, "$topdir/SOURCES") and next;
+	    }
+	    # download unsuccessful
 	    $build_status[$spec_id] = 'ERROR';
-	    $status_details[$spec_id] = "Patch $patch_path not found";
-	    msg_error ("Patch $patch_path not found");
+	    $status_details[$spec_id] = "Patch $patch_base_name not found";
+	    msg_error ("Patch $patch_base_name not found");
 	    return 0;
 	}
 
-	$target = "$topdir/SOURCES/$patch";
+	$target = "$topdir/SOURCES/$patch_base_name";
 
 	`cmp -s $patch_path $target`;
 
@@ -1774,7 +1775,7 @@ sub copy_patches ($) {
 		return 0;
 	    }
 	} else {
-	    msg_info (3, "   $patch and $topdir/SOURCES/$patch are identical; not copying");
+	    msg_info (3, "   $patch_path and $target are identical; not copying");
 	}
 
 	`chmod a+r $target`;
@@ -1804,8 +1805,9 @@ sub do_build (;$$) {
 	    print_live_status;
 	}
 	if ($build_status[$i] ne "PASSED") {
-	    if ($build_status[$i] ne "SKIPPED") {
-		$exit_val++;
+	    $exit_val++;
+	    if (($build_status[$i] ne "SKIPPED") and
+		($build_status[$i] ne "DEP_FAILED")) {
 		mail_log ($i);
 	    }
 	}
@@ -2502,9 +2504,15 @@ sub write_pkgnames () {
     }
     for (my $spec_id = 0; $spec_id <= $#specs_to_build; $spec_id++) {
 	my @packages = $specs_to_build[$spec_id]->get_packages ();
+	my $summary;
+	my $pkg_name;
 	foreach my $pkg (@packages) {
 	    next if not defined $pkg;
-	    print PKGNAMES "$pkg:" . $pkg->eval('%summary') . "\n";
+	    $summary = $pkg->eval('%summary');
+	    $pkg_name = $pkg->get_name();
+	    next if not defined $summary;
+	    next if not defined $pkg_name;
+	    print PKGNAMES "$pkg_name:$summary\n";
 	}
     }
     close PKGNAMES;
