@@ -1581,10 +1581,13 @@ sub wget_source ($$$) {
 
     my $download_dir = $defaults->get ("download_to");
     $download_dir = "$target" unless defined ($download_dir);
+    my $base_src = basename ($src);
 
     msg_info (0, "Downloading source $src");
 
-    my $wget_command = "$wget -nd -nH -P $download_dir --tries=1 -T 60 $src 2>&1";
+    # download to temporary file .$base_src
+    unlink "$download_dir/.$base_src";
+    my $wget_command = "$wget -nd -nH --tries=1 -T 60 -O $download_dir/.$base_src $src 2>&1";
     msg_info (2, "Running $wget_command");
     my $wget_output = `$wget_command`;
     chomp ($wget_output);
@@ -1596,14 +1599,15 @@ sub wget_source ($$$) {
     }
 
     if ($retval != 0) {
+	# download unsuccessful, delete temporary file if exists
+	unlink (".$base_src");
         if (defined ($mirrors)) {
 	    $wget_output =~ s/\n/\nWARNING: wget: /g;
 	    msg_log ("WARNING: wget: $wget_output");
 	    msg_warning (0, "Download failed from primary site");
-	    my $base_src = basename ($src);
 	    foreach my $mirror (@mirror_list) {
 		msg_info (0, "Trying source mirror $mirror");
-		$wget_command = "$wget -nd -nH -P $download_dir -T 60 $mirror/$base_src 2>&1";
+		$wget_command = "$wget -nd -nH --tries=1 -T 60 -O $download_dir/.$base_src $mirror/$base_src 2>&1";
 		msg_info (2, "Running $wget_command");
 		$wget_output = `$wget_command`;
 		chomp ($wget_output);
@@ -1628,7 +1632,10 @@ sub wget_source ($$$) {
 	msg_log ("INFO: wget: $wget_output");
     }
 
-    if ($retval != 0) {
+    if ($retval == 0) {
+	# wget succeeded, now rename temporary file to the real name
+	rename ("$download_dir/.$base_src", "$download_dir/$base_src");
+    } else {
 	if (not defined ($ENV{"${protocol}_proxy"})) {
 	    msg_info (0, "Hint: if you are behind a firewall, you need to set the ${protocol}_proxy");
 	    msg_info (0, "environment variable.  See man -M /usr/sfw/man wget for details")
