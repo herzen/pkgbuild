@@ -431,7 +431,10 @@ sub check_dep ($$) {
     my $ref_rev;
     my $ref_serial;
     my $rel_op;
-    if ($dep =~ /^$pkg\s*(=|<=|=<|>=|=>)\s*(\S*),REV=(\S*)\s*$/) {
+    my $re_quoted_pkg = $pkg;
+    # quote chars with special meaning in regexps
+    $re_quoted_pkg =~ s/([\+\*\(\)\[\].\\])/\\$1/g;
+    if ($dep =~ /^$re_quoted_pkg\s*(=|<=|=<|>=|=>)\s*(\S*),REV=(\S*)\s*$/) {
 	if ($os eq "solaris") {
 	    $rel_op = $1;
 	    $ref_vers = $2;
@@ -444,7 +447,7 @@ sub check_dep ($$) {
 		$ref_rev = $2;
 	    }
 	}
-    } elsif ($dep =~ /^$pkg\s*(=|<=|=<|>=|=>)\s*(\S*)\s*$/) {
+    } elsif ($dep =~ /^$re_quoted_pkg\s*(=|<=|=<|>=|=>)\s*(\S*)\s*$/) {
 	$rel_op = $1;
 	$ref_vers = $2;
 	if ($os eq "linux") {
@@ -453,7 +456,7 @@ sub check_dep ($$) {
 		$ref_rev = $2;
 	    }
 	}
-    } elsif ($dep =~ /^$pkg\s*(=S|<=S|=<S|>=S|=>S)\s*(\S*)\s*$/) {
+    } elsif ($dep =~ /^$re_quoted_pkg\s*(=S|<=S|=<S|>=S|=>S)\s*(\S*)\s*$/) {
 	$rel_op = $1;
 	$ref_serial = $2;
 	if ($os eq "solaris") {
@@ -462,7 +465,7 @@ sub check_dep ($$) {
 	    print "WARNING: ignoring dependency \"$dep\"\n";
 	    return 1;
 	}
-    } elsif ($dep =~ /^$pkg\s*$/) {
+    } elsif ($dep =~ /^$re_quoted_pkg\s*$/) {
 	# no version to compare to, check existance of pkg only
     } else {
 	print "WARNING: could not parse dependency: $dep\n";
@@ -1107,7 +1110,9 @@ sub get_proto_line ($$$$$$$$) {
 	$protoline = "v $class_name $relpath=/dev/null $mode $user $group";
     } elsif ($type eq 's') {
 	my $linkpoint = readlink ($fname);
-	if ($linkpoint =~ /^$buildroot/) {
+	my $buildroot_reg = $buildroot;
+	$buildroot_reg =~ s/([\+\*\(\)\[\].\\])/\\$1/g;
+	if ($linkpoint =~ /^$buildroot_reg/) {
 	    fatal ("ERROR: /$fname is an absolute symlink that points to \$RPM_BUILD_ROOT");
 	} elsif ($linkpoint =~ /^\//) {
 	    print "WARNING: $fname is an absolute symlink\n";
