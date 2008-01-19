@@ -22,6 +22,7 @@
 #
 %__awk                  gawk
 %__bzip2                /usr/bin/bzip2
+%__uncompress           /usr/bin/uncompress
 %__cat                  /bin/cat
 %__chgrp                /bin/chgrp
 %__chmod                /bin/chmod
@@ -76,6 +77,7 @@
 %_builddir              %{_topdir}/BUILD
 %_buildshell            /bin/bash
 %_bzip2bin              %{__bzip2}
+%_uncompressbin         %{__uncompress}
 %_defaultdocdir         %{_usr}/doc
 %_gzipbin               %{__gzip}
 %_instchangelog         5

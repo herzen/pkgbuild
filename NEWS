@@ -18,6 +18,8 @@ Version 1.3.0:
 	- [ 1767423 ] pkgtool error when download_to dir has corrupted file
 	  Reported by Shiv.
 
+        - handle tar.Z tarballs.  Patch from Thomas Wagner.
+
 	New features:
 
 	- %error and %warning macros:

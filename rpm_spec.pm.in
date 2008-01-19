@@ -1372,6 +1372,8 @@ sub _get_unpack_commands ($$) {
 	$uncompress = "/usr/bin/bzip2 -dc";
     } elsif ($srcname =~ /(\.tar\.gz|\.tgz)$/) {
 	$uncompress = "/usr/bin/gzip -dc";
+    } elsif ($srcname =~ /(\.tar\.Z)$/) {
+       $uncompress = "/usr/bin/uncompress -c";
     } elsif ($srcname =~ /(\.tar)$/) {
 	$uncompress = "/bin/cat";
     } elsif ($srcname =~ /(\.zip)$/) {

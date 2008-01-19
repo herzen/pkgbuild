@@ -1,3 +1,9 @@
+2008-01-20  Laszlo Peter  <laca@sun.com>
+
+	* rpm_spec.pm.in: use /usr/bin/uncompress for tar.Z tarballs
+	* macros.in: define macros for uncompress, although they
+	  are not currently used.  Patch from Thomas Wagner.
+
 2008-01-06  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: download tarballs under a temporary name first,
