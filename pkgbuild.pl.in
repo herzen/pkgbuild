@@ -254,8 +254,8 @@ sub print_version () {
 sub usage () {
     print_version();
     print <<_EOF_;
-Copyright (C) 2003 - Sun Microsystems, Inc.
-This may be freely redistributed under the terms of the GNU GPL
+Copyright 2003-2008 Sun Microsystems, Inc.
+This program may be freely redistributed under the terms of the GNU GPL
 
 * = the option is implemented 
 
@@ -288,7 +288,11 @@ This may be freely redistributed under the terms of the GNU GPL
 *     --define "<name> <value>"
                            - define <name> as <value> as if you had
 			     "%define <name> <value>" in the spec file 
- 
+*     --with-foo or --with foo
+                           - same as "%define _with_foo --with-foo"
+*     --without-foo or --without foo
+                           - same as "%define _without_foo --without-foo" 
+
 *   --rebuild <src_pkg>    - install source package, build binary package and
                              remove spec file, sources, patches, and icons.
     --rmsource <spec>      - remove sources and spec file

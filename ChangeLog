@@ -1,3 +1,9 @@
+2008-02-02  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: implement --autodeps; adds spec files to the build
+	  automatically to satisfy missing dependencies.
+	* pkgbuild.pl.in: add --with-foo / --without-foo to usage ()
+
 2008-01-20  Laszlo Peter  <laca@sun.com>
 
 	* rpm_spec.pm.in: use /usr/bin/uncompress for tar.Z tarballs

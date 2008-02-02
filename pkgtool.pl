@@ -56,6 +56,7 @@ my @pkg_list = ();
 my %all_specs;
 my %provider;
 my %warned_about;
+my %specs_copied;
 
 my $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
 chomp ($logname);
@@ -119,6 +120,9 @@ sub process_defaults () {
 		    'a URL pointing to the directory where the resulting rpms will be save (used in the HTML build report)');
     $defaults->add ('srpm_url', 's',
 		    'a URL pointing to the directory where the resulting source srpms will be save (used in the HTML build report)');
+    $defaults->add ('autodeps', '!',
+		    'attempt to find spec files for missing dependencies',
+		    0);
     $defaults->add ('deps', '!',
 		    'whether to check dependencies; use nodeps to ignore dependencies',
 		    1);
@@ -678,6 +682,7 @@ sub process_options {
 		'srpm-url=s' => sub { shift; $defaults->set ('srpm_url', shift); },
 		'target=s' => sub { shift; $defaults->set ('target', shift); },
 		'deps!' => sub { shift; $defaults->set ('deps', shift); },
+		'autodeps!' => sub { shift; $defaults->set ('autodeps', shift); },
 		'rc!' => sub { shift; $read_rc = shift; if (not $read_rc) { $defaults->norc(); } },
 		'interactive!' => sub { shift; $defaults->set ('interactive', shift); },
 		'tarballdirs|tarballdir|tar|tarballs|tardirs|t=s' => sub { shift; $defaults->set ('tarballdirs', shift); },
@@ -831,7 +836,12 @@ Options:
                   Ignore/verify dependencies before building a component.
                   Default: --deps
 
-    --with foo, --without foo
+    --autodeps:
+                  Attempt to find spec files for missing dependencies
+                  in spec file search path (see --specdirs) and add them
+                  to the build as needed.
+
+    --with foo, --without foo, --with-foo, --without-foo
                   This option is passed on to rpm/pkgbuild as is.  Use it
                   for enabling/disabling conditional build options.
 
@@ -1396,8 +1406,91 @@ sub check_dependency ($$&&@) {
 	open_log ($save_log_name);
 	return $result;
     } elsif (!is_provided ($capability)) {
-	&$warning_callback ($spec_name, $capability, "NOT_FOUND");
-	return 0;
+	my $autodeps = $defaults->get ('autodeps');
+	my $autospec;
+	if ($autodeps) {
+	    # try to find a spec file based on the package name
+	    msg_info (1, "Trying to find spec file for $capability");
+
+	    my @the_spec_dirlist = split /[:]/, $defaults->get ('specdirs');
+	    my $specname = $capability . ".spec";
+
+	    msg_info (2, "Looking for $specname");
+	    foreach my $specdir (@the_spec_dirlist) {
+		if (-f "$specdir/$specname") {
+		    msg_info (3, "    ... in $specdir");
+		    $autospec = "$specdir/$specname";
+		    last;
+		}
+	    }
+
+	    if (not defined ($autospec) and $capability =~ /-(devel|root)$/) {
+		msg_info (2, "Looking for $specname");
+		foreach my $specdir (@the_spec_dirlist) {
+		    if (-f "$specdir/$specname") {
+			msg_info (3, "    ... in $specdir");
+			$autospec = "$specdir/$specname";
+			last;
+		    }
+		}
+	    }
+	    
+	    if (defined ($autospec)) {
+		msg_info (1, "Found $autospec");
+		my $spec = rpm_spec->new ($autospec, \@predefs);
+		# ignore duplicate specs
+		if (not defined ($all_specs{$spec->get_file_name()})) {
+		    my $this_spec_id = $spec_counter ++;
+		    $specs_to_build[$this_spec_id] = $spec;
+		    $build_status[$this_spec_id] = 'NOT_BUILT';
+		    $status_details[$this_spec_id] = '';
+		    $all_specs{$spec->get_file_name ()} = $this_spec_id;
+		    my $fname = $spec->get_file_name ();
+		    my @used_specs = get_specs_used ($fname);
+		    if (@used_specs) {
+			foreach my $subspec0 (@used_specs) {
+			    my $subspec = find_spec ($subspec0);
+			    if (not defined ($subspec)) {
+				$build_status[$this_spec_id] = 'FAILED';
+				$status_details[$this_spec_id] = "Spec file used by $fname not found: $subspec0\n";
+				msg_error ("Spec file used by $fname not found: $subspec0");
+				last;
+			    }
+			    if (!defined $specs_copied{$subspec}) {
+				$specs_copied{$subspec} = 1;
+				copy_spec ($spec, $subspec) or $specs_copied{$subspec} = 0;
+			    }
+			}
+		    }
+		    if ($build_status[$this_spec_id] eq "NOT_BUILT") {
+			msg_info (2, "Processing $autospec");
+			process_spec ($this_spec_id);
+			if (defined ($provider{$capability}) and
+			    $provider{$capability} == $this_spec_id) {
+			    msg_info (2, "$autospec defines $capability");
+			    msg_warning (0, "Added $autospec to the build to satisfy dependencies");
+			    my $result = &$recursive_callback ($provider{$capability}, @rec_cb_opts);
+			    return $result;
+			} else {
+			    msg_info (1, "Unfortunately, $autospec does not define $capability");
+			}
+		    } else {
+			return 0;
+		    }
+		} else {
+		    msg_info (1, "$autospec was already loaded");
+		    return 0;
+		}
+	    } else {
+		msg_info (1, "Not found.  Try specifying additional spec file directories using");
+		msg_info (1, "the --specdirs option");
+		return 0;
+	    }
+	} else {
+	    &$warning_callback ($spec_name, $capability, "NOT_FOUND");
+	    msg_info (1, "Hint: use the --autodeps to locate spec files for dependencies automatically");
+	    return 0;
+	}
     } else {
 	return 1;
     }
@@ -2348,8 +2441,6 @@ sub get_specs_used ($) {
     return @ret;
 }
 
-my %specs_copied;
-
 sub copy_specs () {
     msg_info (0, "Copying %use'd or %include'd spec files to SPECS directory");
     for (my $spec_id = 0; $spec_id <= $#specs_to_build; $spec_id++) {
@@ -2384,60 +2475,67 @@ sub copy_specs () {
     }
 }
 
-sub process_specs () {
-    msg_info (0, "Processing spec files\n");
-    for (my $spec_id = 0; $spec_id <= $#specs_to_build; $spec_id++) {
-	my $spec = $specs_to_build[$spec_id];
-	next if ($build_status[$spec_id] ne "NOT_BUILT");
-	msg_info (1, "Processing spec file " . $spec->get_base_file_name ());
-	my @packages = $spec->get_packages ();
-	if (defined $spec->{error}) {
-	    $build_status[$spec_id] = 'ERROR';
-	    $status_details[$spec_id] = $spec->{error};
-	    msg_warning (0, "Failed to process spec file $spec: $spec->{error}");
-	    next;
+sub process_spec ($) {
+    my $spec_id = shift;
+		  
+    my $spec = $specs_to_build[$spec_id];
+    return if ($build_status[$spec_id] ne "NOT_BUILT");
+    msg_info (1, "Processing spec file " . $spec->get_base_file_name ());
+    my @packages = $spec->get_packages ();
+    if (defined $spec->{error}) {
+	$build_status[$spec_id] = 'ERROR';
+	$status_details[$spec_id] = $spec->{error};
+	msg_warning (0, "Failed to process spec file $spec: $spec->{error}");
+	next;
+    }
+    foreach my $pkg (@packages) {
+	next if not defined $pkg;
+	my $pkgname = $pkg->get_name();
+	if (defined ($provider{$pkgname})) {
+	    my $prev_spec = $specs_to_build[$provider{$pkgname}];
+	    msg_warning (0, "skipping spec file " . 
+			 $spec->get_base_file_name() . 
+			 ": $pkgname already defined by spec file " . 
+			 $prev_spec->get_file_name ());
+	    $build_status[$spec_id] = "ERROR";
+	    $status_details[$spec_id] = "$pkgname is already defined by spec file " .
+		$prev_spec->get_file_name ();
+	} else {
+	    $provider{$pkgname} = $spec_id;
+	    msg_debug (2, "$pkgname is provided by spec $spec");
 	}
-	foreach my $pkg (@packages) {
-	    next if not defined $pkg;
-	    my $pkgname = $pkg->get_name();
-	    if (defined ($provider{$pkgname})) {
-		my $prev_spec = $specs_to_build[$provider{$pkgname}];
-		msg_warning (0, "skipping spec file " . 
-			     $spec->get_base_file_name() . 
-			     ": $pkgname already defined by spec file " . 
-			     $prev_spec->get_file_name ());
-		$build_status[$spec_id] = "ERROR";
-		$status_details[$spec_id] = "$pkgname is already defined by spec file " .
-		    $prev_spec->get_file_name ();
+	my @provides = $pkg->get_array ('provides');
+	foreach my $prov (@provides) {
+	    if (not defined $prov) {
+		next;
+	    }
+	    $prov =~ s/ .*//;
+	    if (defined ($provider{$prov}) and
+		($provider{$pkgname} != $spec_id)) {
+		my $prev_spec = $specs_to_build[$provider{$prov}];
+		msg_warning (0, "skipping spec file " .
+			     $spec->get_base_file_name() .
+			     ": $pkgname is already defined by spec file "
+			     . $prev_spec->get_file_name ());
+		if ($build_status[$spec_id] ne "ERROR") {
+		    $build_status[$spec_id] = "ERROR";
+		    $status_details[$spec_id] = "$pkgname is already defined by spec file " . $prev_spec->get_file_name ();
+		}
 	    } else {
-		$provider{$pkgname} = $spec_id;
-		msg_debug (2, "$pkgname is provided by spec $spec");
+		$provider{$prov} = $spec_id;
 	    }
-	    my @provides = $pkg->get_array ('provides');
-	    foreach my $prov (@provides) {
-		if (not defined $prov) {
-		    next;
-		}
-		$prov =~ s/ .*//;
-		if (defined ($provider{$prov}) and
-		    ($provider{$pkgname} != $spec_id)) {
-		    my $prev_spec = $specs_to_build[$provider{$prov}];
-		    msg_warning (0, "skipping spec file " .
-				 $spec->get_base_file_name() .
-				 ": $pkgname is already defined by spec file "
-				 . $prev_spec->get_file_name ());
-		    if ($build_status[$spec_id] ne "ERROR") {
-			$build_status[$spec_id] = "ERROR";
-			$status_details[$spec_id] = "$pkgname is already defined by spec file " . $prev_spec->get_file_name ();
-		    }
-		} else {
-		    $provider{$prov} = $spec_id;
-		}
-		msg_debug (2, "$prov is provided by spec $spec");
-	    }
+	    msg_debug (2, "$prov is provided by spec $spec");
 	}
     }
 }
+
+sub process_specs () {
+    msg_info (0, "Processing spec files\n");
+    for (my $spec_id = 0; $spec_id <= $#specs_to_build; $spec_id++) {
+	process_spec ($spec_id);
+    }
+}
+
 
 # merge new entries into the .pkgnames file
 sub pkgnames_merge ($$) {
