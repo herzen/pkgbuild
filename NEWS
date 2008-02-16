@@ -20,7 +20,104 @@ Version 1.3.0:
 
         - handle tar.Z tarballs.  Patch from Thomas Wagner.
 
+	- [ 1705877 ] defattr takes an optional 4th arg in rpmbuild
+	  Patch from Mike Bristow
+
+	- { } characters get deleted from %files entries.  Reported by
+	  Dave Lin.
+
+	- macros not expanded in the arguments of %files.  Reported by
+	  Dave Lin.
+
 	New features:
+
+	- pkgtool --autodeps
+	  The new --autodeps option allows pkgtool to pick up spec files
+	  from the directories specified by the "specdirs" configuration
+	  setting to satisfy dependencies.  Consider this example:
+
+	  $ cd SFE
+	  $ pkgtool build --download SFEgit.spec
+	  INFO: Copying %use'd or %include'd spec files to SPECS directory
+	  INFO: Processing spec files
+	  WARNING: skipping package SFEgit: required package SFEcurl not i...
+	  WARNING: and no spec file specified on the command line provides it
+	  WARNING: skipping package SFEgit: required package SFEasciidoc n...
+	  WARNING: and no spec file specified on the command line provides it
+	  WARNING: skipping package SFEgit: required package SFExmlto not ...
+	  WARNING: and no spec file specified on the command line provides it
+	  WARNING: skipping package SFEgit: required package SFEcurl-devel...
+	  WARNING: and no spec file specified on the command line provides it
+
+	  Summary:
+
+				   package |      status | details
+	  ---------------------------------+-------------+----------------...
+				    SFEgit |  DEP_FAILED | Dependency chec...
+
+	  This tries to build SFEgit, but SFEgit requires SFEasciidoc
+	  SFExmlto and SFEcurl-devel.  So you need to build these first.
+	  With the --autodeps option, pkgtool adds them to the build
+	  automatically:
+
+	  $ pkgtool build --download --autodeps SFEgit.spec
+	  INFO: Copying %use'd or %include'd spec files to SPECS directory
+	  INFO: Processing spec files
+	  WARNING: Added /export/work/SFE/SFEcurl.spec to the build to sat...
+	  INFO: Finding sources
+	  INFO: Downloading source http://curl.haxx.se/download/curl-7.17....
+	  INFO: Running pkgbuild -ba [...] SFEcurl.spec (SFEcurl)
+	  INFO: SFEcurl PASSED
+	  INFO: Installing SFEcurl
+	  INFO: Installing SFEcurl-devel
+	  WARNING: Added /export/work/SFE/SFEasciidoc.spec to the build to...
+	  INFO: Finding sources
+	  INFO: Downloading source http://downloads.sourceforge.net/asciid...
+	  INFO: Running pkgbuild -ba [...] SFEasciidoc.spec (SFEasciidoc)
+	  INFO: SFEasciidoc PASSED
+	  INFO: Installing SFEasciidoc
+	  INFO: Installing SFEasciidoc-root
+	  WARNING: Added /export/work/SFE/SFExmlto.spec to the build to sa...
+	  WARNING: Added /export/work/SFE/SFEfindutils.spec to the build t...
+	  INFO: Finding sources
+	  INFO: Downloading source http://ftp.gnu.org/pub/gnu/findutils/fi...
+	  INFO: Running pkgbuild -ba [...] SFEfindutils.spec (SFEfindutils)
+	  INFO: SFEfindutils PASSED
+	  INFO: Installing SFEfindutils
+	  INFO: Finding sources
+	  INFO: Downloading source http://cyberelk.net/tim/data/xmlto/stab...
+	  INFO: Running pkgbuild -ba [...] SFExmlto.spec (SFExmlto)
+	  INFO: SFExmlto PASSED
+	  INFO: Installing SFExmlto
+	  INFO: Finding sources
+	  INFO: Downloading source http://www.kernel.org/pub/software/scm/...
+	  INFO: Running pkgbuild -ba [...] SFEgit.spec (SFEgit)
+	  INFO: SFEgit PASSED
+	  INFO: Installing SFEgit
+
+	  Summary:
+
+				   package |      status | details
+	  ---------------------------------+-------------+-------------------
+				    SFEgit |      PASSED | 
+				   SFEcurl |      PASSED | 
+			       SFEasciidoc |      PASSED | 
+				  SFExmlto |      PASSED | 
+			      SFEfindutils |      PASSED | 
+
+          you can set specdirs in ./.pkgtoolrc or ~/.pkgtoolrc
+
+	- Requires: /path/to/file
+	  (also BuildRequires: /path/to/file and 
+                BuildConflicts: /path/to/file)
+
+	  This is based on patches provided by Mike Bristow. [ 1707525 ]
+
+	  When using Requires: /path/to/file, pkgbuild tries to
+	  find the file in the Solaris package contents file
+	  and adds the package to the depend file.  If more than
+	  one package owns the file (which can be a directory too),
+	  it prints a warning and picks one.
 
 	- %error and %warning macros:
 
@@ -32,6 +129,18 @@ Version 1.3.0:
 	      %warning foo
 
 	  prints "WARNING: foo" but the build continues
+
+	- pkgtool looks for spec files with a .spec suffix if not found
+	  without the suffix.
+
+	  $ pkgtool build SFEclutter
+	  INFO: Copying %use'd or %include'd spec files to SPECS directory
+	  INFO: Processing spec files
+	  INFO: Finding sources
+	  INFO: Running pkgbuild -ba [...] SFEclutter.spec (SFEclutter)
+	  INFO: SFEclutter PASSED
+	  INFO: Installing SFEclutter
+	  INFO: Installing SFEclutter-devel
 
 Version 1.2.0:
 

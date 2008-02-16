@@ -1,3 +1,26 @@
+2008-02-16  Laszlo Peter  <laca@sun.com>
+
+	* Makefile.am: add pkgdb.pm and pkgdbgrep.c
+	* NEWS: update
+	* TODO: delete completed items
+	* configure.in: bump version to 1.3.0, add AM_PROG_CC_C_O for
+	  pkgdbgrep
+	* pkgbuild.pl.in: fix bugs 1707525 Add requires: /path/to/file,
+	  1705877 defattr takes an optional 4th arg in rpmbuild.
+	  fix bug where { and } are eaten by glob even if the file
+	  exists and includes { and }
+	* pkgdb.pm.in: (new) perl module that finds the package name
+	  for a file name.  Based on code by Mike Bristow.
+	* pkgdbgrep.c: C program that quickly finds files in the Solaris
+	  contents file.  This is used instead of grep so that regexps
+	  don't need to be escaped.
+	* pkgtool.pl: try to find spec files with .spec appended if not
+	  found without the .spec
+	* rpm_file.pm: add defattributes arg
+	* rpm_package.pm: add dirmode as an optional attribute
+	* rpm_spec.pm.in: handle the optional dirmode attribute in
+	  %attr and %defattr evalutate the arguments of %files -f
+
 2008-02-02  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: implement --autodeps; adds spec files to the build

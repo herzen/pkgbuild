@@ -37,6 +37,7 @@
 use warnings;
 use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
+use pkgdb;
 use File::Basename;
 
 my $myname = "pkgbuild";
@@ -48,6 +49,7 @@ my $build_command;
 my $build_skip = 0;
 my $interactive_mode = 0;
 my $check_deps = 1;
+my $pkgdb = new pkgdb;
 
 my $mydir = `pwd`;
 chomp ($mydir);
@@ -423,6 +425,14 @@ sub check_dep ($$) {
 
     if (not defined ($dep)) {
 	return 1;
+    }
+
+    if ($dep =~ /^\s*\//) {
+	# Requires: /path/to/file  kind of dependency
+	if (-e $dep) {
+	    return 1;
+	}
+	return 0;
     }
 
     my $pkg = $dep;
@@ -877,11 +887,61 @@ sub make_depend ($$) {
 	    print $fhandle "P $dep " . $subpkg->get_tag ("summary") . "\n";
 	    next;
 	}
-	# look for a packages installed on the system
+	# look for packages installed on the system
 	my $pkgname = `/usr/bin/pkginfo '$dep.*' 2>/dev/null | head -1`;
 	chomp ($pkgname);
 	if ($pkgname ne '') {
 	    $pkgname =~ s/^\S*\s*$dep\s*(\S.*)$/$1/;
+	    print $fhandle "P $dep $pkgname\n"; 
+	    next;
+	}
+	
+        # If the dep is a file that exists, see if we can work out what
+        # package(s) own it
+        if (-e $dep) {
+            my @pkgs = $pkgdb->file2pkgs($dep);
+            my $pkg;
+            if (@pkgs == 1) { 
+                $pkg = $pkgs[0]
+            } elsif(@pkgs) {
+                # This /should/ be a directory, rather than a file
+                # (according to contents(4) on solaris-10, only 
+                # directories can be owned by more than one package)
+                # but I bet you can have files owned by more than one.
+                # We'll choose a package and warn.
+                my @favoured_packages = qw(SUNWcsr SUNWcsu SUNWcsxu
+                                           SUNWcar SUNWcarx SUNWcsd
+                                           SUNWcsl SUNWcslx);
+                foreach my $p (@favoured_packages) {
+                    # if we depend on a favourate package, depend 
+                    # only on it.
+                    if (not defined $pkg and grep $p eq $_, @pkgs) {
+                        $pkg = $p;
+			last;
+                    }
+                }
+                # If we have no better, sun packages are nicer than others
+                my @sunpkgs = grep /^SUNW/, @pkgs;
+                if (not defined $pkg and @sunpkgs == 1) { 
+                    $pkg = $sunpkgs[0];
+                }
+                # Oh, sod it.  Depend on the first one.  We could perhaps
+                # do better.
+                $pkg = $pkgs[0] unless defined $pkg;
+		
+                message("WARNING: $dep could mean a dependency on "
+                        . "many packages.  Choosing $pkg from "
+                        . join(', ', map "'$_'", @pkgs));
+	    }
+	    if ($pkg) {
+		my $pkgname = `/usr/bin/pkginfo '$pkg.*' 2>/dev/null | head -1`;
+		chomp ($pkgname);
+		if ($pkgname ne '') {
+		    $pkgname =~ s/^\S*\s*$pkg\s*(\S.*)$/$1/;
+		    print $fhandle "P $pkg $pkgname\n";
+		    next;
+		}
+	    }
         } else {
 	    # look in list of packages built by pkgtool on this system
 	    $pkgname = `grep "^${dep}:" "$topdir/.pkgnames" | head -1`;
@@ -1038,6 +1098,7 @@ sub get_proto_line ($$$$$$$$) {
     my $ghost = 0;
 
     my $type = get_file_type ($fname);
+
     if ($type eq '-') {
 	if (defined ($file) and not $file->is_ghost ()) {
 	    return undef;
@@ -1178,12 +1239,17 @@ sub get_proto_hash ($) {
 	next if not $file;
 	my $fn = "$file";
 	# remove duplicate /'s, e.g. /etc///passwd
-	$fn =~ s/^\/+//;
+	$fn =~ s/^\/+//g;
 	# remove /'s and whitespace from the end of the file name
 	# except if fn is /
 	$fn =~ s/(.)\/*\s*$/$1/;
 	my $class_name = $file->get_class ();
-	my @file_list = glob ($fn);
+	my @file_list;
+	if (-f $fn) {
+	    @file_list = ($fn);
+	} else {
+	    @file_list = glob ($fn);
+	}
 	if (not @file_list) {
 	    if ($file->is_ghost ()) {
 	    } else {
@@ -1192,6 +1258,7 @@ sub get_proto_hash ($) {
 	    }
 	}
 	my @attribs = $file->get_attributes ();
+	my @defattribs = $file->get_defattributes ();
 	my @rec_list = ();
 	foreach my $fname (@file_list) {
 	    if (-d $fname) {
@@ -1201,26 +1268,48 @@ sub get_proto_hash ($) {
 		}
 	    }
 	}
-	@file_list = (@file_list, @rec_list);
-	foreach my $fname (@file_list) {
+        my @all_file_list = (@file_list, @rec_list);
+        foreach my $fname (@all_file_list) {
 	    if (defined ($file_info{$fname})) {
 		message ("File listed twice: $fname");
 		$has_errors = 1;
 	    }
 	    if (not defined ($file_info{$fname})) {
+                # Assume that we are going to use the defattrs;
+                # we'll fixup later
+                my @attribsToUse = @defattribs;
+                my $mode = $attribsToUse[0];
+                # We use the directory mode if this 
+                # is a directory (and we have a default directory
+                # mode)
+                if ( -d $buildroot . '/' . $fname) {
+                    if (exists $attribsToUse[3]) {
+                        $mode = $attribsToUse[3];
+                    }
+                }
+
+                # We use the attribs (rather than the defattribs)
+                # if this is the file listed in %files AND
+                # we have attributes
+                if (grep $fname eq $_, @file_list) {
+                    if (@attribs) {
+                        @attribsToUse = @attribs;
+                        $mode = $attribs[0];
+                    }
+                }
+
 		my $pline = get_proto_line ($file,
 					    $class_name,
 					    $buildroot,
 					    $fname, 
 					    $basedir,
-					    $attribs[0],
-					    $attribs[1],
-					    $attribs[2]);
+					    $mode,
+					    $attribsToUse[1],
+					    $attribsToUse[2]);
 		if (not defined ($pline)) {
 		    message ("File not found by glob: $buildroot/$fname");
 		    $has_errors = 1;
 		}
-#FIXME: ignore directories
 		$file_info{$fname} = $pline;
 		if (defined ($all_files{$fname}) and
 		    substr ($pline, 0, 1) ne "d") {
@@ -1233,12 +1322,16 @@ sub get_proto_hash ($) {
 		   "/$parent_dir" ne "$basedir" and
 		   not defined ($file_info{$parent_dir}) and
 		   not defined ($default_dirs{$parent_dir})) {
+                my $dirmode = $defattr[3];
+                if (not defined $dirmode or $dirmode eq '-') {
+                    $dirmode = $defattr[0]; # fall back to old behaviour
+                }
 		my $pline = get_proto_line (undef,
 					    "none",
 					    $buildroot,
 					    $parent_dir,
 					    $basedir,
-					    $defattr[0],
+					    $dirmode,
 					    $defattr[1],
 					    $defattr[2]);
 		if (defined ($pline)) {

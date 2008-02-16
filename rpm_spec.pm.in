@@ -2121,7 +2121,7 @@ sub _process_files ($$$;$) {
 	if (defined ($macro_opts{"f"}) and defined ($package_ref)) {
 	    my @metafiles = split /\n/, $macro_opts{"f"};
 	    foreach my $mf (@metafiles) {
-		$package_ref->add_metafile ($mf);
+		$package_ref->add_metafile ($self->eval($mf));
 	    }
 	}
     } else {
@@ -2142,7 +2142,7 @@ sub _process_files ($$$;$) {
     my @defattr = $package_ref->get_defattr ();
     my @all_verify = rpm_file->get_all_verify ();
 
-    my @this_attr = (@defattr);
+    my @this_attr = ();
     my $is_doc = 0;
     my $is_config = 0;
     my $is_ghost = 0;
@@ -2160,7 +2160,7 @@ sub _process_files ($$$;$) {
 	return 1;
     }
     my $eline = $self->_preprocess_line ($line);
- 
+
     while (1) {
 	if ($eline =~ /^$/) {
 	    # ignore empty lines
@@ -2173,16 +2173,26 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^\s*%include/) {
 	    $self->_set_error ("%include not allowed within %files", $fhandle);
 	} elsif ($eline =~ /^\s*%defattr/) {
-	    if ($eline =~ /^%defattr\s*\(\s*(-|\?|[0-9]+)\s*,\s*(-|\?|[a-zA-Z0-9][a-zA-Z0-9_-]*)\s*,\s*(-|\?|[a-zA-Z0-9][a-zA-Z0-9_-]*)\s*\)\s*$/) {
+	    if ($eline =~ /
+                             ^%defattr
+                             \s*\(
+                             \s*(-|\?|[0-9]+)  # mode 
+                             \s*,\s*(-|\?|[a-zA-Z0-9][a-zA-Z0-9_-]*) #,user
+                             \s*,\s*(-|\?|[a-zA-Z0-9][a-zA-Z0-9_-]*) #,group
+                             (?:\s*,\s*(-|\?|[0-9]+))? #optional ,dirmode
+                             \s*\)\s*$
+                         /x) {
 		my $mod = $1;
 		my $usr = $2;
 		my $grp = $3;
+		my $dmod = '-';
+                $dmod = $4 if defined $4;
 		if (_is_number ($usr) or _is_number ($grp)) {
 		    $self->_set_error ("%defattr: user and group must be symbolic, not numeric", $fhandle);
 		    return (0);
 		}
-		@defattr = ($mod, $usr, $grp);
-		$package_ref->set_defattr ($mod, $usr, $grp);
+		@defattr = ($mod, $usr, $grp, $dmod);
+		$package_ref->set_defattr ($mod, $usr, $grp, $dmod);
 	    } else {
 		$self->_set_error ("syntax error: $line", $fhandle);
 		return (0);
@@ -2238,7 +2248,7 @@ sub _process_files ($$$;$) {
 	    $eline =~ s/^\s*%dir\s*//;
 	    next;
 	} elsif ($eline =~ /^\s*(\/.*\S)\s*$/) {
-	    my $file = rpm_file->new ($1, \@this_attr, \@this_verify,
+	    my $file = rpm_file->new ($1, \@this_attr, \@defattr, \@this_verify,
 				     not ($is_dir), $is_doc,
 				     $is_config, $class_name, $is_ghost,
 		                     $is_hardlink);
@@ -2250,7 +2260,7 @@ sub _process_files ($$$;$) {
 	    return $self->_process_top_level ($fhandle, $line);
 	}
 
-	@this_attr = (@defattr);
+	@this_attr = ();
 	$is_doc = 0;
 	$is_config = 0;
         $is_ghost = 0;

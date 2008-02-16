@@ -37,10 +37,11 @@ my @_all_verify =  ('owner', 'group', 'mode', 'md5', 'size', 'maj', 'min',
 		    'symlink', 'mtime');
 
 # Create a new rpm_file object.
-sub new ($$;$$$$$$$) {
+sub new ($$;$$$$$$$$) {
     my $class = shift;
     my $glob = shift;
     my $attribs = shift;
+    my $defattribs = shift;
     my $verify = shift;
     my $is_recursive = shift;
     my $is_doc = shift;
@@ -50,12 +51,8 @@ sub new ($$;$$$$$$$) {
     my $is_hardlink = shift;
     my $self = {};
 
-    if (not @$attribs) {
-	my @new_attribs = ('-', '-', '-');
-	$attribs = \@new_attribs;
-    } else {
-	my @new_attribs = (@$attribs);
-	$attribs = \@new_attribs;
+    if (not @$defattribs) {
+       $defattribs = [ '-', '-', '-', '-' ];
     }
 
     if (not @$verify) {
@@ -86,7 +83,12 @@ sub new ($$;$$$$$$$) {
     }
 
     $self->{_glob} = $glob;
-    $self->{_attributes} = $attribs;
+    # ensure that _attributes and _defattributes
+    # are references to a copy of the list passed in,
+    # not a reference to the list passed in as the 
+    # called may change them
+    $self->{_attributes} = [ @$attribs ];
+    $self->{_defattributes} = [ @$defattribs ];
     $self->{_verify} = $verify;
     $self->{_is_doc} = $is_doc;
     $self->{_is_config} = $is_config;
@@ -131,6 +133,13 @@ sub _process_verify ($) {
 
 sub get_all_verify () {
     return (@_all_verify);
+}
+
+sub get_defattributes ($) {
+    my $self = shift;
+
+    my $ref = $self->{_defattributes};
+    return @$ref;
 }
 
 sub get_attributes ($) {

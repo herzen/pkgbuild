@@ -54,7 +54,7 @@ sub new ($$;&) {
     $self->{_blocks} = {};
     my @metafiles = ();
     $self->{_metafiles} = \@metafiles;
-    my @defattr = ('-', '-', '-');
+    my @defattr = ('-', '-', '-', '-');
     $self->{_defattr} = \@defattr;
 
     # initialisation
@@ -94,7 +94,7 @@ sub new_subpackage ($$$) {
     $self->{_blocks} = {};
     my @metafiles = ();
     $self->{_metafiles} = \@metafiles;
-    my @defattr = ('-', '-', '-');
+    my @defattr = ('-', '-', '-', '-');
     $self->{_defattr} = \@defattr;
 
     return (bless $self, $class);
@@ -304,14 +304,14 @@ sub get_class_script ($$$) {
     return $$parent_spec -> get_class_script ($class_name, $script_name);
 }
 
-sub set_defattr ($$$$) {
+sub set_defattr ($$$$$) {
     my $self = shift;
     my $mode = shift;
     my $user = shift;
     my $group = shift;
+    my $dirmode = shift;
 
-    my $defattr_ref = $self->{_defattr};
-    @$defattr_ref = ($mode, $user, $group);
+    $self->{_defattr}= [$mode, $user, $group, $dirmode];
 }
 
 sub get_defattr ($) {

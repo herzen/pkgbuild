@@ -571,6 +571,10 @@ sub read_spec ($) {
 	$spec = rpm_spec->new ($spec_name, \@predefs);
 	# ignore duplicate specs
 	return if defined ($all_specs{$spec->get_file_name()});
+    } elsif (-f "${spec_name}.spec") {
+	$spec = rpm_spec->new ("${spec_name}.spec", \@predefs);
+	# ignore duplicate specs
+	return if defined ($all_specs{$spec->get_file_name()});	
     } else {
 	if (not $spec_name =~ /^\//) {
 	    my @the_spec_dirlist = split /[:]/, $defaults->get ('specdirs');
@@ -578,6 +582,13 @@ sub read_spec ($) {
 		next if not defined $specdir;
 		$spec = rpm_spec->new ("$specdir/$spec_name", \@predefs);
 		last if defined $spec;
+	    }
+	    if (not defined $spec) {
+		foreach my $specdir (@the_spec_dirlist) {
+		    next if not defined $specdir;
+		    $spec = rpm_spec->new ("$specdir/${spec_name}.spec", \@predefs);
+		    last if defined $spec;
+		}
 	    }
 	}
     }
@@ -1067,8 +1078,19 @@ my %pkginfo_version;
 sub is_provided ($) {
     my $capability = shift;
 
+    # FIXME: this deletes the version requirements, but we really should
+    # implement that
+    $capability =~ s/\s.*//;
+
+    if ($capability =~ /^\//) {
+	# Requires: /path/to/file or BuildRequires: /path/to/file
+	if (-e $capability) {
+	    return 1;
+	} else {
+	    return 0;
+	}
+    }
     if ($os eq "solaris") {
-	$capability =~ s/\s.*//;
 	if (defined $pkginfo{$capability}) {
 	    return $pkginfo{$capability};
 	}
@@ -1084,7 +1106,6 @@ sub is_provided ($) {
 	}
 	return $result;
     } else {
-	$capability =~ s/\s.*//;
 	`sh -c "rpm -q --whatprovides $capability" >/dev/null 2>&1`;
 	my $result = (! $?);
 	`sh -c "rpm -q $capability" >/dev/null 2>&1`;
@@ -1406,6 +1427,7 @@ sub check_dependency ($$&&@) {
 	open_log ($save_log_name);
 	return $result;
     } elsif (!is_provided ($capability)) {
+	return 0 if $capability =~ /^\//;
 	my $autodeps = $defaults->get ('autodeps');
 	my $autospec;
 	if ($autodeps) {
