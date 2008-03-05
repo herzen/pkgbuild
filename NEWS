@@ -29,6 +29,8 @@ Version 1.3.0:
 	- macros not expanded in the arguments of %files.  Reported by
 	  Dave Lin.
 
+	- generate xhtml reports, patch from Damien Carbery.
+
 	New features:
 
 	- pkgtool --autodeps
