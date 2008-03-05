@@ -1,3 +1,8 @@
+2008-03-05  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: generate xhtml build reports, patch from
+	  Damien Carbery.
+
 2008-02-16  Laszlo Peter  <laca@sun.com>
 
 	* Makefile.am: add pkgdb.pm and pkgdbgrep.c

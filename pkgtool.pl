@@ -197,7 +197,7 @@ sub cannot_install_error ($$;$) {
     print "Cannot continue.\n\n";
     if (defined ($other_mode)) {
 	print "You may want to try the \"$other_mode\" command instead.\n";
-	print "Use \"pkgtool --help\" for more information about the \"other_mode\" command\n";
+	print "Use \"pkgtool --help\" for more information about the \"$other_mode\" command\n";
     }
     exit (1);
 }
@@ -979,21 +979,36 @@ sub print_status_html {
 	msg_warning (0, "Failed to open file $the_summary_log for writing");
 	return;
     }
-	
-    print SUM_LOG "<HTML>\n<HEAD>\n<TITLE>Build report</TITLE>\n";
-    print SUM_LOG "</HEAD>\n<BODY BGCOLOR=#FFFFFF>\n";
+
+    print SUM_LOG '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"', "\n";
+    print SUM_LOG '    "http://www.w3.org/tr/xhtml1/DTD/xhtml1-strict.dtd">', "\n";
+    print SUM_LOG '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">', "\n";
+    print SUM_LOG "<head>\n<title>Build report</title>\n";
+    print SUM_LOG '<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />', "\n";
+    print SUM_LOG '<style type="text/css">', "\n";
+    print SUM_LOG 'body { background-color: #ffffff; }', "\n";
+    print SUM_LOG 'table { border: 1px solid #999999; border-collapse: collapse; }', "\n";
+    print SUM_LOG 'td { border: 1px solid #999999; padding: 5px; border-spacing: 0px; }', "\n";
+    print SUM_LOG 'td.header { background-color: #666699; }', "\n";
+    print SUM_LOG '.passed { color: #11aa11; }', "\n";
+    print SUM_LOG '.failed { color: #cc1111; }', "\n";
+    print SUM_LOG '.building { color: #ffa500; }', "\n";
+    print SUM_LOG '.dependency { color: #ffa500; }', "\n";
+    print SUM_LOG '.other { color: #cc1111; }', "\n";
+    print SUM_LOG '</style>', "\n";
+    print SUM_LOG "</head>\n<body>\n";
     my $the_summary_title = $defaults->get ('summary_title');
     if (defined ($the_summary_title)) {
-	print SUM_LOG "<P><H3>$the_summary_title</H3><P>\n";
+	print SUM_LOG "<h3>$the_summary_title</h3>\n";
     }
-    print SUM_LOG "<TABLE BORDER=1 CELLSPACING=0 CELLPADDING=5 WIDTH=90%>\n";
-    print SUM_LOG " <TR>\n";
-    print SUM_LOG "  <TD BGCOLOR=#666699><B>package</B></TD>\n";
-    print SUM_LOG "  <TD BGCOLOR=#666699><B>version</B></TD>\n";
-    print SUM_LOG "  <TD BGCOLOR=#666699><B>release</B></TD>\n";
-    print SUM_LOG "  <TD BGCOLOR=#666699><B>status</B></TD>";
-    print SUM_LOG "  <TD BGCOLOR=#666699><B>details</B></TD>\n";
-    print SUM_LOG " </TR>\n";
+    print SUM_LOG "<table>\n";
+    print SUM_LOG " <tr>\n";
+    print SUM_LOG '  <td class="header"><b>package</b></td>', "\n";
+    print SUM_LOG '  <td class="header"><b>version</b></td>', "\n";
+    print SUM_LOG '  <td class="header"><b>release</b></td>', "\n";
+    print SUM_LOG '  <td class="header"><b>status</b></td>', "\n";
+    print SUM_LOG '  <td class="header"><b>details</b></td>', "\n";
+    print SUM_LOG " </tr>\n";
     for (my $i = 0; $i <= $#specs_to_build; $i++) {
 	my $log_name = get_log_name ($i);
 	$spec_name=$specs_to_build[$i]->get_name ();
@@ -1001,51 +1016,50 @@ sub print_status_html {
 	$version = "unknown" if not defined $version;
 	my $release = $specs_to_build[$i]->get_value_of ("release");
 	$release = "" if not defined $release;
-	print SUM_LOG " <TR>\n";
+	print SUM_LOG " <tr>\n";
 	my $the_srpm_url = $defaults->get ('srpm_url');
 	if (defined ($the_srpm_url)) {
 	    if (($build_status[$i] eq "PASSED") and defined ($the_srpm_url)) {
-		print SUM_LOG "  <TD><A HREF=\"$the_srpm_url/$spec_name-$version-$release.src.rpm\">$spec_name</A></TD>\n";
+		print SUM_LOG "  <td><a href=\"$the_srpm_url/$spec_name-$version-$release.src.rpm\">$spec_name</a></td>\n";
 	    } else {
-		print SUM_LOG "  <TD>$spec_name</TD>\n";
+		print SUM_LOG "  <td>$spec_name</td>\n";
 	    }
 	} else {
-	    print SUM_LOG "  <TD>$spec_name</TD>\n";
+	    print SUM_LOG "  <td>$spec_name</td>\n";
 	}
-	print SUM_LOG "  <TD>", $version, "</TD>\n";
-	print SUM_LOG "  <TD>", $release, "</TD>\n";
+	print SUM_LOG "  <td>", $version, "</td>\n";
+	print SUM_LOG "  <td>", $release, "</td>\n";
 	my $color_start = "";
 	my $color_end = "";
 	if ($build_status[$i] eq "PASSED") {
-	    $color_start = "<FONT COLOR=#11AA11>";
-	    $color_end = "</FONT>";
+	    $color_start = '<span class="passed">';
+	    $color_end = '</span>';
 	} elsif ($build_status[$i] eq "BEING_BUILT") {
-	    $color_start = "<FONT COLOR=#FFA500>";
-	    $color_end = "</FONT>";
+	    $color_start = '<span class="building">';
+	    $color_end = '</span>';
 	} elsif ($build_status[$i] eq "DEP") {
-	    $color_start = "<FONT COLOR=#FFA500>";
-	    $color_end = "</FONT>";
+	    $color_start = '<span class="dependency">';
+	    $color_end = '</span>';
 	} elsif ($build_status[$i] eq "NOT_BUILT") {
 	    $color_start = "";
 	    $color_end = "";
 	} else {
-	    $color_start = "<FONT COLOR=#CC1111>";
-	    $color_end = "</FONT>";
+	    $color_start = '<span class="other">';
+	    $color_end = '</span>';
 	}
 	my $the_logdir_url = $defaults->get ('logdir_url');
 	if (defined ($the_logdir_url) and ($build_status[$i] ne "NOT_BUILT")) {
-	    print SUM_LOG "  <TD><A HREF=\"$the_logdir_url/$log_name\">",
-	    $color_start, $build_status[$i], $color_end,
-	    "</A></TD>\n";
+	    print SUM_LOG "  <td><a href=\"$the_logdir_url/$log_name\">",
+	    $color_start, $build_status[$i], $color_end, "</a></td>\n";
 	} else {
-	    print SUM_LOG "  <TD>", 
+	    print SUM_LOG "  <td>", 
 	    $color_start, $build_status[$i], $color_end,
-	    "</A></TD>\n";
+	    "</td>\n";
 	}
 	if ($build_status[$i] eq "PASSED") {
 	    my $the_rpm_url = $defaults->get ('rpm_url');
 	    if (defined ($the_rpm_url)) {
-		print SUM_LOG "  <TD>package: \n";
+		print SUM_LOG "  <td>package: \n";
 		my @pkgs = $specs_to_build[$i]-> get_package_names ($ds);
 		my $ctr = 1;
 		for my $pkg (@pkgs) {
@@ -1054,21 +1068,21 @@ sub print_status_html {
 			    $pkg = "$pkg.tar.gz";
 			}
 		    }
-		    print SUM_LOG "    <A HREF=\"$the_rpm_url/$pkg\">[$ctr]</a> \n";
+		    print SUM_LOG "    <a href=\"$the_rpm_url/$pkg\">[$ctr]</a> \n";
 		    $ctr++;
 		}
-		print SUM_LOG "  </TD>\n";
+		print SUM_LOG "  </td>\n";
 	    } else {
-		print SUM_LOG "  <TD>&nbsp;</TD>\n";
+		print SUM_LOG "  <td>&nbsp;</td>\n";
 	    }
 	} else {
-	    print SUM_LOG "  <TD><PRE>", $status_details[$i], "</PRE></TD>\n";
+	    print SUM_LOG "  <td><pre>", $status_details[$i], "</pre></td>\n";
 	}
-	print SUM_LOG " </TR>\n";
+	print SUM_LOG " </tr>\n";
     }
-    print SUM_LOG "</TABLE><P>\n";
-    print SUM_LOG "<SMALL>", `date`, "</SMALL>\n";
-    print SUM_LOG "</BODY>\n</HTML>\n";
+    print SUM_LOG "</table>\n";
+    print SUM_LOG "<p><small>", scalar localtime(), "</small></p>\n";
+    print SUM_LOG "</body>\n</html>\n";
     close SUM_LOG;
 }
 
@@ -1504,13 +1518,15 @@ sub check_dependency ($$&&@) {
 		    return 0;
 		}
 	    } else {
-		msg_info (1, "Not found.  Try specifying additional spec file directories using");
-		msg_info (1, "the --specdirs option");
+		&$warning_callback ($spec_name, $capability, "NOT_FOUND");
+		msg_info (0, "No spec file for $capability found.");
+		msg_info (0, "Try specifying additional spec file directories");
+		msg_info (0, "using the --specdirs option");
 		return 0;
 	    }
 	} else {
 	    &$warning_callback ($spec_name, $capability, "NOT_FOUND");
-	    msg_info (1, "Hint: use the --autodeps to locate spec files for dependencies automatically");
+	    msg_info (0, "Hint: use the --autodeps to locate spec files for dependencies automatically");
 	    return 0;
 	}
     } else {
@@ -2508,7 +2524,7 @@ sub process_spec ($) {
 	$build_status[$spec_id] = 'ERROR';
 	$status_details[$spec_id] = $spec->{error};
 	msg_warning (0, "Failed to process spec file $spec: $spec->{error}");
-	next;
+	return;
     }
     foreach my $pkg (@packages) {
 	next if not defined $pkg;
