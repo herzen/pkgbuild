@@ -132,6 +132,11 @@ Version 1.3.0:
 
 	  prints "WARNING: foo" but the build continues
 
+        - implement the %check scriptlet.  It gets run after %install
+	  for sanity testing the build.  A typical command in the %check
+	  section is "make check" whenever the build system of the module
+	  supports it.
+
 	- pkgtool looks for spec files with a .spec suffix if not found
 	  without the suffix.
 

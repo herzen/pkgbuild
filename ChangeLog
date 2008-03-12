@@ -1,3 +1,9 @@
+2008-03-12  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: run the %check block after %install
+	* rpm_spec.pm.in: implement support for the %check scriptlet
+	* NEWS: update
+
 2008-03-05  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: generate xhtml build reports, patch from

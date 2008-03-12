@@ -1699,6 +1699,7 @@ sub main () {
 	}
 	if ($build_command =~ /i/) {
 	    do_block ($spec, 'install') or exit (1);
+	    do_block ($spec, 'check') or exit (1);
 	}
 	if ($build_command =~ /[ba]/) {
 	    my $pkgdir = $spec->eval ("%_pkgdir");

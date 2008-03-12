@@ -61,7 +61,7 @@ my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 # items in this list should not be prefixes of items later in the same list
 # i.e. pre|preun wrong,  preun|pre good.
 my $all_script_names = "preun|postun|pre|post|verifyscript|triggerin|triggerun|triggerpostun|check";
-my $all_block_names = "prep|build|install|clean|changelog|$all_script_names";
+my $all_block_names = "prep|build|install|clean|check|changelog|$all_script_names";
 my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use";
 
 sub _init () {
@@ -1983,7 +1983,7 @@ sub _process_block ($$$;$$) {
 	}
     }
 
-    if (not $block_name =~ /(changelog|[ir]class|prep|build|install|clean)/) {
+    if (not $block_name =~ /(changelog|[ir]class|prep|build|install|check|clean)/) {
 	$package_ref = undef;
 	my $all_packages = $self->{_packages};
 	foreach $package (@$all_packages) {
@@ -2000,7 +2000,7 @@ sub _process_block ($$$;$$) {
     }
 
     if (not defined $self->{_blocks}->{$block_name}) {
-	if ($block_name =~ /(build|install|clean)/) {
+	if ($block_name =~ /(build|install|check|clean)/) {
 	    my $dirname = $self->eval ("%{_build_src_dir_name}");
 	    if ($dirname ne "%{_build_src_dir_name}") {
 		$self->{_blocks}->{$block_name} = "cd $dirname\n";
@@ -2050,7 +2050,7 @@ sub _process_block ($$$;$$) {
 		print "WARNING: undefined macro $line\n";
 	    }
 	} elsif (not $line =~ /^%(${all_keywords}|%{?)/) {
-	    if ($block_name =~ /(prep|build|install|clean|changelog)/) {
+	    if ($block_name =~ /(prep|build|install|check|clean|changelog)/) {
 		$self->_append_to_block ($block_name, $eline);
 	    } else {
 		$package_ref->append_to_block ($block_name, $eline);
