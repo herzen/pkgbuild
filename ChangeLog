@@ -1,3 +1,8 @@
+2008-03-26  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: create the download directory if it doesn't exist.
+	  Reported by Michal Bielicki.
+
 2008-03-12  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: run the %check block after %install

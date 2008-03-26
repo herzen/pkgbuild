@@ -1716,6 +1716,14 @@ sub wget_source ($$$) {
 
     msg_info (0, "Downloading source $src");
 
+    # make sure that the download dir exists
+    if (not mkdir_p ($download_dir)) {
+	msg_error ("Failed to create download directory $download_dir");
+	$build_status[$spec_id] = 'ERROR';
+	$status_details[$spec_id] = "cannot create download directory";
+	return 0;
+    }
+
     # download to temporary file .$base_src
     unlink "$download_dir/.$base_src";
     my $wget_command = "$wget -nd -nH --tries=1 -T 60 -O $download_dir/.$base_src $src 2>&1";
