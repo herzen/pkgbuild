@@ -64,6 +64,11 @@ my $all_script_names = "preun|postun|pre|post|verifyscript|triggerin|triggerun|t
 my $all_block_names = "prep|build|install|clean|check|changelog|$all_script_names";
 my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use";
 
+sub get_version () {
+    my $version = "@PKGBUILD_VERSION@";
+    return $version;
+}
+
 sub _init () {
     $arch = `uname -p`;
     chomp ($arch);

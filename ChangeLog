@@ -1,5 +1,10 @@
 2008-03-26  Laszlo Peter  <laca@sun.com>
 
+	* pkgtool.pl: add --version command line option
+	* rpm_spec.pm.in: add get_version function
+
+2008-03-26  Laszlo Peter  <laca@sun.com>
+
 	* configure.in: post release version bump.
 	* pkgtool.pl: create the download directory if it doesn't exist.
 	  Reported by Michal Bielicki.

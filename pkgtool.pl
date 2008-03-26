@@ -33,6 +33,9 @@ use config;
 use File::Copy;
 use File::Basename;
 
+my $myname = "pkgtool";
+my $myversion = rpm_spec::get_version();
+
 # --------- global vars ----------------------------------------------------
 # config settings
 my $the_good_build_dir;
@@ -659,6 +662,12 @@ sub process_with ($$) {
     push (@predefs, "_${with}_${optname} --${with}-${opt}");
 }
 
+my $version_printed = 0;
+sub print_version () {
+    $version_printed = 1;
+    print "$myname version $myversion\n";
+}
+
 sub process_options {
     
     my $default_topdir = $topdir;
@@ -675,6 +684,7 @@ sub process_options {
 
     GetOptions ('v|verbose+' => \$verbose,
 		'debug=n' => sub { shift; $defaults->set ('debug', shift); },
+		'version' => \&print_version,
 		'q|quiet' => sub { $verbose = 0; },
 		'specdirs|specdir|spec|specs|S=s' => sub { shift; $defaults->set ('specdirs', shift); },
 		'halt-on-errors!' => sub { shift; $defaults->set ('halt_on_errors', shift); },
