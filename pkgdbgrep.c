@@ -133,13 +133,14 @@ static int read_contents () {
   int *fname_lengths;
   size_t len;
   int fd;
+  int i, n;
 
   /* calculate the length of each path name, so we can later
      use strncmp() for comparing with the contents line */
   if ((fname_lengths = malloc (n_files_to_find)) == NULL) {
     return 1;
   }
-  for (int i = 0; i < n_files_to_find; i++) {
+  for (i = 0; i < n_files_to_find; i++) {
     fname_lengths[i] = strlen (files_to_find[i]);
   }
 
@@ -159,7 +160,7 @@ static int read_contents () {
     while (n_files_to_find && (p != p_new) && (p_new < buf_end)) {
       p = p_new;
       /* p is at the beginning of a line */
-      for (int i = 0; i < n_files_to_find; i++) {
+      for (i = 0; i < n_files_to_find; i++) {
 	if ((buf_end - p) <= fname_lengths[i]) {
 	  /* need to read more */
 	  memcpy (buf, p, buf_end - p);
@@ -178,7 +179,7 @@ static int read_contents () {
 	      buf_start = buf + (buf_end - p);
 	    } else {
 	      /* don't look for this file anymore */
-	      for (int n = i; n + 1 < n_files_to_find; n++) {
+	      for (n = i; n + 1 < n_files_to_find; n++) {
 		files_to_find[n] = files_to_find[n+1];
 		fname_lengths[n] = fname_lengths[n+1];
 	      }

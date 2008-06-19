@@ -1843,9 +1843,11 @@ sub copy_sources ($) {
 	    }
 	    if (not $defaults->get ("download")) {
 		msg_info (0, "Hint: you need to use the --download option to enable automatic downloads");
+		$status_details[$spec_id] = "Source $base_src not found";
+	    } else {
+		$status_details[$spec_id] = "Source $base_src download failed";
 	    }
 	    $build_status[$spec_id] = 'FAILED';
-	    $status_details[$spec_id] = "Source $base_src not found";
 	    msg_error ($specs_to_build[$spec_id] . ": Source file $base_src not found");
 	    return 0;
 	}

@@ -414,6 +414,7 @@ sub dumprc ($) {
         print Text::Wrap::wrap( '# ', '# ', "$key [$type]: " . $self->{'docs'}->{$key} ), "\n";
 
 	my $val = $self->get ($key);
+	$val = '' if not defined ($val);
 	if ($self->is_default ($key)) {
 	    print "# $key:\t$val\n";
 	} else {
