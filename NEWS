@@ -1,3 +1,23 @@
+Version 1.3.1:
+
+	Bugs fixed:
+
+	- [ 1953614 ] write to single datastream
+
+	- [ 1953613 ] print filename of file stream written to
+
+	- allow installation if the user has either the Software
+	  Installation or the Primary Administrator profile.  Also
+	  verify that they are not masked by Basic Solaris User.
+
+	- stop using c99 features in pkgdbgrep.c
+
+	- kill perl warnings for undefined variables in --dumprc
+	  (reported by Andras Barna)
+
+	- create the download directory before first use if it doesn't
+ 	  exist. (reported by Michal Bielicki)
+
 Version 1.3.0:
 
 	Bugs fixed: 

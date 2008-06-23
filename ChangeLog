@@ -1,3 +1,9 @@
+	======= pkgbuild 1.3.1 =======
+
+2008-06-23  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: update for 1.3.1 release
+
 2008-06-23  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: write all packages in a single datastream
