@@ -1,3 +1,15 @@
+2008-06-23  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: write all packages in a single datastream
+	  when datastream format is requested (Bug 1953614); print the
+	  names of packages at the end of execution (Bug 1953613)
+	* pkgtool.pl: write the name of the package datastream if
+	  datastream format is requested; allow installation if
+	  the user has either Software Installation or
+	  Primary Administrator profile.
+	* rpm_spec.pm.in: change get_package_names to return
+	  the name of a single datastream in the datastream case.
+
 2008-06-19  Laszlo Peter  <laca@sun.com>
 
 	* config.pm: set undefined settings to '' to avoid perl errors

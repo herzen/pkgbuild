@@ -54,6 +54,7 @@ my $pkgdb = new pkgdb;
 my $mydir = `pwd`;
 chomp ($mydir);
 my @spec_names = ();
+my @packages_written = ();
 
 my $arch;
 my $os;
@@ -950,7 +951,7 @@ sub make_depend ($$) {
 		$pkgname =~ s/^${dep}:(.*)/$1/;
 	    } else {
 		# look in a predefined list of package names
-		$pkgname = `grep "^${dep}:" "@PKGBUILD_LIBDIR@/pkgnames" | head -1`;
+		$pkgname = `grep "^${dep}:" "/export/home/laca/pkgbuild-bin/lib/pkgbuild-1.3.1/pkgnames" | head -1`;
 		chomp ($pkgname);
 		if ($pkgname ne '') {
 		    $pkgname =~ s/^${dep}:(.*)/$1/;
@@ -1407,19 +1408,8 @@ sub make_solaris_pkg ($$) {
     system ("/usr/bin/pkgmk -o -r $buildroot -d $pkgdir -f $protodir/$fname");
     my $retval = $?;
     if ($retval) {
+	$spec->_set_error ("pkgmk failed for $fname");
 	return 0;
-    }
-
-    if ($pkgformat eq "datastream") {
-	my $inst = $package->get_tag ('SUNW_Pkg');
-	$inst = "$package" unless $inst;
-	my $version = $package->get_tag ('Version');
-	my $dsname = "${inst}-${version}.${arch}.pkg";
-	system ("/usr/bin/pkgtrans -o -s $pkgdir $pkgdir/$dsname $inst");
-	$retval = $?;
-	if (not $retval) {
-	    system ("rm -rf $pkgdir/$inst");
-	}
     }
 
     return (not $retval);
@@ -1434,11 +1424,33 @@ sub make_packages ($) {
     }
 
     my @packages = $spec->get_packages ();
+    my $pkgdir = $spec->eval ("%_pkgdir");
+    my $pkgnames = '';
 
     foreach my $pkg (@packages) {
 	if ($pkg->has_files()) {
 	    $has_files_at_all = 1;
 	    make_solaris_pkg ($spec, $pkg) or return 0;
+	    my $inst = $pkg->get_tag ('SUNW_Pkg');
+	    $inst = "$pkg" unless $inst;
+	    $pkgnames = "$pkgnames $inst";
+	    if ($pkgformat ne 'datastream') {
+		push (@packages_written, "$pkgdir/$inst");
+	    }
+	}
+    }
+
+    my $dsname = '';
+    if ($pkgnames ne '' and $pkgformat eq "datastream") {
+	my $inst = $packages[0]->get_tag ('SUNW_Pkg');
+	$inst = $packages[0]->get_tag ('Name') unless $inst;
+	$inst = "$spec" unless $inst;
+	my $version = $packages[0]->get_tag ('Version');
+	$dsname = "${inst}-${version}.${arch}.pkg";
+	system ("/usr/bin/pkgtrans -o -s $pkgdir $pkgdir/$dsname $pkgnames");
+	$retval = $?;
+	if (not $retval) {
+	    system ("cd $pkgdir && rm -rf $pkgnames");
 	}
     }
 
@@ -1476,6 +1488,11 @@ sub make_packages ($) {
     
     if ($unpackaged_files_terminate_build and $unpackaged) {
 	return 0;
+    }
+    if ($pkgnames ne '' and $pkgformat eq "datastream") {
+	print "Package datastream written to $pkgdir/$dsname\n";
+	$pkgnames =~ s/^ *//;
+	push (@packages_written, "$pkgdir/$dsname ($pkgnames)");
     }
     return 1;
 }
@@ -1651,7 +1668,10 @@ sub make_src_package ($) {
 	$retval = $?;
 	if (not $retval) {
 	    system ("rm -rf $spkgdir/$src_pkg_name");
+	    push (@packages_written, "$spkgdir/$dsname (source)");
 	}
+    } else {
+	push (@packages_written, "$spkgdir/$src_pkg_name (source)");
     }
 
     return (not $retval);
@@ -1722,7 +1742,15 @@ sub main () {
 	if ($build_command =~ /[ba]/) {
 	    do_block ($spec, 'clean') or exit (1);
 	}
-   }
+
+	if (@packages_written) {
+	    print "Packages written:\n";
+	    foreach my $pkg_written (@packages_written) {
+		print "    $pkg_written\n";
+	    }
+	}
+
+    }
 }
 
 main();

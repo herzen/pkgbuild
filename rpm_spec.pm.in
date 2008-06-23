@@ -2584,12 +2584,16 @@ sub get_package_names ($;$) {
     if (not $datastream) {
 	return $self->get_pkgs ();
     } else {
-	my $pkg_ref = $self->{_packages};
-	my @ds_pkg_names;
-	for my $pkg (@$pkg_ref) {
-	    my $version = $self->eval ('%version');
-	    push (@ds_pkg_names, "$pkg-$version.${arch}.pkg");
-	}
+	my @packages = $self->get_packages ();
+	return undef if not defined ($packages[0]);
+	my $inst = $packages[0]->get_tag ('SUNW_Pkg');
+	$inst = $packages[0]->get_tag ('Name') unless $inst;
+	$inst = "$self" unless $inst;
+
+	my $version = $packages[0]->get_tag ('Version');
+	my $dsname = "${inst}-${version}.${arch}.pkg";
+	my @ds_pkg_names = ($dsname);
+
 	return @ds_pkg_names;
     }
 }
