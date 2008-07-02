@@ -1423,34 +1423,34 @@ sub get_proto_hash ($$) {
 			
 				my $pline;
 				if (defined $do_ips) {
-					print "DEBUG: file for getting ips proto line: $file\n";
+					print "DEBUG: file for getting ips proto line: $fname\n";
 					my $hardlink = undef;
+					# FIXME: $fname should be used and not $file!
+					# 	but $fname wrong data type ( string?)
 					if ($file->is_hardlink()) {
 						$hardlink = 1;
 					}
-					# We need first to expand regexp which can be in $file
-					my $ref_expanded = find_all_matches($file, $buildroot);
 				
-					foreach my $exp_file (@$ref_expanded) {
+					if ( not defined $file_info{$fname} ) {
 						$pline = undef;
-						$pline = get_ips_proto_line ($exp_file,
+						$pline = get_ips_proto_line ($fname,
 								$class_name,
 							    $buildroot,
-							    "$buildroot/$exp_file", 
+							    "$buildroot/$fname", 
 							    $basedir,
 							    $mode,
 							    $attribsToUse[1],
-							    $attribsToUse[2],
+						   	 	$attribsToUse[2],
 								$hardlink);
 						if (not defined ($pline)) {
         		        	message ("IPS: File not found by glob: $buildroot/$fname");
-            		    	$has_errors = 1;
-            			}
-  		      	    	$file_info{$fname} = $pline;
-    	      		  	if (defined ($all_files{$fname}) and
-        	        		substr ($pline, 0, 1) ne "d") {
-            	    		print "WARNING IPS: $fname is included in both $package and $all_files{$fname}\n";
-            			}
+           			    	$has_errors = 1;
+           				}
+  		   	    		$file_info{$fname} = $pline;
+    	   		  		if (defined ($all_files{$fname}) and
+                			substr ($pline, 0, 1) ne "d") {
+           	    			print "WARNING IPS: $fname is included in both $package and $all_files{$fname}\n";
+           				}
 					}
 				} else {
 					my $pline = get_proto_line ($file,
