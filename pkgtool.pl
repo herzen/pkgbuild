@@ -76,6 +76,11 @@ my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
 my $topdir = "$_homedir/packages";
 
+# For IPS support
+my $ips;
+my $ips_only;
+my $ips_repo;
+
 sub process_defaults () {
     my $default_spec_dir = "$topdir/SPECS";
     $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
@@ -180,42 +185,12 @@ sub find_in_path ($) {
 
 # return 1 if the current user has the Software Installation profile
 # return 0 otherwise
-my $cache_can_install;
 sub can_install () {
-    return $cache_can_install if defined ($cache_can_install);
-    my $prof_sw_inst=`/bin/profiles | nl -s: | grep 'Software Installation' | cut -f1 -d:`;
-    my $prof_pri_adm=`/bin/profiles | nl -s: | grep 'Primary Administrator' | cut -f1 -d:`;
-    my $prof_basic_usr=`/bin/profiles | nl -s: | grep 'Basic Solaris User' | cut -f1 -d:`;
-    chomp ($prof_sw_inst);
-    chomp ($prof_pri_adm);
-    chomp ($prof_basic_usr);
-    $prof_sw_inst = 0 if $prof_sw_inst eq "";
-    $prof_pri_adm = 0 if $prof_pri_adm eq "";
-    $prof_basic_usr = 0 if $prof_basic_usr eq "";
-    if ($prof_sw_inst or $prof_pri_adm) {
-	if ($prof_basic_usr) {
-	    if ($prof_basic_usr < $prof_pri_adm) {
-		msg_warning (0, "The \"Primary Administrator\" profile should appear");
-		msg_warning (0, "before \"Basic Solaris User\"");
-		$cache_can_install=0;
-	    } elsif ($prof_basic_usr < $prof_sw_inst) {
-		msg_warning (0, "The \"Software Installation\" profile should appear");
-		msg_warning (0, "before \"Basic Solaris User\"");
-		$cache_can_install=0;
-	    } else {
-		# Basic Solaris User is after Primary Adminstrator / Software Installation
-		$cache_can_install=1
-	    }
-	} else {
-	    # No Basic Solaris User profile found but
-	    # either Primary Adminstrator or Software Installation was found
-	    $cache_can_install=1;
-	}
-    } else {
-	# No Primary Adminstrator or Software Installation
-	$cache_can_install=0;
+    my $cmdout = `/bin/profiles`;
+    if ($cmdout =~ /(^|\n)Software Installation\n/) {
+	return 1
     }
-    return $cache_can_install;
+    return 0
 }
 
 sub cannot_install_error ($$;$) {
@@ -698,6 +673,23 @@ sub print_version () {
     print "$myname version $myversion\n";
 }
 
+# Set IPS controlling variables which be passed to underlying pkgbuild command
+sub set_ips($) {
+	$ips = shift;
+}
+
+# Set IPS-only mode
+sub set_ips_only($) {
+	$ips_only = shift;
+}
+
+# Set IPS repository - full url is needed (http://localhost:80)
+sub set_ips_repository($) {
+	shift;
+	$ips_repo = shift;
+	print "Debug: New ips repository is $ips_repo\n";
+}
+
 sub process_options {
     
     my $default_topdir = $topdir;
@@ -788,6 +780,9 @@ sub process_options {
 		    shift;
 		    $defaults->set ('source_mirrors', shift);
 		},
+		'ips'       => sub { set_ips(1); },
+        'ips-only'  => sub { set_ips_only(1); },
+		'ips-repository=s' => \&set_ips_repository,
 		'<>' => \&process_args);
 
     if ($topdir ne $default_topdir) {
@@ -2112,14 +2107,6 @@ sub build_spec ($$$) {
 	}
     } else {
 	run_build ($spec_id) || return 0;
-	my @pkgnames;
-	my $pkgsdir = $specs_to_build[$spec_id]->eval ('%_pkgdir');
-	if (defined ($ds)) {
-	    @pkgnames = $specs_to_build[$spec_id]-> get_package_names ($ds);
-	}
-	if (@pkgnames) {
-	    msg_info (0, "Package datastream written to $pkgsdir/$pkgnames[0]");
-	}
     }
 
     if (not $build_only) {
@@ -2192,6 +2179,18 @@ sub run_build ($;$) {
 	next if not defined $def;
 	$the_command = "$the_command --define '$def'";
     }
+
+	if ( defined $ips ) {
+		$the_command = "$the_command --ips";
+	}
+
+	if ( defined $ips_only ) {
+		$the_command = "$the_command --ips-only";
+	}
+
+	if ( defined $ips_repo ) {
+		$the_command = "$the_command --ips-repository $ips_repo";
+	}	
 
     if ($build_mode eq "-bp") {
 	$the_command = "$the_command --nodeps";
