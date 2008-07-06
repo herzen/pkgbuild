@@ -1607,9 +1607,41 @@ sub make_ips_dependency ($$) {
 	my $package = ($spec->get_packages())[0];	
 
 	my @deps = $package->get_array('requires');
-	my $name;
+	my $fav_pkg = 0;
+	my $fav_found;	
+	my @favoured_packages = qw(SUNWcsr SUNWcsu SUNWcsxu
+    												 SUNWcar SUNWcarx SUNWcsd
+                             SUNWcsl SUNWcslx);
 	foreach my $dep (@deps) {
-		push @$ref_lines, "pkgsend add depend type=require fmri=$dep";
+		$fav_pkg = 0;	
+   	foreach my $p (@favoured_packages) {
+      	# if we depend on a favourate package, depend 
+        # only on it.
+        if ( $dep == $p ) {
+					if ( defined $fav_found ) {
+						$fav_pkg = -1;
+						last;
+					}
+					else {
+        		$fav_pkg = 1;
+						$fav_found = 1;
+						last;
+					}
+        }
+    }
+		if ( $fav_pkg >= 0 ) {
+			#FIXME: Ugly hack as there is bug in IPS that dependency doesn't work
+			#   across different authorities
+			# As workaround let's comment all dependencies on SUNW packages
+			if ( $dep =~ m/^SUNW/ ) {
+				push  @$ref_lines, "#pkgsend add depend type=require fmri=$dep";
+			} else {
+				push @$ref_lines, "pkgsend add depend type=require fmri=$dep";
+			}
+		}
+		else {
+			message("WARNING: Skipping dependency ($dep) on more than 1 favourite package"); 
+		}
 	}
 }
 
@@ -1729,9 +1761,9 @@ sub publish_ips_package ($) {
 	prepare_script($spec, $script, \@pkg_lines);
 	
 	# Calling script
-	#print "DEBUG: Calling script $script\n";
-	#`chmod +x $script`;
-	#print `$script`;
+	print "DEBUG: Calling script $script\n";
+	`chmod +x $script`;
+	print `$script`;
 }
 
 # Save pkg lines array to script, which publish all info to ips repository
