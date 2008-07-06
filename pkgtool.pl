@@ -1303,18 +1303,33 @@ sub install_pkgs ($) {
 # FIXME: should install in dependency order
     foreach my $pkg (@pkgs) {
 	my $msg;
-	if (defined ($ds)) {
-	    $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir/$pkg all 2>&1`;
-	} else {
-	    $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir $pkg 2>&1`;
-	}
-	if ($? > 0) {
-	    unlink ($adminfile);
-	    msg_error "failed to install package: $msg";
-	    $build_status[$spec_id] = 'FAILED';
-	    $status_details[$spec_id] = $msg;
-	    return 0;
-	}
+			if ( defined $ips ) {
+				$msg=`pfexec pkg install $pkg`;
+				if ( $? > 0 ) {
+					msg_error "failed to install IPS package: $msg";
+					$build_status[$spec_id] = 'FAILED';
+      		$status_details[$spec_id] = $msg;
+      		return 0;
+			  }
+			}
+			
+			# If ips-only is specified do not install svr4 package as it will not
+			#   be created by pkgbuild!
+			if ( not defined $ips_only ) {
+				if (defined ($ds)) {
+			    $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir/$pkg all 2>&1`;
+				} else {
+	   			 $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir $pkg 2>&1`;
+				}
+		
+				if ($? > 0) {
+	    		unlink ($adminfile);
+	    		msg_error "failed to install package: $msg";
+	    		$build_status[$spec_id] = 'FAILED';
+	    		$status_details[$spec_id] = $msg;
+	    		return 0;
+				}
+			}
     }
     
     unlink ($adminfile);
