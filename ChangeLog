@@ -1,24 +1,9 @@
-2008-06-23  Laszlo Peter  <laca@sun.com>
-
-	* configure.in: post release version bump
-
-	======= pkgbuild 1.3.1 =======
-
-2008-06-23  Laszlo Peter  <laca@sun.com>
-
-	* NEWS: update for 1.3.1 release
-
-2008-06-23  Laszlo Peter  <laca@sun.com>
-
-	* pkgbuild.pl.in: write all packages in a single datastream
-	  when datastream format is requested (Bug 1953614); print the
-	  names of packages at the end of execution (Bug 1953613)
-	* pkgtool.pl: write the name of the package datastream if
-	  datastream format is requested; allow installation if
-	  the user has either Software Installation or
-	  Primary Administrator profile.
-	* rpm_spec.pm.in: change get_package_names to return
-	  the name of a single datastream in the datastream case.
+2008-07-12	Petr Sobotka  <sobotkap@gmail.com>
+	* pkgbuild.pl.in: Add creating IPS publish script when running with --ips
+						parameter.
+	* pkgtool.pl: Passing new ips arguments to pkgbuild. 
+				  Installing IPS package is commented as IPS bug #2253 blocks
+				  it.
 
 2008-06-19  Laszlo Peter  <laca@sun.com>
 

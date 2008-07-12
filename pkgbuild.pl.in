@@ -1755,8 +1755,7 @@ sub publish_ips_package ($) {
 	print "DEBUG: Calling close transaction\n";
 	close_transaction(\@pkg_lines);
 
-	# FIXME: use temp file for a script
-	my $script = "/tmp/script.sh";
+	my $script = $spec->eval("%buildroot") . "/ips_script.ksh";
 	print "DEBUG: Prepare script - $script\n";
 	prepare_script($spec, $script, \@pkg_lines);
 	

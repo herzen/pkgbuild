@@ -1304,12 +1304,13 @@ sub install_pkgs ($) {
     foreach my $pkg (@pkgs) {
 	my $msg;
 			if ( defined $ips ) {
-				$msg=`pfexec pkg install $pkg`;
-				if ( $? > 0 ) {
-					msg_error "failed to install IPS package: $msg";
-					$build_status[$spec_id] = 'FAILED';
-      		$status_details[$spec_id] = $msg;
-      		return 0;
+				msg_warning "Skipping installation of IPS package ... until IPS bug #2417 will be fixed (probably it will be fixed in 94b)";
+				#$msg=`pfexec pkg install $pkg`;
+				#if ( $? > 0 ) {
+				#	msg_error "failed to install IPS package: $msg";
+			#		$build_status[$spec_id] = 'FAILED';
+      		#$status_details[$spec_id] = $msg;
+      		#return 0;
 			  }
 			}
 			
