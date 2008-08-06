@@ -1,3 +1,7 @@
+2008-08-06  Petr Sobotka  <sobotkap@gmail.com>
+  * pkgbuild.pl.in: Commit patches send by Glynn Foster 
+	                   - wrong metadata variable names
+
 2008-07-12	Petr Sobotka  <sobotkap@gmail.com>
 	* pkgbuild.pl.in: Add creating IPS publish script when running with --ips
 						parameter.

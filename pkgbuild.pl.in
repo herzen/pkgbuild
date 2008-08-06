@@ -1271,7 +1271,7 @@ sub get_ips_proto_line ($$$$$$$$$) {
 	}
 
 	if ( $type eq 'f' and defined $file) {
-		$line = "pkgsend add file \"$fname\" mode=$mode user=$user group=$group path=\"$file\"";
+		$line = "pkgsend add file \"$fname\" mode=$mode owner=$user group=$group path=\"$file\"";
 	} elsif ( $type eq 'd' ) {
 		if ( not defined $file) {
 			$file = $fname;
@@ -1280,7 +1280,7 @@ sub get_ips_proto_line ($$$$$$$$$) {
 				$file = "/$file";
 			}
 		}
-		$line = "pkgsend add dir mode=$mode user=$user group=$group path=\"$file\"";	
+		$line = "pkgsend add dir mode=$mode owner=$user group=$group path=\"$file\"";	
 	} elsif ( $type eq 's' ) {
 		my $target = readlink ($fname);
 		# Hardlinks are not tested in $RMP_BUILD_DIR, but they are used only
@@ -1665,7 +1665,7 @@ sub add_summary($$) {
 	my $spec = shift;
 
 	my $summary = $spec->get_value_of("summary");
-	push (@$ref_lines, "pkgsend add set name=summary value=\"$summary\"");
+	push (@$ref_lines, "pkgsend add set name=description value=\"$summary\"");
 }
 
 # Add close transaction
