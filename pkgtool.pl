@@ -76,10 +76,9 @@ my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
 my $topdir = "$_homedir/packages";
 
-# For IPS support
+# Which package mechanism are we going to install by default?
 my $ips;
-my $ips_only;
-my $ips_repo;
+my $svr4;
 
 sub process_defaults () {
     my $default_spec_dir = "$topdir/SPECS";
@@ -673,21 +672,14 @@ sub print_version () {
     print "$myname version $myversion\n";
 }
 
-# Set IPS controlling variables which be passed to underlying pkgbuild command
 sub set_ips($) {
+	print "Debug: IPS packages will be installed by default to http:\/\/localhost:80\/\n";
 	$ips = shift;
 }
 
-# Set IPS-only mode
-sub set_ips_only($) {
-	$ips_only = shift;
-}
-
-# Set IPS repository - full url is needed (http://localhost:80)
-sub set_ips_repository($) {
-	shift;
-	$ips_repo = shift;
-	print "Debug: New ips repository is $ips_repo\n";
+sub set_svr4($) {
+	print "Debug: SVr4 packages will be installed by default\n";
+	$svr4 = shift;
 }
 
 sub process_options {
@@ -780,9 +772,8 @@ sub process_options {
 		    shift;
 		    $defaults->set ('source_mirrors', shift);
 		},
-		'ips'       => sub { set_ips(1); },
-        'ips-only'  => sub { set_ips_only(1); },
-		'ips-repository=s' => \&set_ips_repository,
+		'ips' => sub { set_ips(1); },
+		'svr4' => sub { set_svr4(1); },
 		'<>' => \&process_args);
 
     if ($topdir ne $default_topdir) {
@@ -849,6 +840,15 @@ Options:
 	          Interactive mode: pkgbuild/rpm output is displayed on
                   the standard output; pkgbuild is executed in interactive
                   mode which makes it start a subshell if the build fails
+
+    --ips  [EXPERIMENTAL]
+
+		  Install IPS packages by default to local repository
+		  http://localhost:80/
+
+    --svr4  [EXPERIMENTAL]
+
+		  Install SVr4 packages by default.
 
   Directories and search paths:
 
@@ -1304,21 +1304,20 @@ sub install_pkgs ($) {
     foreach my $pkg (@pkgs) {
 	my $msg;
 			if ( defined $ips ) {
-				msg_warning "Skipping installation of IPS package ... until IPS bug #2417 will be fixed (probably it will be fixed in 94b)";
+				msg_warning(0, "Skipping installation of IPS package ... until IPS bug #2417 will be fixed (probably it will be fixed in 94b)");
 				#$msg=`pfexec pkg install $pkg`;
 				#if ( $? > 0 ) {
 				#	msg_error "failed to install IPS package: $msg";
-			#		$build_status[$spec_id] = 'FAILED';
-      		#$status_details[$spec_id] = $msg;
-      		#return 0;
-			  }
+				#	$build_status[$spec_id] = 'FAILED';
+      				#	$status_details[$spec_id] = $msg;
+      				#	return 0;
+				# }
 			}
 			
-			# If ips-only is specified do not install svr4 package as it will not
-			#   be created by pkgbuild!
-			if ( not defined $ips_only ) {
+			# Only install SVr4 package if --svr4 is defined
+			if ( defined $svr4) {
 				if (defined ($ds)) {
-			    $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir/$pkg all 2>&1`;
+			         $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir/$pkg all 2>&1`;
 				} else {
 	   			 $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir $pkg 2>&1`;
 				}
@@ -2195,18 +2194,6 @@ sub run_build ($;$) {
 	next if not defined $def;
 	$the_command = "$the_command --define '$def'";
     }
-
-	if ( defined $ips ) {
-		$the_command = "$the_command --ips";
-	}
-
-	if ( defined $ips_only ) {
-		$the_command = "$the_command --ips-only";
-	}
-
-	if ( defined $ips_repo ) {
-		$the_command = "$the_command --ips-repository $ips_repo";
-	}	
 
     if ($build_mode eq "-bp") {
 	$the_command = "$the_command --nodeps";

@@ -1,13 +1,21 @@
-2008-08-06  Petr Sobotka  <sobotkap@gmail.com>
-  * pkgbuild.pl.in: Commit patches send by Glynn Foster 
-	                   - wrong metadata variable names
+2008-08-12  Glynn Foster  <glynn.foster@sun.com>
 
-2008-07-12	Petr Sobotka  <sobotkap@gmail.com>
-	* pkgbuild.pl.in: Add creating IPS publish script when running with --ips
-						parameter.
+	* pkgbuild.pl.in, pkgtool.pl: Ensure that we now build IPS and
+	SVr4 packages by default, and utilize the SVr4 infrastructure
+	in preparing the IPS package to be published to the repository.
+	Add some additional meta-data to the IPS publishing stage.
+
+2008-08-06  Petr Sobotka  <sobotkap@gmail.com>
+
+	* pkgbuild.pl.in: Commit patches send by Glynn Foster - wrong
+	metadata variable names
+
+2008-07-12  Petr Sobotka  <sobotkap@gmail.com>
+
+	* pkgbuild.pl.in: Add creating IPS publish script
+	when running with --ips
 	* pkgtool.pl: Passing new ips arguments to pkgbuild. 
-				  Installing IPS package is commented as IPS bug #2253 blocks
-				  it.
+	Installing IPS package is commented as IPS bug #2253 blocks it.
 
 2008-06-19  Laszlo Peter  <laca@sun.com>
 
