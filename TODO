@@ -1,5 +1,27 @@
+Things broken by IPS support:
+ - Requires: /path/to/file (this currently parses /var/sadm/install/contents,
+   need to use pkg search)
+ - uninstall-pkgs should detect if the pkg was installed with pkgadd or pkg
+ - install-pkgs and build should detect if the default pkging system is
+   svr4 or ips and install using that format (unless --ips or --svr4 is
+   used to force one or the other)
+
+Additional stuff needed for full IPS support:
+ - need to define and implement additional spec file elements for
+   attributes and tags, e.g.
+   %tag (foo) in %files and
+   Attribute(name): value
+ - possibly merge subpackages and tag them based on their name, e.g.
+   devel, root, data for SFEfoo-devel, SFEfoo-root, SFEfoo-data
+ - implement publish subcommand that:
+   - rebuilds the manifest (because it's possible that the package was
+     previously built as svr4 only)
+   - publishes to the repository determined by PKG_REPO
+[- include sources in the binary packages, tagged as sources and not
+   installed by default, to allow automatic rebuilds; filters and
+   filter operations need to be implemented in IPS for this ]
+
 Some things I'm planning fix/add:
- - IPS support
  - bcond_with (http://www.redhat.com/archives/epel-devel-list/2007-July/msg00208.html)
  - S8/S9 compatibility
  - %check scriptlet: http://rpm.org/max-rpm-snapshot/s1-rpm-inside-scripts.html#S3-RPM-INSIDE-CHECK-SCRIPT
