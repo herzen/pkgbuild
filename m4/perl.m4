@@ -28,4 +28,4 @@ else
   AC_MSG_RESULT(no)
 fi
 AC_SUBST(PERL)dnl
-])# AC_PROG_PERL
+])

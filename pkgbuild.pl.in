@@ -1654,6 +1654,8 @@ sub open_ips_transaction($$) {
 	if (scalar @lines > 0) {
 		print "Warning: Open transaction isn't first line of pkgsend script!\n";
 	}
+	# FIXME: Need to get this from the environmental variable, rather than
+	# set it from the script each time
 	push (@$ref_lines, "export PKG_REPO=$ips_server");
 	push (@$ref_lines, "eval `pkgsend open $name\@$version`");
 	push (@$ref_lines, "pkgsend include $manifest");
