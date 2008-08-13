@@ -1,3 +1,10 @@
+2008-08-13  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: add --notify/--nonotify options; use notify-send
+	  to tell the user when a spec file is done.
+	* configure.in: bump version to 1.3.90 in preparation for
+	  1.4.0
+
 2008-08-12  Glynn Foster  <glynn.foster@sun.com>
 
 	* pkgbuild.pl.in, pkgtool.pl: Ensure that we now build IPS and

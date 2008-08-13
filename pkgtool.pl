@@ -133,6 +133,9 @@ sub process_defaults () {
     $defaults->add ('deps', '!',
 		    'whether to check dependencies; use nodeps to ignore dependencies',
 		    1);
+    $defaults->add ('notify', '!',
+		    'whether to send a desktop notification when the build passes/fails, use --nonotify to disable',
+		    1);
     $defaults->add ('halt_on_errors', '!',
 		    'whether to abort the build if an error occurs', 
 		    0);
@@ -717,6 +720,7 @@ sub process_options {
 		'srpm-url=s' => sub { shift; $defaults->set ('srpm_url', shift); },
 		'target=s' => sub { shift; $defaults->set ('target', shift); },
 		'deps!' => sub { shift; $defaults->set ('deps', shift); },
+		'notify!' => sub { shift; $defaults->set ('notify', shift); },
 		'autodeps!' => sub { shift; $defaults->set ('autodeps', shift); },
 		'rc!' => sub { shift; $read_rc = shift; if (not $read_rc) { $defaults->norc(); } },
 		'interactive!' => sub { shift; $defaults->set ('interactive', shift); },
@@ -908,6 +912,11 @@ Options:
 	          the nightly builds.  Default: %y%m%d
 
   Reporting:
+
+    --notify, --nonotify
+
+                  Send desktop notifications when the build of a spec
+		  file passes or fails.  Default: --notify
 
     --mail-errors-to=address
 
@@ -2002,11 +2011,21 @@ sub do_build (;$$) {
 	    }
 	    print_live_status;
 	}
+	my $notify = $defaults->get ('notify');
 	if ($build_status[$i] ne "PASSED") {
 	    $exit_val++;
+	    if ($notify) {
+		my $notify_msg = "pkgbuild:\n$specs_to_build[$i] failed:\n$status_details[$i]";
+		system ("notify-send --icon 'dialog-warning' '$notify_msg'");
+	    }
 	    if (($build_status[$i] ne "SKIPPED") and
 		($build_status[$i] ne "DEP_FAILED")) {
 		mail_log ($i);
+	    }
+	} else {
+	    if ($notify) {
+		my $notify_msg = "pkgbuild:\n$specs_to_build[$i] passed";
+		system ("notify-send --icon 'dialog-ok' '$notify_msg'");
 	    }
 	}
     }
