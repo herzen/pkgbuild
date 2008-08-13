@@ -1,5 +1,9 @@
 2008-08-12  Glynn Foster  <glynn.foster@sun.com>
 
+	* pkgbuild.pl.in: Use :: instead of : in info.classification.
+
+2008-08-12  Glynn Foster  <glynn.foster@sun.com>
+
 	* m4/perl.m4: aclocal doesn't seem to like comments at the end
 	of the m4 file. Remove.
 	* pkgbuild.pl.in: Add short comment about repository.

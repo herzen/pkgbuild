@@ -1689,7 +1689,7 @@ sub add_ips_summary($$) {
 
 	my $group = $spec->get_value_of("group");
 	if (defined $group) {
-		my $classification = "freedesktop.org:" . $group;
+		my $classification = "freedesktop.org::" . $group;
 		push (@$ref_lines, "set name=info.classification value=\"$classification\"");
 	}
 }
