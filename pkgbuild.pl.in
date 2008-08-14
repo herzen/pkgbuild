@@ -206,6 +206,10 @@ sub set_pkgformat ($) {
 	$pkgformat = "filesystem";
     } elsif ($format eq "ds" or $format eq "datastream") {
 	$pkgformat = "datastream";
+    } elsif ($format eq "ips") {
+	$pkgformat = "ips";
+    } else {
+	fatal ("Invalid argument to pkgformat option: $format");
     }
 }
 
@@ -304,7 +308,7 @@ This program may be freely redistributed under the terms of the GNU GPL
                              remove spec file, sources, patches, and icons.
     --rmsource <spec>      - remove sources and spec file
     --recompile <src_pkg>  - like --rebuild, but don't build any package
-*   --pkgformat={filesystem|fs|datastream|ds}
+*   --pkgformat={filesystem|fs|datastream|ds|ips}
                            - Create packages in filesystem or datastream
                              format.  Default: filesystem
 _EOF_
@@ -1271,7 +1275,8 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
 	}
 	$line = "dir mode=$mode owner=$user group=$group path=\"$file\"";	
     } elsif ( $type eq 's' ) {
-	my $target = readlink ($svrfname);
+	# read the link target of the file in the proto area
+	my $target = readlink ($fname);
 	# Hardlinks are not tested in $RPM_BUILD_DIR, but they are used
 	# only if spec file creator mark %files as hardlinks ...
 	if ( defined $hardlink ){
@@ -1610,7 +1615,7 @@ sub make_ips_dependency ($$) {
    	foreach my $p (@favoured_packages) {
 	    # if we depend on a favourate package, depend 
 	    # only on it.
-	    if ( $dep == $p ) {
+	    if ( $dep eq $p ) {
 		if ( defined $fav_found ) {
 		    $fav_pkg = -1;
 		    last;
@@ -1676,18 +1681,12 @@ sub add_ips_summary($$) {
     
     my $summary = $spec->get_value_of("summary");
     my $upstream_url = $spec->get_value_of("url");
+    $upstream_url = "http://pkgbuild.sf.net/" unless defined ($upstream_url);
 
     push (@$ref_lines, "set name=description value=\"$summary\"");
     push (@$ref_lines, "set name=pkg.summary value=\"$summary\"");
     push (@$ref_lines, "set name=info.upstream_url value=\"$upstream_url\"");
     
-    # FIXME: This should probably point at individual packagers at some stage in the future
-    push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
-
-    push (@$ref_lines, "set name=description value=\"$summary\"");
-    push (@$ref_lines, "set name=pkg.summary value=\"$summary\"");
-    push (@$ref_lines, "set name=info.upstream_url value=\"$upstream_url\"");
-
     # FIXME: This should probably point at individual packagers at some stage in the future
     push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
 
@@ -1707,10 +1706,11 @@ sub close_ips_transaction($) {
 }
 
 # Create file list from package with tag for subpackages for pkgsend command
-sub make_ips_package ($$$$) {
+sub make_ips_package ($$$$$) {
     my $spec = shift;
     my $package = shift;
     my $ref_lines = shift;
+    my $all_files_ref = shift;
     my $tag = shift;
     
     if (defined $tag) {
@@ -1725,7 +1725,11 @@ sub make_ips_package ($$$$) {
     }
     my %files = %$files_ref;
     foreach my $file (keys %files) {
-	push(@$ref_lines, $files{$file} . $tag);	
+	push(@$ref_lines, $files{$file} . $tag) 
+	    unless defined $$all_files_ref{$file};
+	# only include each file in the manifest once otherwise
+	# we get an error during installation
+	$$all_files_ref{$file} = 1;
     }
     if (not %files) {
 	print "WARNING: empty package: $package\n";
@@ -1756,12 +1760,13 @@ sub make_ips_files ($$) {
 
     my @packages = $spec->get_packages ();
     my $tag;
+    my %all_files_in_manifest = ();
     foreach $package (@packages) {
 	print "DEBUG: making package $package\n";
 	if (defined $tag) {
 	    $tag = parse_tag($package);			
 	}
-	make_ips_package($spec, $package, $ref_lines, $tag);
+	make_ips_package($spec, $package, $ref_lines, \%all_files_in_manifest, $tag);
 	# first package is the main one - without tag
 	$tag = "";
     }
@@ -1788,14 +1793,20 @@ sub create_ips_package ($) {
     print "DEBUG: Calling close_ips_transaction\n";
     close_ips_transaction(\@pkg_lines);
     
-    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" . $spec->get_value_of ("name") . "_ips.ksh";
+    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" . $spec->get_value_of ("name") . "_ips.sh";
     my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" . $spec->get_value_of ("name") . ".manifest";
 
     print "DEBUG: Prepare script - $script\n";
     prepare_ips_script($spec, $script, \@pkg_lines);
     print "DEBUG: Prepare manifest - $manifest\n";
     prepare_ips_manifest($spec, $manifest, \@manifest_lines);
+}
+
+# publish an IPS package
+sub publish_ips_package ($) {
+    my $spec = shift;
     
+    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" . $spec->get_value_of ("name") . "_ips.sh";
     print "DEBUG: Calling script $script\n";
     `chmod +x $script`;
     print `$script`;
@@ -2129,6 +2140,12 @@ sub main () {
 
 		# Create an IPS package
 		create_ips_package ($spec);
+		# we always create the manifest file, but only publish the
+		# package if the requested pkgformat is ips
+		if ($pkgformat eq "ips") {
+		    # Call the script to publish it
+		    publish_ips_package ($spec);
+		}
 	}
 	if ($build_command =~ /[as]/) {
 	    $pkgdir = $spec->eval ("%_srcpkgdir");

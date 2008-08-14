@@ -1312,33 +1312,33 @@ sub install_pkgs ($) {
 # FIXME: should install in dependency order
     foreach my $pkg (@pkgs) {
 	my $msg;
-			if ( defined $ips ) {
-				msg_warning(0, "Skipping installation of IPS package ... until IPS bug #2417 will be fixed (probably it will be fixed in 94b)");
-				#$msg=`pfexec pkg install $pkg`;
-				#if ( $? > 0 ) {
-				#	msg_error "failed to install IPS package: $msg";
-				#	$build_status[$spec_id] = 'FAILED';
-      				#	$status_details[$spec_id] = $msg;
-      				#	return 0;
-				# }
-			}
-			
-			# Only install SVr4 package if --svr4 is defined
-			if ( defined $svr4) {
-				if (defined ($ds)) {
-			         $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir/$pkg all 2>&1`;
-				} else {
-	   			 $msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir $pkg 2>&1`;
-				}
-		
-				if ($? > 0) {
-	    		unlink ($adminfile);
-	    		msg_error "failed to install package: $msg";
-	    		$build_status[$spec_id] = 'FAILED';
-	    		$status_details[$spec_id] = $msg;
-	    		return 0;
-				}
-			}
+	if ( defined $ips ) {
+	    msg_warning(0, "Skipping installation of IPS package ... until IPS bug #2417 will be fixed (probably it will be fixed in 94b)");
+	    #$msg=`pfexec pkg install $pkg`;
+	    #if ( $? > 0 ) {
+	    #	msg_error "failed to install IPS package: $msg";
+	    #	$build_status[$spec_id] = 'FAILED';
+	    #	$status_details[$spec_id] = $msg;
+	    #	return 0;
+	    # }
+	}
+	
+	# Only install SVr4 package if --svr4 is defined
+	if ( defined $svr4) {
+	    if (defined ($ds)) {
+		$msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir/$pkg all 2>&1`;
+	    } else {
+		$msg=`pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir $pkg 2>&1`;
+	    }
+	    
+	    if ($? > 0) {
+		unlink ($adminfile);
+		msg_error "failed to install package: $msg";
+		$build_status[$spec_id] = 'FAILED';
+		$status_details[$spec_id] = $msg;
+		return 0;
+	    }
+	}
     }
     
     unlink ($adminfile);
@@ -2205,6 +2205,9 @@ sub run_build ($;$) {
     }
     if ($build_engine_name eq "pkgbuild") {
 	my $pkgformat = $defaults->get ('pkgformat');
+	if (defined ($ips)) {
+	    $pkgformat = "ips";
+	}
 	if ($pkgformat ne 'filesystem' and $pkgformat ne 'fs') {
 	    $the_command = "$the_command --pkgformat $pkgformat";
 	}

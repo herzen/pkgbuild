@@ -1,3 +1,13 @@
+2008-08-14  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: add --pkgformat ips option and only publish the
+	  IPS package if this option is used; fix the symlink targets;
+	  add fallback upstream_url; delete duplicate ips headers;
+	  make sure there are no duplicate entries in the manifest otherwise
+	  pkg install fails
+	* pkgtool.pl: use --pkgformat ips option when calling pkgbuild
+	  if pkgtool was called with --ips
+
 2008-08-12  Glynn Foster  <glynn.foster@sun.com>
 
 	* pkgbuild.pl.in: Use :: instead of : in info.classification.
