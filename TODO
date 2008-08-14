@@ -49,6 +49,5 @@ Some things I'm planning fix/add:
  - %exclude modifier in %files
 
 Longer term plans:
- - commit triggered build system
  - build dep tree and install dep tree visualization
  - build debugging (step-by-step interactive building)

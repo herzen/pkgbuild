@@ -1229,91 +1229,91 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
     my $user = $def_user;
     my $group = $def_grp;
 
-	# Delete double // from fname: example /usr//lib 
-	$fname =~ s/\/+/\//g;
+    # Delete double // from fname: example /usr//lib 
+    $fname =~ s/\/+/\//g;
     my $type = get_file_type ($fname);
-	my $line;
+    my $line;
+    
+    if ( $type eq 'g' ) {
+	print "Warning: Ghost files are *not* supported, yet\n";
+	return undef;
+    }
 
-	if ( $type eq 'g' ) {
-		print "Warning: Ghost files are *not* supported, yet\n";
-		return undef;
+    if ( $mode eq "-" ) {
+	$mode = get_file_mode ($fname);
+    }
+
+    if ( $user eq '-' ) {
+	$user = getpwuid ((stat($fname))[4]);
+    }
+
+    if ( $group eq '-' ) {
+	$group = getgrgid ((stat($fname))[5]);
+    }
+
+    $basedir = "$basedir/";
+    $basedir =~ s/\/\/*/\//g;
+    $basedir = substr ("$basedir", 1);
+
+    my $relpath = substr ($fname, length ($basedir));
+
+    my $svrfname = $spec->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . $relpath;
+
+    if ( $type eq 'f' and defined $file) {
+	$line = "file $svrfname mode=$mode owner=$user group=$group path=\"$file\"";
+    } elsif ( $type eq 'd' ) {
+	if ( not defined $file) {
+	    $file = $fname;
+	    $file =~ s/^$buildroot//;
+	    if ( $file !~ /^\// ) {
+		$file = "/$file";
+	    }
 	}
-
-	if ( $mode eq "-" ) {
-		$mode = get_file_mode ($fname);
+	$line = "dir mode=$mode owner=$user group=$group path=\"$file\"";	
+    } elsif ( $type eq 's' ) {
+	my $target = readlink ($svrfname);
+	# Hardlinks are not tested in $RPM_BUILD_DIR, but they are used
+	# only if spec file creator mark %files as hardlinks ...
+	if ( defined $hardlink ){
+	    $line = "hardlink path=\"$file\" target=\"$target\"";
+	} else {
+	    $line = "link path=\"$file\" target=\"$target\"";
 	}
-
-	if ( $user eq '-' ) {
-		$user = getpwuid ((stat($fname))[4]);
-	}
-
-	if ( $group eq '-' ) {
-		$group = getgrgid ((stat($fname))[5]);
-	}
-
-	$basedir = "$basedir/";
-	$basedir =~ s/\/\/*/\//g;
-	$basedir = substr ("$basedir", 1);
-
-	my $relpath = substr ($fname, length ($basedir));
-
-	my $svrfname = $spec->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . $relpath;
-
-	if ( $type eq 'f' and defined $file) {
-		$line = "file $svrfname mode=$mode owner=$user group=$group path=\"$file\"";
-	} elsif ( $type eq 'd' ) {
-		if ( not defined $file) {
-			$file = $fname;
-			$file =~ s/^$buildroot//;
-			if ( $file !~ /^\// ) {
-				$file = "/$file";
-			}
-		}
-		$line = "dir mode=$mode owner=$user group=$group path=\"$file\"";	
-	} elsif ( $type eq 's' ) {
-		my $target = readlink ($svrfname);
-		# Hardlinks are not tested in $RMP_BUILD_DIR, but they are used only
-        # if spec file creator mark %files as hardlinks ...
-		if ( defined $hardlink ){
-			$line = "hardlink path=\"$file\" target=\"$target\"";
-		} else {
-			$line = "link path=\"$file\" target=\"$target\"";
-		}
-	}
-	else {
-		print "Warning: Unsupported object type $type on file $svrfname\n";
-	}
+    }
+    else {
+	print "Warning: Unsupported object type $type on file $svrfname\n";
+    }
 	
-	return $line;	
+    return $line;	
 }
 
 # Find all matches (in shell regexp file context)
 # Return reference to array of files/dirs/links or whatever
 sub find_all_matches($$) {
-	my $fname = shift;
-	my $build_path = shift;
-	my $dirname = $build_path . $fname;
-	#print "DEBUG: Finding all matches for $fname in dir $build_path\n";
-	#delete more duplicates of / - example /usr//lib
-	$dirname =~ s/\/\/+/\//g;
-	#print "DEBUG: dirname = $dirname\n";
-	my $find_output = `find $dirname`;
-	my @file_list = split /\n/, $find_output;
-
-	# now remove all build_path prefixes 
-	foreach $line (@file_list) {
-		$line =~ s/^$build_path//;
-		# Check if there is '/' at the beggining of path if not add it
-		if ( $line !~ /^\// ) {
-			$line = "/$line";
-		}
+    my $fname = shift;
+    my $build_path = shift;
+    my $dirname = $build_path . $fname;
+    #print "DEBUG: Finding all matches for $fname in dir $build_path\n";
+    #delete more duplicates of / - example /usr//lib
+    $dirname =~ s/\/\/+/\//g;
+    #print "DEBUG: dirname = $dirname\n";
+    my $find_output = `find $dirname`;
+    my @file_list = split /\n/, $find_output;
+    
+    # now remove all build_path prefixes 
+    foreach $line (@file_list) {
+	$line =~ s/^$build_path//;
+	# Check if there is '/' at the beggining of path if not add it
+	if ( $line !~ /^\// ) {
+	    $line = "/$line";
 	}
-	return \@file_list;
+    }
+    return \@file_list;
 } 
 
 # Specify if we want a proto hash for SVr4 or IPS
 sub get_proto_hash ($$$) {
-	my $spec = shift;
+    my $spec = shift;
     my $package = shift;
     my $do_ips = shift;
 
@@ -1329,14 +1329,14 @@ sub get_proto_hash ($$$) {
     my $error = $package->get_error ();
     my @defattr = $package->get_defattr ();
     if (defined ($error)) {
-		print "ERROR: $error\n";
-		return undef;
+	print "ERROR: $error\n";
+	return undef;
     }
     if (not @files) {
         my %empty_hash;
-		return \%empty_hash;
+	return \%empty_hash;
     }
-
+    
     my %file_info = ();
     my %default_dirs = ();
 
@@ -1345,53 +1345,53 @@ sub get_proto_hash ($$$) {
     my $buildroot = $package->eval ("%buildroot");
     my $basedir = $package->get_tag ("sunw_basedir");
     if (not defined ($basedir) or ($basedir eq "")) {
-		$basedir = "/";
+	$basedir = "/";
     }
-
-	chdir ($buildroot);
+	
+    chdir ($buildroot);
 
     foreach my $file (@files) {
-		next if not $file;
-		my $fn = "$file";
-		# remove duplicate /'s, e.g. /etc///passwd
-		$fn =~ s/^\/+//g;
-		# remove /'s and whitespace from the end of the file name
-		# except if fn is /
-		$fn =~ s/(.)\/*\s*$/$1/;
-		my $class_name = $file->get_class ();
-		my @file_list;
-		if (-f $fn) {
-	    	@file_list = ($fn);
-		} else {
-	    	@file_list = glob ($fn);
-		}
-		if ((not @file_list) and (not $file->is_ghost())) {
-			message ("File not found by glob: $buildroot$file");
-			$has_errors = 1;
-		}
+	next if not $file;
+	my $fn = "$file";
+	# remove duplicate /'s, e.g. /etc///passwd
+	$fn =~ s/^\/+//g;
+	# remove /'s and whitespace from the end of the file name
+	# except if fn is /
+	$fn =~ s/(.)\/*\s*$/$1/;
+	my $class_name = $file->get_class ();
+	my @file_list;
+	if (-f $fn) {
+	    @file_list = ($fn);
+	} else {
+	    @file_list = glob ($fn);
+	}
+	if ((not @file_list) and (not $file->is_ghost())) {
+	    message ("File not found by glob: $buildroot$file");
+	    $has_errors = 1;
+	}
 
-		my @attribs = $file->get_attributes ();
-		my @defattribs = $file->get_defattributes ();
-		my @rec_list = ();
-		
-		foreach my $fname (@file_list) {
-	    	if (-d $fname) {
-				if ($file->is_recursive()) {
-		    		my @files_in_dir = list_all_files ($fname);
-		    		@rec_list = (@rec_list, @files_in_dir);
-				}
-	    	}
+	my @attribs = $file->get_attributes ();
+	my @defattribs = $file->get_defattributes ();
+	my @rec_list = ();
+	
+	foreach my $fname (@file_list) {
+	    if (-d $fname) {
+		if ($file->is_recursive()) {
+		    my @files_in_dir = list_all_files ($fname);
+		    @rec_list = (@rec_list, @files_in_dir);
 		}
+	    }
+	}
     
-		my @all_file_list = (@file_list, @rec_list);
-    	foreach my $fname (@all_file_list) {
-	    	if (defined ($file_info{$fname})) {
-				message ("File listed twice: $fname");
-				$has_errors = 1;
-	    	}
+	my @all_file_list = (@file_list, @rec_list);
+	foreach my $fname (@all_file_list) {
+	    if (defined ($file_info{$fname})) {
+		message ("File listed twice: $fname");
+		$has_errors = 1;
+	    }
 	    
-			if (not defined ($file_info{$fname})) {
-            	# Assume that we are going to use the defattrs;
+	    if (not defined ($file_info{$fname})) {
+		# Assume that we are going to use the defattrs;
                 # we'll fixup later
                 my @attribsToUse = @defattribs;
                 my $mode = $attribsToUse[0];
@@ -1403,7 +1403,7 @@ sub get_proto_hash ($$$) {
                         $mode = $attribsToUse[3];
                     }
                 }
-
+		
                 # We use the attribs (rather than the defattribs)
                 # if this is the file listed in %files AND
                 # we have attributes
@@ -1414,112 +1414,112 @@ sub get_proto_hash ($$$) {
                     }
                 }
 			
-				my $pline;
-				if (defined $do_ips) {
-					my $hardlink = undef;
-
-					# FIXME: $fname should be used and not $file!
-					# 	but $fname wrong data type ( string?)
-					if ($file->is_hardlink()) {
-						$hardlink = 1;
-					}
-				
-					if ( not defined $file_info{$fname} ) {
-						$pline = undef;
-						$pline = get_ips_proto_line ($fname,
-												$class_name,
-												$buildroot,
-												$fname, 
-												$basedir,
-							        				$mode,
-							        				$attribsToUse[1],
-						   	 					$attribsToUse[2],
-												$hardlink,
-												$package, $spec);
-						if (not defined ($pline)) {
-        		        			message ("IPS: File not found by glob: $buildroot/$fname");
-           			    			$has_errors = 1;
-           					}
-  		   	    			$file_info{$fname} = $pline;
-    	   		  			if (defined ($all_files{$fname}) and substr ($pline, 0, 1) ne "d") {
-							# Is this a warning I should care about?
-           	    					#print "WARNING IPS: $fname is included in both $package and $all_files{$fname}\n";
-           					}
-					}
-				} else {
-					# Now collect for SVr4 packages
-					my $pline = get_proto_line ($file,
-							    		$class_name,
-							    		$buildroot,
-						    	    		$fname, 
-							    		$basedir,
-							    		$mode,
-							    		$attribsToUse[1],
-							    		$attribsToUse[2]);
-					if (not defined ($pline)) {
-			    		message ("File not found by glob: $buildroot/$fname");
-			    		$has_errors = 1;
-					}
-					$file_info{$fname} = $pline;
-					if (defined ($all_files{$fname}) and
-		    			substr ($pline, 0, 1) ne "d") {
-			   	 		print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
-					}
-				}
-		    	my $parent_dir = $fname;
-				$parent_dir =~ s/\/[^\/]+$//;
-	    		while ($parent_dir ne "" and
-		   				"/$parent_dir" ne "$basedir" and
-			   			not defined ($file_info{$parent_dir}) and
-			   			not defined ($default_dirs{$parent_dir})) {
-        	        my $dirmode = $defattr[3];
+		my $pline;
+		if (defined $do_ips) {
+		    my $hardlink = undef;
+		    
+		    # FIXME: $fname should be used and not $file!
+		    # 	but $fname wrong data type ( string?)
+		    if ($file->is_hardlink()) {
+			$hardlink = 1;
+		    }
+		    
+		    if ( not defined $file_info{$fname} ) {
+			$pline = undef;
+			$pline = get_ips_proto_line ($fname,
+						     $class_name,
+						     $buildroot,
+						     $fname, 
+						     $basedir,
+						     $mode,
+						     $attribsToUse[1],
+						     $attribsToUse[2],
+						     $hardlink,
+						     $package, $spec);
+			if (not defined ($pline)) {
+			    message ("IPS: File not found by glob: $buildroot/$fname");
+			    $has_errors = 1;
+			}
+			$file_info{$fname} = $pline;
+			if (defined ($all_files{$fname}) and substr ($pline, 0, 1) ne "d") {
+			    # Is this a warning I should care about?
+			    #print "WARNING IPS: $fname is included in both $package and $all_files{$fname}\n";
+			}
+		    }
+		} else {
+		    # Now collect for SVr4 packages
+		    my $pline = get_proto_line ($file,
+						$class_name,
+						$buildroot,
+						$fname, 
+						$basedir,
+						$mode,
+						$attribsToUse[1],
+						$attribsToUse[2]);
+		    if (not defined ($pline)) {
+			message ("File not found by glob: $buildroot/$fname");
+			$has_errors = 1;
+		    }
+		    $file_info{$fname} = $pline;
+		    if (defined ($all_files{$fname}) and
+			substr ($pline, 0, 1) ne "d") {
+			print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
+		    }
+		}
+		my $parent_dir = $fname;
+		$parent_dir =~ s/\/[^\/]+$//;
+		while ($parent_dir ne "" and
+		       "/$parent_dir" ne "$basedir" and
+		       not defined ($file_info{$parent_dir}) and
+		       not defined ($default_dirs{$parent_dir})) {
+		    my $dirmode = $defattr[3];
             	    if (not defined $dirmode or $dirmode eq '-') {
-                	    $dirmode = $defattr[0]; # fall back to old behaviour
-   	           	 	}
-					my $pline;
-					if (defined $do_ips) {
-						$pline = get_ips_proto_line(undef,
-									"none",
-								    $buildroot,
-					    			$parent_dir,
-								    $basedir,
-								    $dirmode,
-								    $defattr[1],
-						    		$defattr[2],
-									undef,
-									$package, $spec);
-					} else {
-						$pline = get_proto_line (undef,
-								    "none",
-								    $buildroot,
-								    $parent_dir,
-								    $basedir,
-					    			$dirmode,
-								    $defattr[1],
-							    	$defattr[2]);
-					}
-					if (defined ($pline)) {
-					    $default_dirs{$parent_dir} = $pline;
-					} else {
-		    			last;
-					}
-					$parent_dir =~ s/\/[^\/]+$//;
-	   			}
-	    	}
+			$dirmode = $defattr[0]; # fall back to old behaviour
+		    }
+		    my $pline;
+		    if (defined $do_ips) {
+			$pline = get_ips_proto_line(undef,
+						    "none",
+						    $buildroot,
+						    $parent_dir,
+						    $basedir,
+						    $dirmode,
+						    $defattr[1],
+						    $defattr[2],
+						    undef,
+						    $package, $spec);
+		    } else {
+			$pline = get_proto_line (undef,
+						 "none",
+						 $buildroot,
+						 $parent_dir,
+						 $basedir,
+						 $dirmode,
+						 $defattr[1],
+						 $defattr[2]);
+		    }
+		    if (defined ($pline)) {
+			$default_dirs{$parent_dir} = $pline;
+		    } else {
+			last;
+		    }
+		    $parent_dir =~ s/\/[^\/]+$//;
+		}
+	    }
     	}
-	}
+    }
     chdir ($cwd);
 
     foreach my $dirname (keys %default_dirs) {
-		if (not defined ($file_info{$dirname})) {
-	    	$file_info{$dirname} = $default_dirs{$dirname}
-		}
+	if (not defined ($file_info{$dirname})) {
+	    $file_info{$dirname} = $default_dirs{$dirname}
+	}
     }
 
     if ($has_errors == 1) {
-		return undef;
+	return undef;
     } else {
-		return \%file_info;
+	return \%file_info;
     }
 }
 
@@ -1594,134 +1594,138 @@ sub make_solaris_pkg ($$) {
 # The first agument contain reference to array - at the end of this
 # array
 sub make_ips_dependency ($$) {
-	my $ref_lines = shift;
-	my $spec = shift;
-
-	# Check dependency of main/first package as subpackages can't have
-	# a dependency or can they?
-	my $package = ($spec->get_packages())[0];	
-
-	my @deps = $package->get_array('requires');
-	my $fav_pkg = 0;
-	my $fav_found;	
-	my @favoured_packages = qw(SUNWcsr SUNWcsu SUNWcsxu
-    												 SUNWcar SUNWcarx SUNWcsd
-                             SUNWcsl SUNWcslx);
-	foreach my $dep (@deps) {
-		$fav_pkg = 0;	
+    my $ref_lines = shift;
+    my $spec = shift;
+    
+    # Check dependency of main/first package as subpackages can't have
+    # a dependency or can they?
+    my $package = ($spec->get_packages())[0];	
+    
+    my @deps = $package->get_array('requires');
+    my $fav_pkg = 0;
+    my $fav_found;	
+    my @favoured_packages = qw(SUNWcsr SUNWcsu SUNWcsxu SUNWcar SUNWcarx SUNWcsd SUNWcsl SUNWcslx);
+    foreach my $dep (@deps) {
+	$fav_pkg = 0;	
    	foreach my $p (@favoured_packages) {
-      	# if we depend on a favourate package, depend 
-        # only on it.
-        if ( $dep == $p ) {
-					if ( defined $fav_found ) {
-						$fav_pkg = -1;
-						last;
-					}
-					else {
-        		$fav_pkg = 1;
-						$fav_found = 1;
-						last;
-					}
-        }
-    }
-		if ( $fav_pkg >= 0 ) {
-			#FIXME: Ugly hack as there is bug in IPS that dependency doesn't work
-			#   across different authorities
-			# As workaround let's comment all dependencies on SUNW packages
-			if ( $dep =~ m/^SUNW/ ) {
-				push  @$ref_lines, "#depend type=require fmri=$dep";
-			} else {
-				push @$ref_lines, "depend type=require fmri=$dep";
-			}
+	    # if we depend on a favourate package, depend 
+	    # only on it.
+	    if ( $dep == $p ) {
+		if ( defined $fav_found ) {
+		    $fav_pkg = -1;
+		    last;
 		}
 		else {
-			message("WARNING: Skipping dependency ($dep) on more than 1 favourite package"); 
+		    $fav_pkg = 1;
+		    $fav_found = 1;
+		    last;
 		}
+	    }
 	}
+	if ( $fav_pkg >= 0 ) {
+	    #FIXME: Ugly hack as there is bug in IPS that dependency doesn't work
+	    #   across different authorities
+	    # As workaround let's comment all dependencies on SUNW packages
+	    if ( $dep =~ m/^SUNW/ ) {
+		push  @$ref_lines, "#depend type=require fmri=$dep";
+	    } else {
+		push @$ref_lines, "depend type=require fmri=$dep";
+	    }
+	}
+	else {
+	    message("WARNING: Skipping dependency ($dep) on more than 1 favourite package"); 
+	}
+    }
 }
 
 # Add open transaction line - with pkgsend command
 sub open_ips_transaction($$) {
-	my $ref_lines = shift;
-	my $spec = shift;
-
-	my $name = $spec->get_value_of ("name");
-	my $version = $spec->get_value_of("version");
-	my $manifestdir = 
+    my $ref_lines = shift;
+    my $spec = shift;
+    
+    my $name = $spec->get_value_of ("name");
+    my $version = $spec->get_value_of("version");
 	
-	my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" . $spec->get_value_of ("name") . ".manifest";
+    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" . $spec->get_value_of ("name") . ".manifest";
 
-	if (scalar @lines > 0) {
-		print "Warning: Open transaction isn't first line of pkgsend script!\n";
-	}
-	# FIXME: Need to get this from the environmental variable, rather than
-	# set it from the script each time
-	push (@$ref_lines, "export PKG_REPO=$ips_server");
-	push (@$ref_lines, "eval `pkgsend open $name\@$version`");
-	push (@$ref_lines, "pkgsend include $manifest");
+    if (scalar @lines > 0) {
+	print "Warning: Open transaction isn't first line of pkgsend script!\n";
+    }
+    # FIXME: Need to get this from the environmental variable, rather than
+    # set it from the script each time
+    push (@$ref_lines, "export PKG_REPO=$ips_server");
+    push (@$ref_lines, "eval `pkgsend open $name\@$version`");
+    push (@$ref_lines, "pkgsend include $manifest");
 } 
 
 # Add summary line 
 sub add_ips_license($$) {
-	my $ref_lines = shift;
-	my $spec = shift;
-
-	my $name = $spec->get_value_of ("name");
-	my $license= $spec->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
-
-	push (@$ref_lines, "license $license license=copyright");
+    my $ref_lines = shift;
+    my $spec = shift;
+    
+    my $name = $spec->get_value_of ("name");
+    my $license= $spec->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
+    
+    push (@$ref_lines, "license $license license=copyright");
 }
 
 # Add summary line 
 sub add_ips_summary($$) {
-	my $ref_lines = shift;
-	my $spec = shift;
+    my $ref_lines = shift;
+    my $spec = shift;
+    
+    my $summary = $spec->get_value_of("summary");
+    my $upstream_url = $spec->get_value_of("url");
 
-	my $summary = $spec->get_value_of("summary");
-	my $upstream_url = $spec->get_value_of("url");
+    push (@$ref_lines, "set name=description value=\"$summary\"");
+    push (@$ref_lines, "set name=pkg.summary value=\"$summary\"");
+    push (@$ref_lines, "set name=info.upstream_url value=\"$upstream_url\"");
+    
+    # FIXME: This should probably point at individual packagers at some stage in the future
+    push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
 
-	push (@$ref_lines, "set name=description value=\"$summary\"");
-	push (@$ref_lines, "set name=pkg.summary value=\"$summary\"");
-	push (@$ref_lines, "set name=info.upstream_url value=\"$upstream_url\"");
+    push (@$ref_lines, "set name=description value=\"$summary\"");
+    push (@$ref_lines, "set name=pkg.summary value=\"$summary\"");
+    push (@$ref_lines, "set name=info.upstream_url value=\"$upstream_url\"");
 
-	# FIXME: This should probably point at individual packagers at some stage in the future
-	push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
+    # FIXME: This should probably point at individual packagers at some stage in the future
+    push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
 
-	my $group = $spec->get_value_of("group");
-	if (defined $group) {
-		my $classification = "freedesktop.org::" . $group;
-		push (@$ref_lines, "set name=info.classification value=\"$classification\"");
-	}
+    my $group = $spec->get_value_of("group");
+    if (defined $group) {
+	my $classification = "freedesktop.org::" . $group;
+	push (@$ref_lines, "set name=info.classification value=\"$classification\"");
+    }
 }
 
 # Add close transaction
 sub close_ips_transaction($) {
-	my $ref_lines = shift;
-	my @lines = @$ref_lines;
-
-	push (@$ref_lines , "pkgsend close");
+    my $ref_lines = shift;
+    my @lines = @$ref_lines;
+    
+    push (@$ref_lines , "pkgsend close");
 }
 
 # Create file list from package with tag for subpackages for pkgsend command
 sub make_ips_package ($$$$) {
-	my $spec = shift;
-	my $package = shift;
-	my $ref_lines = shift;
-	my $tag = shift;
-
-	if (defined $tag) {
-		$tag = " $tag=true";
-	} else {
-		$tag = "";
-	}
-
-	my $files_ref = get_proto_hash ($spec, $package, 1);
+    my $spec = shift;
+    my $package = shift;
+    my $ref_lines = shift;
+    my $tag = shift;
+    
+    if (defined $tag) {
+	$tag = " $tag=true";
+    } else {
+	$tag = "";
+    }
+    
+    my $files_ref = get_proto_hash ($spec, $package, 1);
     if (not defined ($files_ref)) {
-		exit (1);
+	exit (1);
     }
     my %files = %$files_ref;
     foreach my $file (keys %files) {
-		push(@$ref_lines, $files{$file} . $tag);	
+	push(@$ref_lines, $files{$file} . $tag);	
     }
     if (not %files) {
 	print "WARNING: empty package: $package\n";
@@ -1730,18 +1734,18 @@ sub make_ips_package ($$$$) {
 
 # Parse tag from package name
 sub parse_tag($) {
-	my $package = shift;
-	my $tag;
-	print "DEBUG: Parsing tag for package $package\n";
-	if ( $package =~ /devel$/ ) {
-		$tag = "devel";
-	} elsif ( $package =~ /l10n$/ ) {
-		$tag = "l10n";
-	} elsif ( $package =~ /doc$/ ) {
-		$tag = "doc";
-	}
-
-	return $tag;
+    my $package = shift;
+    my $tag;
+    print "DEBUG: Parsing tag for package $package\n";
+    if ( $package =~ /devel$/ ) {
+	$tag = "devel";
+    } elsif ( $package =~ /l10n$/ ) {
+	$tag = "l10n";
+    } elsif ( $package =~ /doc$/ ) {
+	$tag = "doc";
+    }
+    
+    return $tag;
 }
 
 # Prepare pkgsend lines, which add files of package to ips repository
@@ -1750,87 +1754,87 @@ sub make_ips_files ($$) {
 	my $spec = shift;
     my $has_files_at_all = 0;
 
-	my @packages = $spec->get_packages ();
-	my $tag;
-	foreach $package (@packages) {
-		print "DEBUG: making package $package\n";
-		if (defined $tag) {
-			$tag = parse_tag($package);			
-		}
-		make_ips_package($spec, $package, $ref_lines, $tag);
-		# first package is the main one - without tag
-		$tag = "";
+    my @packages = $spec->get_packages ();
+    my $tag;
+    foreach $package (@packages) {
+	print "DEBUG: making package $package\n";
+	if (defined $tag) {
+	    $tag = parse_tag($package);			
 	}
+	make_ips_package($spec, $package, $ref_lines, $tag);
+	# first package is the main one - without tag
+	$tag = "";
+    }
 }
 
 # Create infrastructure for IPS package
 sub create_ips_package ($) {
-	my $spec = shift;
+    my $spec = shift;
+    
+    print "DEBUG: Publishing ips package\n";
+    
+    my @pkg_lines;
+    my @manifest_lines;
+    print "DEBUG: Calling ips_transaction\n";
+    open_ips_transaction(\@pkg_lines, $spec);
+    print "DEBUG: Calling make_ips_dependency\n";
+    make_ips_dependency(\@manifest_lines, $spec);
+    print "DEBUG: Calling make_ips_files\n";
+    make_ips_files(\@manifest_lines, $spec);
+    print "DEBUG: Calling add_ips_summary\n";
+    add_ips_summary(\@manifest_lines, $spec);
+    print "DEBUG: Calling add_ips_license\n";
+    add_ips_license(\@manifest_lines, $spec); 
+    print "DEBUG: Calling close_ips_transaction\n";
+    close_ips_transaction(\@pkg_lines);
+    
+    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" . $spec->get_value_of ("name") . "_ips.ksh";
+    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" . $spec->get_value_of ("name") . ".manifest";
 
-	print "DEBUG: Publishing ips package\n";
-
-	my @pkg_lines;
-	my @manifest_lines;
-	print "DEBUG: Calling ips_transaction\n";
-	open_ips_transaction(\@pkg_lines, $spec);
-	print "DEBUG: Calling make_ips_dependency\n";
-	make_ips_dependency(\@manifest_lines, $spec);
-	print "DEBUG: Calling make_ips_files\n";
-	make_ips_files(\@manifest_lines, $spec);
-	print "DEBUG: Calling add_ips_summary\n";
-	add_ips_summary(\@manifest_lines, $spec);
-	print "DEBUG: Calling add_ips_license\n";
-	add_ips_license(\@manifest_lines, $spec); 
-	print "DEBUG: Calling close_ips_transaction\n";
-	close_ips_transaction(\@pkg_lines);
-
-	my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" . $spec->get_value_of ("name") . "_ips.ksh";
-	my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" . $spec->get_value_of ("name") . ".manifest";
-
-	print "DEBUG: Prepare script - $script\n";
-	prepare_ips_script($spec, $script, \@pkg_lines);
-	print "DEBUG: Prepare manifest - $manifest\n";
-	prepare_ips_manifest($spec, $manifest, \@manifest_lines);
-	
-	print "DEBUG: Calling script $script\n";
-	`chmod +x $script`;
-	print `$script`;
+    print "DEBUG: Prepare script - $script\n";
+    prepare_ips_script($spec, $script, \@pkg_lines);
+    print "DEBUG: Prepare manifest - $manifest\n";
+    prepare_ips_manifest($spec, $manifest, \@manifest_lines);
+    
+    print "DEBUG: Calling script $script\n";
+    `chmod +x $script`;
+    print `$script`;
 }
 
 # Save pkg lines array to script, which publish all info to ips repository
 sub prepare_ips_script($$$) {
-	my $spec = shift;
-	my $file = shift;
-	my $ref_lines = shift;
+    my $spec = shift;
+    my $file = shift;
+    my $ref_lines = shift;
+    
+    my @lines = @$ref_lines;
+    my $build_dir = $spec->eval('%buildroot');
+    open FW, ">$file" or die "Failed to open file $file for writing\n";
 
-	my @lines = @$ref_lines;
-	my $build_dir = $spec->eval('%buildroot');
-	open FW, ">$file" or die "Failed to open file $file for writing\n";
-
-	print FW "#/usr/bin/bash\n";
-
-	foreach $line (@lines) {
-		print FW "$line \n";
-	}
-	close FW; 
+    print FW "#/usr/bin/bash\n";
+    
+    foreach $line (@lines) {
+	print FW "$line \n";
+    }
+    close FW; 
 }
 
 # Save manifest lines array to file, which gets included when the package is sent
 # to the IPS repository
 
 sub prepare_ips_manifest($$$) {
-	my $spec = shift;
-	my $file = shift;
-	my $ref_lines = shift;
-
-	my @lines = @$ref_lines;
-	my $build_dir = $spec->eval('%buildroot');
-	open FW, ">$file" or die "Failed to open file $file for writing\n";
-
-	foreach $line (@lines) {
-		print FW "$line\n";
-	}
-	close FW;
+    my $spec = shift;
+    my $file = shift;
+    my $ref_lines = shift;
+    
+    my @lines = @$ref_lines;
+    my $build_dir = $spec->eval('%buildroot');
+    open FW, ">$file" or die "Failed to open file $file for writing\n";
+    
+    foreach $line (@lines) {
+	print FW "$line\n";
+    }
+    close FW;
 }
 
 sub create_svr4_packages ($) {
