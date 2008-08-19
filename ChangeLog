@@ -1,3 +1,8 @@
+2008-08-20  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: add preserve="renamenew" to config files in
+	  IPS manifest.  Patch from Rein Remmel.
+
 2008-08-14  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: add --pkgformat ips option and only publish the

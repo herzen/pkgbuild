@@ -1265,6 +1265,9 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
 
     if ( $type eq 'f' and defined $file) {
 	$line = "file $svrfname mode=$mode owner=$user group=$group path=\"$file\"";
+	if ($file->is_config()) {
+	    $line .= " preserve=\"renamenew\"";
+	}    
     } elsif ( $type eq 'd' ) {
 	if ( not defined $file) {
 	    $file = $fname;
