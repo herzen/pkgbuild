@@ -1264,7 +1264,7 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
     my $svrfname = $spec->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . $relpath;
 
     if ( $type eq 'f' and defined $file) {
-	$line = "fname $svrfname mode=$mode owner=$user group=$group path=\"$fname\"";
+	$line = "file $svrfname mode=$mode owner=$user group=$group path=\"$fname\"";
 	if ($file->is_config()) {
 	    $line .= " preserve=\"renamenew\"";
 	}    
