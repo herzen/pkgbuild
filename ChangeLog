@@ -1,3 +1,8 @@
+2008-08-29  Laszlo Peter  <laca@sun.com>
+
+	* rpm_spec.pm.in: apply patch by Boyd Adamson for
+	  [ 2019102 ] Compressed patches are recognised but can't be found
+
 2008-08-21  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: use $fname instead of $file in
