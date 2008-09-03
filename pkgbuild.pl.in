@@ -10,7 +10,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright (C) 2004, 2005 Sun Microsystems, Inc.
+#  Copyright 2008 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -266,7 +266,7 @@ sub usage () {
     print_version();
     print <<_EOF_;
 Copyright 2003-2008 Sun Microsystems, Inc.
-This program may be freely redistributed under the terms of the GNU GPL
+This program may be freely redistributed under the terms of the GNU GPLv2
 
 * = the option is implemented 
 
@@ -835,6 +835,30 @@ sub make_pkginfo ($$) {
     return "i pkginfo=$pkginfodir/$fname\n";
 }
 
+# expand macros in file $src in the contect of $spec and write the output
+# to file $dst
+sub eval_file ($$$) {
+    my $spec = shift;
+    my $src = shift;
+    my $dst = shift;
+
+    open SRC, "<$src" or
+	fatal ("failed to open file $src for reading");
+    open DST, ">$dst" or
+	fatal ("failed to open file $dst for writing");
+
+    while (my $line = <SRC>) {
+	if ($line =~ /%({[.a-zA-Z0-9_]+}|[.a-zA-Z0-9_]+)/) {
+	    print DST $spec->eval ($line);
+	} else {
+	    print DST $line;
+	}
+    }
+
+    close SRC;
+    close DST;
+}
+
 sub make_copyright ($$;$) {
     my $spec = shift;
     my $package = shift;
@@ -858,12 +882,7 @@ sub make_copyright ($$;$) {
     if (defined $package) {
 	$pkgname = "$package";
     }
-    my $out=`cp "$srcdir/$cr_file" "$copyrightdir/${pkgname}.copyright" 2>&1`;
-
-    if ($? != 0) {
-	message ("warning: failed to copy copyright file $srcdir/$cr_file: $out");
-	return undef;
-    }
+    eval_file ($spec, "$srcdir/$cr_file", "$copyrightdir/${pkgname}.copyright");
 
     return "i copyright=$copyrightdir/${pkgname}.copyright\n";
 }
@@ -1097,21 +1116,21 @@ sub get_docdir ($$) {
     my $package = shift;
     my $basedir = shift;
 
-    my $pkgname = $package->get_tag ("SUNW_Pkg");
-    if (not defined ($pkgname)) {
-	$pkgname = $package->get_name ();
+    my $docdir = $package->eval ("%_pkg_docdir");
+    if ($docdir eq '%_pkg_docdir') {
+	$docdir = $package->eval ("%{_datadir}/%{name}");
     }
-    # where to put the doc files in the package:
-    my $docdir;
-    if ($basedir eq "/") {
-	$docdir = "usr/share/doc/" . $pkgname;
-    } else {
-	$docdir = "share/doc/" . $pkgname;
+
+    if (index ($docdir, $basedir) != 0) {
+	$package->_set_error ("%_pkg_docdir ($docdir) is not under basedir $basedir");
+	return undef;
     }
+
+    $docdir = substr ($docdir, length ($basedir));
+    $docdir =~ s/^\/*//;
+
     return $docdir;
 }
-
-my %all_doc_files;
 
 # process a %doc file and return the proto line for $type: ips or svr4
 sub get_doc_proto_line ($$$$) {
@@ -1122,6 +1141,7 @@ sub get_doc_proto_line ($$$$) {
 
     my $package = $file->get_package ();
     my $docdir = get_docdir ($package, $basedir);
+    return undef if not defined ($docdir);
     # now find the build directory:
     my $blddir = $package->eval ("%{_builddir}");
     my $bsdirname = $package->eval ('%{_build_src_dir_name}');
@@ -1170,7 +1190,6 @@ sub get_doc_proto_line ($$$$) {
     my $pkgbasedir = "$basedir/";
     $pkgbasedir =~ s/\/\/*/\//g;
     $pkgbasedir = substr ($pkgbasedir, 1);
-    $all_doc_files{"$pkgbasedir$docdir/$fname"} = "$package";
     $all_files{"$pkgbasedir$docdir/$fname"} = "$package";
     if ($type eq 'svr4') {
 	return "f none $docdir/$fname=$pkgbasedir$docdir/$fname 0444 root bin";
@@ -1576,18 +1595,19 @@ sub get_proto_hash ($$$) {
 		    if (not defined ($pline)) {
 			$has_errors = 1;
 			if ($file->is_doc ()) {
-			    message ("Doc file not found: $fname");
+			    message ("Documentation (%doc) file not found: $fname");
 			} else {
 			    message ("File not found by glob: $buildroot/$fname");
 			}
 		    }
 		    $file_info{$fname} = $pline;
-		    if (defined ($all_doc_files{$fname}) and
+		    if (defined ($all_files{$fname}) and
 			substr ($pline, 0, 1) ne "d") {
-			print "WARNING: documentation file $fname is included in both $package and $all_doc_files{$fname}\n";
-		    } elsif (defined ($all_files{$fname}) and
-			substr ($pline, 0, 1) ne "d") {
-			print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
+			if ($file->is_doc ()) {
+			    print "WARNING: documentation file $fname is included in both $package and $all_files{$fname}\n";
+			} else {
+			    print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
+			}
 		    }
 		}
 		# automatically adding all missing parent dirs
@@ -1597,9 +1617,13 @@ sub get_proto_hash ($$$) {
 		    # so we prepend the name of the docdir otherwise it wouldn't
 		    # be found in $RPM_BUILD_ROOT
 		    my $docdir = get_docdir ($package, $basedir);
-		    $parent_dir = "$basedir/$docdir/$fname";
-		    # delete leading /
-		    $parent_dir = substr ($parent_dir, 1);
+		    if (not defined ($docdir)) {
+			$has_errors = 1;
+		    } else {
+			$parent_dir = "$basedir/$docdir/$fname";
+			# delete leading /
+			$parent_dir = substr ($parent_dir, 1);
+		    }
 		}
 		$parent_dir =~ s/\/[^\/]+$//;
 		while ($parent_dir ne "" and
@@ -1669,6 +1693,9 @@ sub make_solaris_pkg ($$) {
 
     my $files_ref = get_proto_hash ($spec, $package, undef);
     if (not defined ($files_ref)) {
+	if ($spec->has_error ()) {
+	    print ("pkgbuild: " . $spec->get_error () . "\n");
+	}
 	exit (1);
     }
     my %files = %$files_ref;

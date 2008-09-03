@@ -1,3 +1,40 @@
+Version 1.3.2:
+
+	Bugs fixed:
+
+	- [ 2019102 ] Compressed patches are recognised but can't be found
+	  (patch by Boyd Adamson)
+
+	New features:
+
+	- %doc files and %docdir implemented.
+	  Differences from rpmbuild:
+	   - pkgbuild supports %doc(compress|gzip|bzip2) tag, this
+	     causes the files to be compressed with the chosen compression
+	     utility
+	   - files in subdirectories of the source dir can be tagged with
+	     %doc, e.g.
+
+	     %doc po/ChangeLog
+
+	     The file will be placed in a subdirectory of the same
+	     name under %{_pkg_docdir}
+           - the %{_pkg_docdir} macro can be used to refer to or
+	     change the doc directory of a package.
+
+	- pkgtool's new --notify/--nonotify options use notify-send
+	  to tell the user when a spec file is done
+
+	- %{SOURCEn.url} and %{PATCHn.url} macros return the value of
+          Source<n> with any macros expanded.
+          Also %{spec_label.SOURCEn.url} returns the URL of the nth
+          source in %use'd spec file spec_label.
+
+	- macros are now expanded in the copyright file defined by
+          the SUNW_Copyright macro.  This allows providing rich
+          information in the copyright file, e.g. download location,
+	  using %{SOURCEn.url}, see above.
+
 Version 1.3.1:
 
 	Bugs fixed:

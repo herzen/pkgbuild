@@ -1,5 +1,23 @@
 2008-09-03  Laszlo Peter  <laca@sun.com>
 
+	* AUTHORS: add Petr and Glynn
+	* NEWS: update with new features and bug fixes since 1.3.1
+	* pkgbuild.pl.in: new function eval_file for expanding macros
+	  in a file in the context of a spec file.  Use eval_file for
+	  expanding the macros in the copyright file.  Define a new
+	  macro called _pkg_docdir and use it to set/get the location
+	  of the %doc files in the package.  Simplify the %doc code
+	  somewhat.
+	* pkgbuild.spec.in: use %doc :)
+	* rpm_package.pm: new function _set_error() that calls
+	  the parent spec's _set_error().
+	* rpm_spec.pm.in: define _pkg_docdir macro.  Implement
+	  %{SOURCEn.url} & friends.  New function has_error()
+	  returns 1 is there is an error defined with _set_error()
+	* macros.in: add _pkg_docdir
+
+2008-09-03  Laszlo Peter  <laca@sun.com>
+
 	Implement %doc and %docdir
 
 	* pkgbuild.pl.in: process %doc files: copy them to $RPM_BUILD_ROOT,

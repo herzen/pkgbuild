@@ -124,6 +124,13 @@ sub eval ($$) {
     return ${$self->{_parent_spec_ref}}->eval($string);
 }
 
+sub _set_error ($$;$) {
+    my $self = shift;
+    my $msg = shift;
+
+    return ${$self->{_parent_spec_ref}}->_set_error($msg);
+}
+
 sub push_tag ($$$) {
     my $self = shift;
     my $tag_name = shift;

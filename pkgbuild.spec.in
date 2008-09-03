@@ -13,7 +13,7 @@ Version:      @PKGBUILD_VERSION@
 Release:      1
 BuildArch:    noarch
 Vendor:	      Sun Microsystems, Inc.
-Summary:      pkgbuild - rpmbuild compatible tool for building Solaris packages
+Summary:      pkgbuild - rpmbuild-like tool for building Solaris packages
 Source:       pkgbuild-%{version}.tar.bz2
 BuildRoot:    %{_tmppath}/%{name}-%{version}-build
 
@@ -49,6 +49,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr (-, root, bin)
+%doc COPYING AUTHORS NEWS
 %attr (0755, root, bin) %{_bindir}
 %attr (0755, root, bin) %{_libdir}
 

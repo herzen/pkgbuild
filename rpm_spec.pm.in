@@ -270,6 +270,7 @@ sub _read_macros ($) {
 	$default_macros{_localstatedir} = "%{_prefix}/var";
 	$default_macros{_defaultdocdir} = "%_prefix/doc";
 	$default_macros{_docdir} = "%{_datadir}/doc";
+	$default_macros{_pkg_docdir} = "%{_docdir}/%{_name}";
 	$default_macros{__libtoolize} = "libtoolize";
     
 	$default_macros{_global_cflags} = "-O2 -g -pipe";
@@ -509,6 +510,11 @@ sub _do_eval_var ($$$$$@) {  # %var or %{var}
 	    next;
 	}
 	if ($chr eq ".") {
+	    if ($varname =~ /(PATCH|SOURCE)[0-9]*/) {
+		# %{SOURCEn.url}
+		$varname = "$varname$chr";
+		next;
+	    }
 	    return $self->_do_eval_spec_var ($preeval, $str, $delimiter,
 					     $varname, @chrs);
 	}
@@ -556,7 +562,11 @@ sub _do_eval_spec_var ($$$$$@) { # %spec.var or %{spec.var}
 	    next;
 	}
 	if ($chr eq ".") {
-	    if ($varname ne "") {
+	    if ($varname =~ /(PATCH|SOURCE)[0-9]*/) {
+		# %{spec.SOURCEn.url}
+		$varname = "$varname$chr";
+		next;
+	    } elsif ($varname ne "") {
 		return $self->_do_eval_spec_pkg_var ($preeval,
 						     $str, $delimiter,
 						     $specname, $varname,
@@ -2602,12 +2612,16 @@ sub get_package_names ($;$) {
     if (not $datastream) {
 	return $self->get_pkgs ();
     } else {
-	my $pkg_ref = $self->{_packages};
-	my @ds_pkg_names;
-	for my $pkg (@$pkg_ref) {
-	    my $version = $self->eval ('%version');
-	    push (@ds_pkg_names, "$pkg-$version.${arch}.pkg");
-	}
+	my @packages = $self->get_packages ();
+	return undef if not defined ($packages[0]);
+	my $inst = $packages[0]->get_tag ('SUNW_Pkg');
+	$inst = $packages[0]->get_tag ('Name') unless $inst;
+	$inst = "$self" unless $inst;
+
+	my $version = $packages[0]->get_tag ('Version');
+	my $dsname = "${inst}-${version}.${arch}.pkg";
+	my @ds_pkg_names = ($dsname);
+
 	return @ds_pkg_names;
     }
 }
@@ -2638,6 +2652,14 @@ sub get_value_of ($$) {
     my $package_ref = $self->{_packages}[0];
     if (defined ($package_ref) and $package_ref->tag_is_defined ($name)) {
 	return $package_ref->get_tag ($name);
+    } elsif ($name =~ /^(SOURCE|PATCH)([0-9]*).url$/) {
+	my $num = $2;
+	my $source_or_patch = lc($1);
+	if (not defined ($num) or ($num eq "")) {
+	    $num = 0;
+	}
+	my @values = $package_ref->get_array ($source_or_patch);
+	return $values[$num];
     } elsif ($name =~ /^(SOURCE|PATCH)([0-9]*)$/) {
 	my $num = $2;
 	my $source_or_patch = lc($1);
@@ -2892,6 +2914,12 @@ sub get_error ($) {
     } else {
 	return "No error.";
     }
+}
+
+sub has_error ($) {
+    my $self = shift;
+
+    return defined ($self->{error});
 }
 
 _init();

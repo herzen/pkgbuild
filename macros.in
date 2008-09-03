@@ -119,6 +119,7 @@
 %_infodir               %{_datadir}/info
 %_mandir                %{_datadir}/man
 %_docdir		%{_datadir}/doc
+%_pkg_docdir            %{_docdir}/%{name}
 
 %_global_cflags		-O2 -g -pipe
 %optflags		%{_global_cflags}
