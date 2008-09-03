@@ -37,8 +37,9 @@ my @_all_verify =  ('owner', 'group', 'mode', 'md5', 'size', 'maj', 'min',
 		    'symlink', 'mtime');
 
 # Create a new rpm_file object.
-sub new ($$;$$$$$$$$) {
+sub new ($$$;$$$$$$$$) {
     my $class = shift;
+    my $package = shift;
     my $glob = shift;
     my $attribs = shift;
     my $defattribs = shift;
@@ -82,6 +83,7 @@ sub new ($$;$$$$$$$$) {
 	$is_hardlink = 0;
     }
 
+    $self->{_package} = $package;
     $self->{_glob} = $glob;
     # ensure that _attributes and _defattributes
     # are references to a copy of the list passed in,
@@ -95,6 +97,7 @@ sub new ($$;$$$$$$$$) {
     $self->{_is_ghost} = $is_ghost;
     $self->{_is_hardlink} = $is_hardlink;
     $self->{_is_recursive} = $is_recursive;
+    $self->{_compression} = undef;
     if (defined ($class_name)) {
 	$self->{_class} = $class_name;
     } else {
@@ -135,6 +138,19 @@ sub get_all_verify () {
     return (@_all_verify);
 }
 
+sub set_compression ($$) {
+    my $self = shift;
+    my $compression = shift;
+
+    $self->{_compression} = $compression;
+}
+
+sub get_compression ($) {
+    my $self = shift;
+
+    return $self->{_compression};
+}
+
 sub get_defattributes ($) {
     my $self = shift;
 
@@ -147,6 +163,12 @@ sub get_attributes ($) {
 
     my $ref = $self->{_attributes};
     return @$ref;
+}
+
+sub get_package ($) {
+    my $self = shift;
+
+    return $self->{_package};
 }
 
 sub get_verify ($) {

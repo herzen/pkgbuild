@@ -2202,11 +2202,33 @@ sub _process_files ($$$;$) {
 		$self->_set_error ("syntax error: $line", $fhandle);
 		return (0);
 	    }
+	} elsif ($eline =~ /^\s*%docdir/) {
+	    $is_doc = 1;
+	    $eline =~ s/^\s*%docdir\s*//;
+	    next;
 	} elsif ($eline =~ /^\s*%doc/) {
 	    $is_doc = 1;
 	    $eline =~ s/^\s*%doc\s*//;
-# FIXME: should process %doc stuff properly...
-#	    next;
+	    my $compression;
+	    if ($eline =~ /^\((compress|gzip|bzip2)\)/) {
+		$compression = $1;
+		$eline =~ s/^\((compress|gzip|bzip2)\)\s*//;
+	    }
+	    # no special processing needed if it's a file with a full path name
+	    next if $eline =~ /^\//;
+	    # a whitespace-separated list of file name may follow %doc
+	    my @doc_names = split /\s+/, $eline;
+	    for my $doc_name (@doc_names) {
+		my $file = rpm_file->new ($package_ref, $doc_name,
+					  \@this_attr, \@defattr, \@this_verify,
+					  not ($is_dir), $is_doc,
+					  $is_config, $class_name, $is_ghost,
+					  $is_hardlink);
+		$package_ref->add_file ($file);
+		if (defined ($compression)) {
+		    $file->set_compression ($compression);
+		}
+	    }
 	} elsif ($eline =~ /^\s*%config/) {
 	    $is_config = 1;
 	    $eline =~ s/^\s*%config\s*\([^)]*\)\s*// or
@@ -2243,20 +2265,16 @@ sub _process_files ($$$;$) {
 	    }
 	    $eline =~ s/^\s*%class\s*\([^\)]*\)//;
 	    next;
-	} elsif ($eline =~ /^\s*%docdir/) {
-	    $is_doc = 1;
-	    $is_dir = 1;
-	    $eline =~ s/^\s*%docdir\s*//;
-	    next;
 	} elsif ($eline =~ /^\s*%dir/) {
 	    $is_dir = 1;
 	    $eline =~ s/^\s*%dir\s*//;
 	    next;
 	} elsif ($eline =~ /^\s*(\/.*\S)\s*$/) {
-	    my $file = rpm_file->new ($1, \@this_attr, \@defattr, \@this_verify,
-				     not ($is_dir), $is_doc,
-				     $is_config, $class_name, $is_ghost,
-		                     $is_hardlink);
+	    my $file = rpm_file->new ($package_ref, $1,
+				      \@this_attr, \@defattr, \@this_verify,
+				      not ($is_dir), $is_doc,
+				      $is_config, $class_name, $is_ghost,
+				      $is_hardlink);
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
 	    $self->_set_error ("File must begin with \"/\": $1", $fhandle);

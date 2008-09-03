@@ -650,6 +650,7 @@ sub mkdir_p ($) {
 	mkdir_p ($pdir) or return 0;
     }
 
+    return 1 if -d $dir;
     mkdir ($dir) or return 0;
     return 1;
 }
@@ -1090,6 +1091,98 @@ sub get_file_type ($) {
     }
 }
 
+# return the directory, relative to $basedir, where %doc files are
+# placed for $package
+sub get_docdir ($$) {
+    my $package = shift;
+    my $basedir = shift;
+
+    my $pkgname = $package->get_tag ("SUNW_Pkg");
+    if (not defined ($pkgname)) {
+	$pkgname = $package->get_name ();
+    }
+    # where to put the doc files in the package:
+    my $docdir;
+    if ($basedir eq "/") {
+	$docdir = "usr/share/doc/" . $pkgname;
+    } else {
+	$docdir = "share/doc/" . $pkgname;
+    }
+    return $docdir;
+}
+
+my %all_doc_files;
+
+# process a %doc file and return the proto line for $type: ips or svr4
+sub get_doc_proto_line ($$$$) {
+    my $type = shift;
+    my $file = shift;
+    my $fname = shift;
+    my $basedir = shift;
+
+    my $package = $file->get_package ();
+    my $docdir = get_docdir ($package, $basedir);
+    # now find the build directory:
+    my $blddir = $package->eval ("%{_builddir}");
+    my $bsdirname = $package->eval ('%{_build_src_dir_name}');
+    if ($bsdirname eq '%{_build_src_dir_name}') {
+	$bsdirname = $package->eval ('%name-%version');
+    }
+    if (! -f "$blddir/$bsdirname/$fname") {
+	return undef;
+    }
+    my $mydir = `pwd`;
+    chomp ($mydir);
+    # get the directory of $fname, in case we have something like
+    # %doc foo/bar/COPYING
+    my $fname_basedir = dirname ($fname);
+    mkdir_p ("./$basedir/$docdir/$fname_basedir") or fatal ("Failed to create directory $mydir/$docdir/$fname_basedir");
+    system ("cp -p '$blddir/$bsdirname/$fname' './$basedir/$docdir/$fname_basedir'");
+    if ($? != 0) {
+	fatal ("ERROR: failed to copy $fname to $mydir/$basedir/$docdir/$fname_basedir");
+	return undef;
+    }
+    my $compression = $file->get_compression ();
+    if (defined ($compression)) {
+	my $comp_retval;
+	if ($compression eq 'compress') {
+	    system ("rm -f './$basedir/$docdir/${fname}.Z'");
+	    system ("/usr/bin/compress -f './$basedir/$docdir/$fname'");
+	    $comp_retval = $?;
+	    $fname .= ".Z";
+	} elsif ($compression eq 'gzip') {
+	    system ("rm -f './$basedir/$docdir/${fname}.gz'");
+	    system ("/usr/bin/gzip -9 './$basedir/$docdir/$fname'");
+	    $comp_retval = $?;
+	    $fname .= ".gz";
+	} elsif ($compression eq 'bzip2') {
+	    system ("rm -f './$basedir/$docdir/${fname}.bz2'");
+	    system ("/usr/bin/bzip2 -9 './$basedir/$docdir/$fname'");
+	    $comp_retval = $?;
+	    $fname .= ".bz2";
+	}
+	if ($comp_retval != 0) {
+	    fatal ("ERROR: failed to $compression documentation file $mydir/$basedir/$docdir/$fname");
+	    return undef;
+	}
+    }
+	
+    my $pkgbasedir = "$basedir/";
+    $pkgbasedir =~ s/\/\/*/\//g;
+    $pkgbasedir = substr ($pkgbasedir, 1);
+    $all_doc_files{"$pkgbasedir$docdir/$fname"} = "$package";
+    $all_files{"$pkgbasedir$docdir/$fname"} = "$package";
+    if ($type eq 'svr4') {
+	return "f none $docdir/$fname=$pkgbasedir$docdir/$fname 0444 root bin";
+    } elsif ($type eq 'ips') {
+	my $svr_package = basename ($docdir);
+	my $svrfname = $file->get_package ()->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . "$docdir/$fname";
+	return "file $svrfname mode=0444 owner=root group=bin path=\"$pkgbasedir$docdir/$fname\" doc=true";
+    } else {
+	return undef;
+    }
+}
+
 # FIXME: this is ugly as hell
 sub get_proto_line ($$$$$$$$) {
     my $file = shift;
@@ -1108,8 +1201,16 @@ sub get_proto_line ($$$$$$$$) {
 
     my $type = get_file_type ($fname);
 
+    if (($type eq '-') and defined ($file) and $file->is_doc ()) {
+	# documentation file, goes under /usr/share/doc/<package name>
+	# must be copied to $RPM_BUILD_ROOT from the build dir
+	return get_doc_proto_line ('svr4', $file, $fname, $basedir);
+    }
+
     if ($type eq '-') {
 	if (defined ($file) and not $file->is_ghost ()) {
+	    # we don't know what type of file it is
+	    # or it doesn't exist
 	    return undef;
 	} else {
 	    if (not defined ($file)) {
@@ -1238,12 +1339,19 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
     my $type = get_file_type ($fname);
     my $line;
     
+    print "DEBUG: get_ips_proto_line $fname\n";
+    if (($type eq '-') and defined ($file) and $file->is_doc ()) {
+	# documentation file, goes under /usr/share/doc/<package name>
+	# must be copied to $RPM_BUILD_ROOT from the build dir
+	return get_doc_proto_line ('ips', $file, $fname, $basedir);
+    }
+
     if ( $type eq 'g' ) {
 	print "Warning: Ghost files are *not* supported, yet\n";
 	return undef;
     }
 
-    if ( $mode eq "-" ) {
+    if (($mode eq "-") and ($type ne "-")) {
 	$mode = get_file_mode ($fname);
     }
 
@@ -1466,18 +1574,34 @@ sub get_proto_hash ($$$) {
 						$attribsToUse[1],
 						$attribsToUse[2]);
 		    if (not defined ($pline)) {
-			message ("File not found by glob: $buildroot/$fname");
 			$has_errors = 1;
+			if ($file->is_doc ()) {
+			    message ("Doc file not found: $fname");
+			} else {
+			    message ("File not found by glob: $buildroot/$fname");
+			}
 		    }
 		    $file_info{$fname} = $pline;
-		    if (defined ($all_files{$fname}) and
+		    if (defined ($all_doc_files{$fname}) and
+			substr ($pline, 0, 1) ne "d") {
+			print "WARNING: documentation file $fname is included in both $package and $all_doc_files{$fname}\n";
+		    } elsif (defined ($all_files{$fname}) and
 			substr ($pline, 0, 1) ne "d") {
 			print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
 		    }
 		}
+		# automatically adding all missing parent dirs
 		my $parent_dir = $fname;
+		if ($file->is_doc and not "$file" =~ /^\//) {
+		    # %doc files may not include the docdir, only the file name
+		    # so we prepend the name of the docdir otherwise it wouldn't
+		    # be found in $RPM_BUILD_ROOT
+		    my $docdir = get_docdir ($package, $basedir);
+		    $parent_dir = "$basedir/$docdir/$fname";
+		    # delete leading /
+		    $parent_dir = substr ($parent_dir, 1);
+		}
 		$parent_dir =~ s/\/[^\/]+$//;
-		# automatically adding all parent dirs
 		while ($parent_dir ne "" and
 		       "/$parent_dir" ne "$basedir" and
 		       not defined ($file_info{$parent_dir}) and
@@ -1675,7 +1799,8 @@ sub add_ips_license($$) {
     
     my $name = $spec->get_value_of ("name");
     my $license= $spec->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
-    
+
+    return if not -f $license;
     push (@$ref_lines, "license $license license=copyright");
 }
 

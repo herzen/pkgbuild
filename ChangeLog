@@ -1,3 +1,15 @@
+2008-09-03  Laszlo Peter  <laca@sun.com>
+
+	Implement %doc and %docdir
+
+	* pkgbuild.pl.in: process %doc files: copy them to $RPM_BUILD_ROOT,
+	  compress if needed and add them to the prototype/manifest.
+	  Tag %doc files with doc=true in the manifest.
+	* rpm_file.pm: link the rpm_file objects to their package; add
+	  get_package() function.  Also, set_compression() and
+	  get_compression() functions used for %doc files.
+	* rpm_spec.pm.in: process %doc files and %docdir
+
 2008-08-29  Laszlo Peter  <laca@sun.com>
 
 	* rpm_spec.pm.in: apply patch by Boyd Adamson for
