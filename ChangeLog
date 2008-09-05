@@ -1,3 +1,13 @@
+2008-09-05  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: add info about %doc -d subdir
+	* pkgbuild.pl.in: implement the changes for %doc -d subdir
+	* pkgbuild.spec.in: add %{_datadir} and %{_datadir}/doc to
+	  %files so they have correct permissions
+	* rpm_file.pm: new functions set_doc_subdir() and get_doc_subdir()
+	  needed for the %doc -d subdir feature.
+	* rpm_spec.pm.in: implement %doc -d subdir in the spec file parser
+
 2008-09-03  Laszlo Peter  <laca@sun.com>
 
 	* AUTHORS: add Petr and Glynn

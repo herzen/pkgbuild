@@ -1148,6 +1148,14 @@ sub get_doc_proto_line ($$$$) {
     if ($bsdirname eq '%{_build_src_dir_name}') {
 	$bsdirname = $package->eval ('%name-%version');
     }
+
+    my $doc_subdir = $file->get_doc_subdir();
+    if (defined ($doc_subdir)) {
+	$doc_subdir .= "/";
+    } else {
+	$doc_subdir = "";
+    }
+
     if (! -f "$blddir/$bsdirname/$fname") {
 	return undef;
     }
@@ -1157,7 +1165,7 @@ sub get_doc_proto_line ($$$$) {
     # %doc foo/bar/COPYING
     my $fname_basedir = dirname ($fname);
     mkdir_p ("./$basedir/$docdir/$fname_basedir") or fatal ("Failed to create directory $mydir/$docdir/$fname_basedir");
-    system ("cp -p '$blddir/$bsdirname/$fname' './$basedir/$docdir/$fname_basedir'");
+    system ("cp -p '$blddir/$bsdirname/$doc_subdir$fname' './$basedir/$docdir/$fname_basedir'");
     if ($? != 0) {
 	fatal ("ERROR: failed to copy $fname to $mydir/$basedir/$docdir/$fname_basedir");
 	return undef;

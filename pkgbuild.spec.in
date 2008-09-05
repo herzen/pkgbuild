@@ -50,6 +50,8 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr (-, root, bin)
 %doc COPYING AUTHORS NEWS
+%dir %attr (0755, root, sys) %{_datadir}
+%dir %attr (0755, root, other) %{_datadir}/doc
 %attr (0755, root, bin) %{_bindir}
 %attr (0755, root, bin) %{_libdir}
 

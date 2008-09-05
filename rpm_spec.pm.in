@@ -2219,6 +2219,7 @@ sub _process_files ($$$;$) {
 	} elsif ($eline =~ /^\s*%doc/) {
 	    $is_doc = 1;
 	    $eline =~ s/^\s*%doc\s*//;
+	    # automatic compression: a pkgbuild extension
 	    my $compression;
 	    if ($eline =~ /^\((compress|gzip|bzip2)\)/) {
 		$compression = $1;
@@ -2226,6 +2227,12 @@ sub _process_files ($$$;$) {
 	    }
 	    # no special processing needed if it's a file with a full path name
 	    next if $eline =~ /^\//;
+	    # another pkgbuild extension: -d directory
+	    my $subdir;
+	    if ($eline =~ /^-d\s+(\S+)\s*/) {
+		$subdir = $1;
+		$eline =~ s/^-d\s+(\S+)\s*//;
+	    }
 	    # a whitespace-separated list of file name may follow %doc
 	    my @doc_names = split /\s+/, $eline;
 	    for my $doc_name (@doc_names) {
@@ -2237,6 +2244,9 @@ sub _process_files ($$$;$) {
 		$package_ref->add_file ($file);
 		if (defined ($compression)) {
 		    $file->set_compression ($compression);
+		}
+		if (defined ($subdir)) {
+		    $file->set_doc_subdir ($subdir);
 		}
 	    }
 	} elsif ($eline =~ /^\s*%config/) {

@@ -98,6 +98,7 @@ sub new ($$$;$$$$$$$$) {
     $self->{_is_hardlink} = $is_hardlink;
     $self->{_is_recursive} = $is_recursive;
     $self->{_compression} = undef;
+    $self->{_doc_subdir} = undef;
     if (defined ($class_name)) {
 	$self->{_class} = $class_name;
     } else {
@@ -149,6 +150,19 @@ sub get_compression ($) {
     my $self = shift;
 
     return $self->{_compression};
+}
+
+sub set_doc_subdir ($$) {
+    my $self = shift;
+    my $subdir = shift;
+
+    $self->{_doc_subdir} = $subdir;
+}
+
+sub get_doc_subdir ($) {
+    my $self = shift;
+
+    return $self->{_doc_subdir};
 }
 
 sub get_defattributes ($) {
