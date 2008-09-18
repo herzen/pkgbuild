@@ -289,6 +289,8 @@ sub init () {
 	$build_engine_name = "pkgbuild";
 	$build_engine = $pkgbuild_path;
     }
+
+    find_in_path ('notify-send') or $defaults->set ('notify', 0);
 }
 
 # return the name of the log file given the id of the spec file

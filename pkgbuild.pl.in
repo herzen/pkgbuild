@@ -1551,7 +1551,7 @@ sub get_proto_hash ($$$) {
                 # We use the attribs (rather than the defattribs)
                 # if this is the file listed in %files AND
                 # we have attributes
-                if (grep $fname eq $_, @file_list) {
+                if (grep $fname eq $_, @all_file_list) {
                     if (@attribs) {
                         @attribsToUse = @attribs;
                         $mode = $attribs[0];

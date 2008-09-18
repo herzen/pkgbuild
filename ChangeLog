@@ -1,3 +1,18 @@
+2008-09-18  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: %attr modifiers not processed recursively
+	  (broken since 1.3.0)
+	* pkgtool.pl: disable dbus notifications if notify-send is not in the
+	  PATH
+	* NEWS: update
+	* TODO: remove an item that is done
+
+2008-09-18  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: post release version bump
+
+	======= pkgbuild 1.3.90 =======
+
 2008-09-05  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: add info about %doc -d subdir

@@ -13,8 +13,6 @@ Additional stuff needed for full IPS support:
    attributes and tags, e.g.
    %tag (foo) in %files and
    Attribute(name): value
- - possibly merge subpackages and tag them based on their name, e.g.
-   devel, root, data for SFEfoo-devel, SFEfoo-root, SFEfoo-data
  - implement publish subcommand that:
    - rebuilds the manifest (because it's possible that the package was
      previously built as svr4 only)
