@@ -1,5 +1,10 @@
 2008-10-14  Laszlo Peter  <laca@sun.com>
 
+	* pkgtool.pl: fix [ 2149046 ] pkgtool --notify errs when dbus service
+	  is disabled, patch by Andrew Dudman
+
+2008-10-14  Laszlo Peter  <laca@sun.com>
+
 	* pkgtool.pl: fix [ 2149067 ] more colors for summary log
 	  based on patch from Andrew Dudman
 

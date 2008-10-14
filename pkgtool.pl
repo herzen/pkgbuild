@@ -75,6 +75,7 @@ my $build_engine_name = "pkgbuild";
 my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
 my $topdir = "$_homedir/packages";
+my $can_notify = 0;
 
 # Which package mechanism are we going to install by default?
 my $ips;
@@ -135,7 +136,7 @@ sub process_defaults () {
 		    1);
     $defaults->add ('notify', '!',
 		    'whether to send a desktop notification when the build passes/fails, use --nonotify to disable',
-		    1);
+		    $can_notify);
     $defaults->add ('halt_on_errors', '!',
 		    'whether to abort the build if an error occurs', 
 		    0);
@@ -2769,9 +2770,14 @@ sub write_pkgnames () {
 
 # --------- main program ---------------------------------------------------
 sub main {
+    my $dbus = `svcprop -c -p restarter/state svc:/system/dbus:default 2>/dev/null`;
+    chomp ($dbus);
+    if (($dbus eq "online") and find_in_path ('notify-send')) {
+	$can_notify = 1;
+    }
+
     process_defaults ();
 
-    find_in_path ('notify-send') or $defaults->set ('notify', 0);
     process_options ();
 
     $ds = $defaults->get('pkgformat');
