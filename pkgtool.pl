@@ -1043,12 +1043,13 @@ sub print_status_html {
     print SUM_LOG 'td.header { background-color: #666699; }', "\n";
     print SUM_LOG '.passed { color: #11aa11; }', "\n";
     print SUM_LOG '.failed { color: #cc1111; }', "\n";
-    print SUM_LOG '.building { color: #ffa500; }', "\n";
-    print SUM_LOG '.dependency { color: #ffa500; }', "\n";
+    print SUM_LOG '.building { color: #9c23f9; }', "\n";
+    print SUM_LOG '.dependency { color: #9c23f9; }', "\n";
+    print SUM_LOG '.dep_failed { color: #ffa500; }', "\n";
+    print SUM_LOG '.skipped { color: #00a5ff; }', "\n";
     print SUM_LOG '.other { color: #cc1111; }', "\n";
     print SUM_LOG '</style>', "\n";
     print SUM_LOG "</head>\n<body>\n";
-    my $the_summary_title = $defaults->get ('summary_title');
     if (defined ($the_summary_title)) {
 	print SUM_LOG "<h3>$the_summary_title</h3>\n";
     }
@@ -1094,6 +1095,15 @@ sub print_status_html {
 	} elsif ($build_status[$i] eq "NOT_BUILT") {
 	    $color_start = "";
 	    $color_end = "";
+	} elsif ($build_status[$i] eq "SKIPPED") {
+	    $color_start = '<span class="skipped">';
+	    $color_end = '</span>';
+	} elsif ($build_status[$i] eq "DEP_FAILED") {
+	    $color_start = '<span class="dep_failed">';
+	    $color_end = '</span>';
+	} elsif ($build_status[$i] eq "FAILED") {
+	    $color_start = '<span class="failed">';
+	    $color_end = '</span>';
 	} else {
 	    $color_start = '<span class="other">';
 	    $color_end = '</span>';
