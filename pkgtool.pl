@@ -1024,10 +1024,17 @@ sub print_status_html {
 	return;
     }
 
+    my $the_summary_title = $defaults->get ('summary_title');
     print SUM_LOG '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"', "\n";
     print SUM_LOG '    "http://www.w3.org/tr/xhtml1/DTD/xhtml1-strict.dtd">', "\n";
     print SUM_LOG '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">', "\n";
-    print SUM_LOG "<head>\n<title>Build report</title>\n";
+    print SUM_LOG "<head>\n";
+    if (defined ($the_summary_title)) {
+        print SUM_LOG "<title>$the_summary_title - Build report</title>\n";
+    }
+    else {
+        print SUM_LOG "<title>Build report</title>\n";
+    }
     print SUM_LOG '<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />', "\n";
     print SUM_LOG '<style type="text/css">', "\n";
     print SUM_LOG 'body { background-color: #ffffff; }', "\n";

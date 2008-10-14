@@ -1,5 +1,10 @@
 2008-10-14  Laszlo Peter  <laca@sun.com>
 
+	* pkgtool.pl: fix [ 2006686 ] RFE: Put html summary in page title
+	  patch by Damien Carbery.
+
+2008-10-14  Laszlo Peter  <laca@sun.com>
+
 	* pkgbuild.pl.in: fix [ 2148981 ] usage help message inaccurate
 	  patch by Andrew Dudman.
 
