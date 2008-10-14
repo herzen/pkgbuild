@@ -286,8 +286,9 @@ This program may be freely redistributed under the terms of the GNU GPLv2
 *         c                - compile (prep and compile)
 *         i                - install (prep, compile, install)
 *         b                - binary package (prep, compile, install, package)
+*         s                - source package (install, package)
 *         a                - bin/src package (prep, compile, install, package)
-*     --short-circuit      - skip straight to specified stage (only for c,i)
+*     --short-circuit      - skip straight to specified stage (for c,i,b)
       --clean              - remove build tree when done
       --rmsource           - remove sources and spec file when done
       --sign               - generate PGP/GPG signature
