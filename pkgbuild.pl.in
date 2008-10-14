@@ -1629,8 +1629,8 @@ sub get_proto_hash ($$$) {
 			$has_errors = 1;
 		    } else {
 			$parent_dir = "$basedir/$docdir/$fname";
-			# delete leading /
-			$parent_dir = substr ($parent_dir, 1);
+			# delete leading /s
+			$parent_dir =~ s/^\/+//;
 		    }
 		}
 		$parent_dir =~ s/\/[^\/]+$//;

@@ -289,8 +289,6 @@ sub init () {
 	$build_engine_name = "pkgbuild";
 	$build_engine = $pkgbuild_path;
     }
-
-    find_in_path ('notify-send') or $defaults->set ('notify', 0);
 }
 
 # return the name of the log file given the id of the spec file
@@ -2755,6 +2753,8 @@ sub write_pkgnames () {
 # --------- main program ---------------------------------------------------
 sub main {
     process_defaults ();
+
+    find_in_path ('notify-send') or $defaults->set ('notify', 0);
     process_options ();
 
     $ds = $defaults->get('pkgformat');

@@ -1,3 +1,11 @@
+2008-10-14  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: fix normalisation of parent directory names
+	  when a package with basedir == / uses %doc
+	* pkgtool.pl: fix error where $defaults->set is called too early
+	  ($defaults is undef) and causes an error if notify-send is not
+	  in the PATH
+
 2008-09-18  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: %attr modifiers not processed recursively
