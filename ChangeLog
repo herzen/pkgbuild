@@ -1,5 +1,11 @@
 2008-11-10  Laszlo Peter  <laca@sun.com>
 
+	* spectool.pl: implement get_requires, get_prereq and
+	  get_buildrequires in spectool
+	* NEWS: update
+
+2008-11-10  Laszlo Peter  <laca@sun.com>
+
 	* pkgbuild.pl.in: implement _duplicate_files_terminate_build macro
 	  that controls whether file included in multiple packages cause
 	  a warning or an error

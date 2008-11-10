@@ -17,6 +17,8 @@ Version 1.3.4 / 1.3.92:
           Andrew Dudman
         - [ 2006686 ] RFE: Put html summary in page title patch by
           Damien Carbery.
+	- implement get_requires, get_prereq and get_buildrequires in
+          spectool
 
 Version 1.3.3 / 1.3.91:
 

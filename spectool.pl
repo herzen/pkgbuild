@@ -235,12 +235,12 @@ sub process_args {
     }
 
     if (not defined ($spec_command)) {
-	if (not $arg =~ /^(eval|get_packages|get_sources|get_public_sources|get_block|get_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_used_spec_files|get_error|verify)$/) {
+	if (not $arg =~ /^(eval|get_packages|get_sources|get_public_sources|get_block|get_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_used_spec_files|get_error|verify|get_requires|get_buildrequires|get_prereq)$/) {
 	    usage (1);
 	}
 	$spec_command = $arg;
     } else {
-	if ($spec_command =~ /^(eval|get_block)$/
+	if ($spec_command =~ /^(eval|get_block|get_requires|get_prereq)$/
 	    and not defined ($spec_cmd_arg)) {
 	    $spec_cmd_arg = $arg;
 	} else {
@@ -316,6 +316,11 @@ sub process_options {
 	}
     }
 
+    if (not @spec_names) {
+        msg_warning (0, "No spec files specified, nothing to do.");
+        exit (0);
+    }
+
     for my $spec_name (@spec_names) {
 	read_spec ($spec_name) unless not defined ($spec_name);
     }
@@ -385,6 +390,12 @@ Commands:
     get_patches
 
     get_public_patches
+
+    get_requires <package name>
+
+    get_prereq <package name>
+
+    get_buildrequires
 
     get_classes
 
@@ -463,6 +474,65 @@ sub do_get_packages () {
 	} else {
 	    my @pkgs = $spec->get_packages ();
 	    print_result ($spec, @pkgs);
+	}
+    }
+}
+
+sub do_get_requires () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	} else {
+	    my @pkgs = $spec->get_packages ();
+	    my @reqs = ();
+	    foreach my $pkg (@pkgs) {
+		next if "$pkg" ne "$spec_cmd_arg";
+		my @pkg_breqs = $pkg->get_array ('requires');
+		if (@pkg_breqs) {
+		    push(@reqs, @pkg_breqs);
+		}
+	    }
+	    print_result ($spec, @reqs);
+	}
+    }
+}
+
+sub do_get_prereq () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	} else {
+	    my @pkgs = $spec->get_packages ();
+	    my @reqs = ();
+	    foreach my $pkg (@pkgs) {
+		next if "$pkg" ne "$spec_cmd_arg";
+		my @pkg_breqs = $pkg->get_array ('prereq');
+		if (@pkg_breqs) {
+		    push(@reqs, @pkg_breqs);
+		}
+	    }
+	    print_result ($spec, @reqs);
+	}
+    }
+}
+
+sub do_get_buildrequires () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	} else {
+	    my @pkgs = $spec->get_packages ();
+	    my @buildreqs = ();
+	    foreach my $pkg (@pkgs) {
+		my @pkg_breqs = $pkg->get_array ('buildrequires');
+		if (@pkg_breqs) {
+		    push(@buildreqs, @pkg_breqs);
+		}
+	    }
+	    print_result ($spec, @buildreqs);
 	}
     }
 }
@@ -657,6 +727,12 @@ sub main {
 	do_get_class_script_names ();
     } elsif ($spec_command eq "get_included_files") {
 	do_get_included_files ();
+    } elsif ($spec_command eq "get_requires") {
+	do_get_requires ();
+    } elsif ($spec_command eq "get_buildrequires") {
+	do_get_buildrequires ();
+    } elsif ($spec_command eq "get_prereq") {
+	do_get_prereq ();
     } elsif ($spec_command eq "get_error") {
 	do_get_error ();
     } elsif ($spec_command eq "verify") {
