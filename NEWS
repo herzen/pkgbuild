@@ -1,3 +1,23 @@
+Version 1.3.4 / 1.3.92:
+
+	Bugs fixed:
+
+        - [ 2149046 ] pkgtool --notify errs when dbus service is disabled,
+          patch by Andrew Dudman
+        - [ 2148981 ] usage help message inaccurate, patch by Andrew Dudman.
+	- fix normalisation of parent directory names when a package with
+          basedir == / uses %doc
+
+        New features / enhancements:
+
+	- implement _duplicate_files_terminate_build macro
+	  that controls whether file included in multiple packages cause
+	  a warning or an error (default: warning only, as before)
+	- [ 2149067 ] more colors for summary log based on patch from
+          Andrew Dudman
+        - [ 2006686 ] RFE: Put html summary in page title patch by
+          Damien Carbery.
+
 Version 1.3.3 / 1.3.91:
 
 	Bugs fixed:

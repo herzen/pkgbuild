@@ -309,6 +309,7 @@ sub _read_macros ($) {
 	$default_macros{nil} = "";
 	$default_macros{find_lang} = "echo WARNING: find_lang not implemented";
 	$default_macros{_unpackaged_files_terminate_build} = 1;
+	$default_macros{_duplicate_files_terminate_build} = 0;
 	$default_macros{_invalid_patches_terminate_build} = 1;
     } else {
 	my $line;

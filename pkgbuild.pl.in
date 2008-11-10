@@ -1587,7 +1587,7 @@ sub get_proto_hash ($$$) {
 			}
 			$file_info{$fname} = $pline;
 			if (defined ($all_files{$fname}) and substr ($pline, 0, 1) ne "d") {
-			    # Is this a warning I should care about?
+			    # FIXME: Is this a warning I should care about?
 			    #print "WARNING IPS: $fname is included in both $package and $all_files{$fname}\n";
 			}
 		    }
@@ -1612,10 +1612,18 @@ sub get_proto_hash ($$$) {
 		    $file_info{$fname} = $pline;
 		    if (defined ($all_files{$fname}) and
 			substr ($pline, 0, 1) ne "d") {
+			my $err_msg;
 			if ($file->is_doc ()) {
-			    print "WARNING: documentation file $fname is included in both $package and $all_files{$fname}\n";
+			    $err_msg = "documentation file $fname is included in both $package and $all_files{$fname}";
 			} else {
-			    print "WARNING: $fname is included in both $package and $all_files{$fname}\n";
+			    $err_msg = "$fname is included in both $package and $all_files{$fname}";
+			}
+			if ($package->eval ('%_duplicate_files_terminate_build') eq 1) {
+			    print "ERROR: $err_msg\n";
+			    $package->_set_error ("$err_msg");
+			    $has_errors = 1;
+			} else {
+			    print "WARNING: $err_msg\n";
 			}
 		    }
 		}

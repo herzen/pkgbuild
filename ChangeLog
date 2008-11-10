@@ -1,3 +1,12 @@
+2008-11-10  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: implement _duplicate_files_terminate_build macro
+	  that controls whether file included in multiple packages cause
+	  a warning or an error
+	* rpm_spec.pm.in: set _duplicate_files_terminate_build to 0 by default
+	* configure.in: bump version to 1.3.4
+	* NEWS: update
+
 2008-10-14  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: fix [ 2149046 ] pkgtool --notify errs when dbus service
@@ -25,6 +34,8 @@
 	* pkgtool.pl: fix error where $defaults->set is called too early
 	  ($defaults is undef) and causes an error if notify-send is not
 	  in the PATH
+
+	======= pkgbuild 1.3.91 =======
 
 2008-09-18  Laszlo Peter  <laca@sun.com>
 
