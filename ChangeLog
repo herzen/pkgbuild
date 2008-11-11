@@ -1,3 +1,8 @@
+2008-11-11  Laszlo Peter  <laca@sun.com>
+
+	* spectool.pl: exit with non-zero on errors (the value returned is
+	  the number of spec files that could not be parsed)
+
 2008-11-10  Laszlo Peter  <laca@sun.com>
 
 	* spectool.pl: implement get_requires, get_prereq and

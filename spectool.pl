@@ -203,7 +203,7 @@ sub read_spec ($) {
 	$spec = rpm_spec->new ($spec_name, \@predefs);
     } else {
 	if (not $spec_name =~ /^\//) {
-	    my @the_spec_dirlist = split /:/, $defaults->get ('specdirs');
+	    my @the_spec_dirlist = split /:/, $defaults->get ('specdirs'); #/
 	    foreach my $specdir (@the_spec_dirlist) {
 		next if not defined $specdir;
 		$spec = rpm_spec->new ("$specdir/$spec_name", \@predefs);
@@ -449,6 +449,7 @@ sub do_eval () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    print_result ($spec, $spec->eval ($spec_cmd_arg));
 	}
@@ -460,6 +461,7 @@ sub do_get_block () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    print_result ($spec, $spec->get_block ($spec_cmd_arg));
 	}
@@ -471,6 +473,7 @@ sub do_get_packages () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_packages ();
 	    print_result ($spec, @pkgs);
@@ -483,6 +486,7 @@ sub do_get_requires () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_packages ();
 	    my @reqs = ();
@@ -503,6 +507,7 @@ sub do_get_prereq () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_packages ();
 	    my @reqs = ();
@@ -523,6 +528,7 @@ sub do_get_buildrequires () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_packages ();
 	    my @buildreqs = ();
@@ -548,6 +554,7 @@ sub do_get_package_names () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_package_names ($pkgformat);
 	    if ($full_path) {
@@ -564,6 +571,7 @@ sub do_get_classes () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_classes ();
 	    print_result ($spec, @pkgs);
@@ -576,6 +584,7 @@ sub do_get_class_script_names () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_classes ();
 	    print_result ($spec, @pkgs);
@@ -588,6 +597,7 @@ sub do_get_included_files () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_included_files ();
 	    print_result ($spec, @pkgs);
@@ -600,6 +610,7 @@ sub do_get_error () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_error ();
 	    print_result ($spec, @pkgs);
@@ -612,6 +623,7 @@ sub do_get_used_spec_files () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_used_spec_files ();
 	    print_result ($spec, @pkgs);
@@ -624,6 +636,7 @@ sub do_get_sources () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_sources ();
 	    print_result ($spec, @pkgs);
@@ -636,6 +649,7 @@ sub do_get_public_sources () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_public_sources ();
 	    print_result ($spec, @pkgs);
@@ -648,6 +662,7 @@ sub do_get_patches () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_patches ();
 	    print_result ($spec, @pkgs);
@@ -660,6 +675,7 @@ sub do_get_public_patches () {
 	my $spec = $specs[$spec_id];
 	if (defined $spec->{error}) {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_public_patches ();
 	    print_result ($spec, @pkgs);
