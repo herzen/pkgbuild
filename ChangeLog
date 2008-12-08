@@ -1,3 +1,38 @@
+2008-12-08  Laszlo Peter  <laca@sun.com>
+
+	* Makefile.am: add ips_utils.pm
+	* NEWS: update, lots of new stuff
+	* ips_utils.pm: (new) perl module for parsing the IPS cfg_cache file
+	  and other helper functions
+	* pkgbuild.pl.in: publish to $PKGBUILD_IPS_SERVER instead of hard coded
+	  localhost:80; use debug_print for printing debug messages so it's
+	  easier to globally enable/disable them; generate proper dependency
+	  info for IPS packages; use pkg(5) conformant version string;
+	  enhance the publishing script to return non-zero for errors;
+	  add metadata to IPS manifests according to the latest guidelines;
+	  add legacy actions to manifests; use tags for "subpackages", create
+	  separate packages for packages defined with -n
+	* pkgtool.pl: use $PKGBUILD_IPS_SERVER or the local depotd, if running;
+	  new option: --update (update_if_newer in .pkgtoolrc) enables
+	  rebuilding if the spec version is newer than the legacy version;
+	  fix can_install to look at the order of Software Installation,
+	  Primary Administrator and Basic Solaris User; install packages from
+	  the depotd that we publish to (in build mode)
+	* rpm_package.pm: define new tags for IPS versioning; new_subpackage:
+	  2 new optional args: pkg_tag (e.g. "devel") and is_subpkg (boolean);
+	  get_svr4_name (new) returns the SVr4 package name of the package;
+	  get_ips_name (new) returns the IPS package name of the package;
+	  set_meta / get_meta / get_meta_hash: new functions for handling
+	  the Meta tags; get_pkg_tag, is_subpkg: new functions used for
+	  determining whether a package is a subpkg and a tagged part of
+	  the main package in IPS; don't return the SUNW_Pkg for get_name()
+	* rpm_spec.pm.in: new tags: ips_component_version, ips_build_version;
+	  ips_vendor_version and meta(key): value; create subpackages when
+	  %package is not defined with -n name
+	* spectool.pl: fix get_package_names to return proper info for
+	  IPS packages; new mode: get_meta for returning meta tag
+	  information
+
 2008-11-11  Laszlo Peter  <laca@sun.com>
 
 	* spectool.pl: exit with non-zero on errors (the value returned is

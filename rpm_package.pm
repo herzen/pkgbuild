@@ -44,7 +44,12 @@ sub new ($$;&) {
 
     $self->{_parent_spec_ref} = $parent_spec_ref;
     $self->{_tags} = {};
+    $self->{_meta} = {};
     $self->{_tags}->{release} = 0;
+    my $ips_os_rel = `uname -r`;
+    chomp ($ips_os_rel);
+    $self->{_tags}->{ips_component_version} = "0." . $ips_os_rel;
+    $self->{_tags}->{ips_build_version} = $ips_os_rel;
     my $target = $$parent_spec_ref->{_defines}->{"_target"};
     if (defined $target) {
 	$self->{_tags}->{buildarchitectures} = $target;
@@ -62,13 +67,17 @@ sub new ($$;&) {
 	$self->{_tags}->{name} = $name;
     }
 
+    $self->{_is_subpkg} = 0;
+
     return (bless $self, $class);
 }
 
-sub new_subpackage ($$$) {
+sub new_subpackage ($$$;$$) {
     my $class = shift;
     my $parent_spec_ref = shift;
     my $name = shift;
+    my $pkg_tag = shift;
+    my $is_subpkg = shift;
     my $self = {};
 
     $self->{_parent_spec_ref} = $parent_spec_ref;
@@ -96,8 +105,36 @@ sub new_subpackage ($$$) {
     $self->{_metafiles} = \@metafiles;
     my @defattr = ('-', '-', '-', '-');
     $self->{_defattr} = \@defattr;
+    # the tag of the subpkg, e.g. devel, l10n
+    $self->{_pkg_tag} = $pkg_tag;
+    if (not defined ($is_subpkg)) {
+	if (defined ($pkg_tag)) {
+	    $is_subpkg = 1;
+	} else {
+	    $is_subpkg = 0;
+	}
+    }
+    $self->{_is_subpkg} = $is_subpkg;
 
     return (bless $self, $class);
+}
+
+sub get_svr4_name ($) {
+    my $self = shift;
+    if (defined $self->{_tags}->{sunw_pkg}) {
+	return $self->{_tags}->{sunw_pkg};
+    }
+    return $self->{_tags}->{name};
+}
+
+sub get_ips_name ($) {
+    my $self = shift;
+    if ($self->{_is_subpkg}) {
+	my $parent_ref = $self->{_parent_spec_ref};
+	return $$parent_ref->get_name();
+    } else {
+	return $self->{_tags}->{name};
+    }
 }
 
 sub set_tag ($$$) {
@@ -115,6 +152,36 @@ sub get_tag ($$) {
     $tag_name = lc ($tag_name);
 
     return $self->{_tags}->{$tag_name};
+}
+
+sub set_meta ($$$) {
+    my $self = shift;
+    my $meta_name = shift;
+    my $value = shift;
+    $self->{_meta}->{$meta_name} = $value;
+}
+
+sub get_meta ($$) {
+    my $self = shift;
+    my $meta_name = shift;
+    $meta_name = lc($meta_name);
+    return $self->{_meta}->{$meta_name};
+}
+
+sub get_meta_hash ($) {
+    my $self = shift;
+    my $meta_ref = $self->{_meta};
+    return {%$meta_ref};
+}
+
+sub get_pkg_tag ($) {
+    my $self = shift;
+    return $self->{_pkg_tag};
+}
+
+sub is_subpkg ($) {
+    my $self = shift;
+    return $self->{_is_subpkg};
 }
 
 sub eval ($$) {
@@ -176,9 +243,6 @@ sub get_name ($) {
 
     if (not defined ($self->{_tags}->{name})) {
 	return undef;
-    }
-    if (defined ($self->{_tags}->{sunw_pkg})) {
-	return $self->{_tags}->{sunw_pkg};
     }
     return $self->{_tags}->{name};
 }

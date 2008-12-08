@@ -14,7 +14,8 @@ plain_modules = \
 	packagebase.pm \
 	rpm_file.pm \
 	rpm_package.pm \
-	config.pm
+	config.pm \
+	ips_utils.pm
 all_modules = $(gen_modules) $(plain_modules)
 
 pkgbuilddir = $(PKGBUILD_LIBDIR)

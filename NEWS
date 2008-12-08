@@ -1,3 +1,60 @@
+Version 1.3.98:
+
+	Bugs fixed:
+
+	- legacy actions are now added to IPS manifests, so pkginfo
+	  recognises that the packages are installed.
+	- handle errors running pkg(1)
+	- fix detecting whether the user has permission to install packages
+
+	New features:
+
+	- IPS packages are automatically published in the local repository,
+          if svc:/application/pkg/server:default is online (no need to
+	  use the --ips option)
+	- the PKGBUILD_IPS_SERVER environment variable can be used to
+          select a different repository
+        - IPS dependencies are determined from the SVr4 package names
+          by translating the legacy actions to IPS FMRIs.  This means
+          that spec files can continue to use SVr4 package names in the
+          Requires/BuildRequires lines and pkgbuild will convert them
+	  to IPS dependencies on the fly when publishing to IPS.
+	- add metadata to IPS manifests according to the latest guidelines
+	- the new Meta tag can be used to define additional IPS meta data.
+	  Example:
+	      Meta(info.maintainer): laca@sun.com
+	- spectool has a new get_meta mode for querying Meta tags.
+	  Example:
+	      spectool get_meta foo.spec
+	- Packages not defined with %package -n are considered
+          "subpackages" and are merged in the main IPS package and
+          tagged with the suffix.  Packages defined with %package -n
+	  become separate IPS packages.  Example:
+
+	      Name: foo
+	      SUNW_Pkg: SFEfoo
+	      Version ...
+	      ...
+	      %package devel
+	      ...
+	      %package -n bar
+	      SUNW_Pkg: SFEbar
+	      ...
+
+	  This creates 3 SVr4 packages: SFEfoo, SFEfoo-devel and SFEbar
+	  and 2 IPS packages: foo and bar. ("devel" files in foo are
+          tagged with "devel=true")
+	- IPS packages are automatically installed in "build" mode
+	- IPS package versioning now conforms to pkg(5), new tags have
+	  been added for controlling elements of the version string:
+	  IPS_component_version (defaults to "0." + `uname -r`, e.g. 0.5.11)
+	  IPS_build_version (defaults to `uname -r`)
+	  IPS_vendor_version (defaults to %version)
+	- new --update option of pkgtool (and corresponding update_if_newer
+	  .pkgtoolrc setting) makes pkgtool rebuild and update packages
+	  if the version in the spec file is newer than the installed version
+	  (the Version tag is compared with the pkginfo (legacy) version)
+
 Version 1.3.4 / 1.3.92:
 
 	Bugs fixed:

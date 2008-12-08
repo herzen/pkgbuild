@@ -32,6 +32,11 @@ use rpm_spec;
 use config;
 use File::Copy;
 use File::Basename;
+use ips_utils;
+
+my $ips_utils = new ips_utils ();
+
+my $ips_server = $ENV{PKGBUILD_IPS_SERVER} || $ips_utils->get_local_ips_server();
 
 my $myname = "pkgtool";
 my $myversion = rpm_spec::get_version();
@@ -134,6 +139,9 @@ sub process_defaults () {
     $defaults->add ('deps', '!',
 		    'whether to check dependencies; use nodeps to ignore dependencies',
 		    1);
+    $defaults->add ('update_if_newer', '!',
+		    'rebuild and update packages if the version in the spec file is newer than the version installed',
+		    0);
     $defaults->add ('notify', '!',
 		    'whether to send a desktop notification when the build passes/fails, use --nonotify to disable',
 		    $can_notify);
@@ -188,12 +196,42 @@ sub find_in_path ($) {
 
 # return 1 if the current user has the Software Installation profile
 # return 0 otherwise
+my $cache_can_install;
 sub can_install () {
-    my $cmdout = `/bin/profiles`;
-    if ($cmdout =~ /(^|\n)Software Installation\n/) {
-	return 1
+    return $cache_can_install if defined ($cache_can_install);
+    my $prof_sw_inst=`/bin/profiles | nl -s: | grep 'Software Installation' | cut -f1 -d:`;
+    my $prof_pri_adm=`/bin/profiles | nl -s: | grep 'Primary Administrator' | cut -f1 -d:`;
+    my $prof_basic_usr=`/bin/profiles | nl -s: | grep 'Basic Solaris User' | cut -f1 -d:`;
+    chomp ($prof_sw_inst);
+    chomp ($prof_pri_adm);
+    chomp ($prof_basic_usr);
+    $prof_sw_inst = 0 if $prof_sw_inst eq "";
+    $prof_pri_adm = 0 if $prof_pri_adm eq "";
+    $prof_basic_usr = 0 if $prof_basic_usr eq "";
+    if ($prof_sw_inst or $prof_pri_adm) {
+	if ($prof_basic_usr) {
+	    if ($prof_basic_usr < $prof_pri_adm) {
+		msg_warning (0, "The \"Primary Administrator\" profile should appear");
+		msg_warning (0, "before \"Basic Solaris User\"");
+		$cache_can_install=0;
+	    } elsif ($prof_basic_usr < $prof_sw_inst) {
+		msg_warning (0, "The \"Software Installation\" profile should appear");
+		msg_warning (0, "before \"Basic Solaris User\"");
+		$cache_can_install=0;
+	    } else {
+		# Basic Solaris User is after Primary Adminstrator / Software Installation
+		$cache_can_install=1
+	    }
+	} else {
+	    # No Basic Solaris User profile found but
+	    # either Primary Adminstrator or Software Installation was found
+	    $cache_can_install=1;
+	}
+    } else {
+	# No Primary Adminstrator or Software Installation
+	$cache_can_install=0;
     }
-    return 0
+    return $cache_can_install;
 }
 
 sub cannot_install_error ($$;$) {
@@ -201,9 +239,9 @@ sub cannot_install_error ($$;$) {
     my $doing_what = shift;
     my $other_mode = shift;
 
-    print "You need the Software Installation profile in order to install\n";
-    print "or remove packages.  See the profiles(1) and user_attr(4) man pages\n";
-    print "for more information\n\n";
+    print "You need the Software Installation or the Primary Administrator profile\n";
+    print "in order to install or remove packages.  See the profiles(1) and user_attr(4)\n";
+    print "man pages for more information\n\n";
     print "The \"$mode\" command involves $doing_what packages.\n";
     print "Cannot continue.\n\n";
     if (defined ($other_mode)) {
@@ -289,6 +327,14 @@ sub init () {
     } else {
 	$build_engine_name = "pkgbuild";
 	$build_engine = $pkgbuild_path;
+    }
+    if (defined ($ENV{PKGBUILD_IPS_SERVER}) or
+	$ips_utils->is_depotd_enabled()) {
+	$ips = 1;
+	$svr4 = undef;
+    } else {
+	$ips = undef;
+	$svr4 = 1;
     }
 }
 
@@ -677,13 +723,15 @@ sub print_version () {
 }
 
 sub set_ips($) {
-	print "Debug: IPS packages will be installed by default to http:\/\/localhost:80\/\n";
+	msg_info (0,"IPS packages will be installed by default from $ips_server");
 	$ips = shift;
+	$svr4 = undef;
 }
 
 sub set_svr4($) {
-	print "Debug: SVr4 packages will be installed by default\n";
+	msg_info (0,"SVr4 packages will be installed by default");
 	$svr4 = shift;
+	$ips = undef;
 }
 
 sub process_options {
@@ -735,6 +783,7 @@ sub process_options {
 		    @predefs = ( @predefs, $def );
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
 		},
+		'update!' => sub { shift; $defaults->set ('update_if_newer', shift); },
 		'with=s' => \&process_with,
 		'without=s' => \&process_with,
 		'pkgformat=s' => \&process_pkgformat,
@@ -1180,6 +1229,15 @@ sub is_provided ($) {
 	    $version =~ s/([^,]+)(,|$).*/$1/;
             $pkginfo_version{$capability} = $version;
 	}
+	if (not $result) {
+	    # no svr4 package (or IPS package with a legacy action) found
+	    # let's look for an IPS package
+	    my $pkg_out = `pkg info -l $capability 2>&1`;
+	    $result = (! $?);
+	    my $version = $pkg_out;
+	    $version =~ s/^.*\n\s*Branch:\s([0-9.]+)\s*\n.*$/$1/s;
+	    $pkginfo_version{$capability} = $version;
+	}
 	return $result;
     } else {
 	`sh -c "rpm -q --whatprovides $capability" >/dev/null 2>&1`;
@@ -1312,7 +1370,7 @@ sub install_rpms ($) {
     return 1;
 }
 
-sub install_pkgs ($) {
+sub install_pkgs_svr4 ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
     
@@ -1330,16 +1388,6 @@ sub install_pkgs ($) {
 # FIXME: should install in dependency order
     foreach my $pkg (@pkgs) {
 	my $msg;
-	if ( defined $ips ) {
-	    msg_warning(0, "Skipping installation of IPS package ... until IPS bug #2417 will be fixed (probably it will be fixed in 94b)");
-	    #$msg=`pfexec pkg install $pkg`;
-	    #if ( $? > 0 ) {
-	    #	msg_error "failed to install IPS package: $msg";
-	    #	$build_status[$spec_id] = 'FAILED';
-	    #	$status_details[$spec_id] = $msg;
-	    #	return 0;
-	    # }
-	}
 	
 	# Only install SVr4 package if --svr4 is defined
 	if ( defined $svr4) {
@@ -1360,6 +1408,64 @@ sub install_pkgs ($) {
     }
     
     unlink ($adminfile);
+    return 1;
+}
+
+sub install_pkgs_ips ($) {
+    my $spec_id = shift;
+    my $spec = $specs_to_build[$spec_id];
+    
+    my $auth = $ips_utils->get_pkgbuild_authority ();
+    if (not defined $auth) {
+	msg_error ("Unable to identify the authority for $ips_server");
+    }
+
+    my @pkgs = $spec->get_packages ();
+    my $verbose = $defaults->get ('verbose');
+    map msg_info (0, "Installing $_ from authority $auth\n"), @pkgs;
+    
+    my $all_pkgs = "";
+    my $ips_vendor_version = $spec->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
+    my $version = $spec->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");    
+    foreach my $pkg (@pkgs) {
+	# subpackages are merged in the main package
+	next if ($pkg->is_subpkg());
+	my $prefix = $ips_utils->get_authority_setting ($auth, 'prefix');
+	# FIXME: hack?
+	$prefix = $auth unless defined ($prefix);
+	$all_pkgs = "$all_pkgs pkg://$auth/$pkg\@$version";
+    }
+
+    my $msg;
+    if ( defined $ips ) {
+	msg_info (1, "Running pfexec pkg refresh $auth");
+	$msg=`pfexec pkg refresh $auth 2>&1`;
+	if ( $? > 0 ) {
+	    msg_error "pkg refresh failed when installing package: $msg";
+	    $build_status[$spec_id] = 'FAILED';
+	    $status_details[$spec_id] = $msg;
+	    return 0;
+	} else {
+	    my @msg_lines = split /\n/, $msg;
+	    foreach my $msg_line (@msg_lines) {
+		msg_info (1, $msg_line);
+	    }
+	}
+	msg_info (1, "Running pfexec pkg install --no-refresh $all_pkgs");
+	$msg=`pfexec pkg install --no-refresh $all_pkgs 2>&1`;
+	if ( $? > 0 ) {
+	    msg_error "failed to install IPS package: $msg";
+	    $build_status[$spec_id] = 'FAILED';
+	    $status_details[$spec_id] = $msg;
+	    return 0;
+	} else {
+	    my @msg_lines = split /\n/, $msg;
+	    foreach my $msg_line (@msg_lines) {
+		msg_info (1, $msg_line);
+	    }
+	}
+    }
+	
     return 1;
 }
 
@@ -2056,6 +2162,52 @@ sub do_build (;$$) {
     }
 }
 
+# given 2 package names and versions in the form of
+#     <name>-<version>
+# return 1 if the first version is higher than the 2nd one
+# version is . separated list of numbers
+sub is_newer ($$) {
+    my $p1 = shift;
+    my $p2 = shift;
+
+    # cut the matching package name and dash
+    if ("$p1 -compare- $p2" =~ /^(.*)-([0-9.]+) -compare- \1-([0-9.]+)$/) {
+	my $v1 = $2;
+	my $v2 = $3;
+	# compare the first token
+	while ($v1 =~ /^([0-9]+)\.*(.*)/) {
+	    my $v10 = $1;
+	    $v1 = $2;
+	    # do both version strings have tokens left?
+	    if ($v2 =~ /^([0-9]+)\.*(.*)/) {
+		my $v20 = $1;
+		$v2 = $2;
+		if ($v10 > $v20) {
+		    return 1;
+		} elsif ($v10 < $v20) {
+		    return 0;
+		}
+		# first token is the same, continue with the next
+		next;
+	    } else {
+		# v2 has no more tokens, so v1 is higher
+		return 1;
+	    }
+	}
+	# loop ended, which means v1 has no more tokens
+	if ($v2 =~ /^[0-9]+/) {
+	    # v2 has more tokens, so it's the higher version
+	    return 0;
+	} else {
+	    # the are the same
+	    return 0;
+	}
+    }
+
+    # the package names did not match
+    return 0;
+}
+
 sub build_spec ($$$) {
     my $spec_id = shift;
     my $build_only = shift;
@@ -2086,16 +2238,23 @@ sub build_spec ($$$) {
 	    if (not defined ($pkg)) {
 		next;
 	    }
-	    msg_info (3, "Checking if $pkg is installed");
-	    if (is_provided ("$pkg") and $check_deps) {
-		my $provider = what_provides ("$pkg");
+	    my $svr4_pkg = $pkg->get_svr4_name();
+	    msg_info (3, "Checking if $svr4_pkg is installed");
+	    if (is_provided ("$svr4_pkg") and $check_deps) {
+		my $provider = what_provides ("$svr4_pkg");
 		my $pkgver = $pkg->eval ("%version");
-		if ($provider eq "${pkg}-${pkgver}") {
+		if ($provider eq "${svr4_pkg}-${pkgver}") {
 		    msg_warning (0, "skipping package ${pkg}-${pkgver}: already installed");
 		    $status_details[$spec_id]="${pkg}-${pkgver} already installed";
 		} else {
-		    msg_warning (0, "skipping package ${pkg}-${pkgver}: $provider already installed");
-		    $status_details[$spec_id]="$provider installed";
+		    if ($defaults->get ('update_if_newer') and
+			is_newer ("${svr4_pkg}-${pkgver}", $provider)) {
+			msg_info (0, "Updating ${pkg} to version ${pkgver} (from $provider)");
+			next;
+		    } else {
+			msg_warning (0, "skipping package ${pkg}-${pkgver}: $provider already installed");
+			$status_details[$spec_id]="$provider installed";
+		    }
 		}
 		$build_status[$spec_id]='SKIPPED';
 		return 1;
@@ -2163,7 +2322,14 @@ sub build_spec ($$$) {
 
     if (not $build_only) {
 	if ($os eq "solaris") {
-	    install_pkgs ($spec_id) || return 0;
+	    if (defined ($ips)) {
+		install_pkgs_ips ($spec_id) || return 0;
+	    } elsif (defined ($svr4)) {
+		install_pkgs_svr4 ($spec_id) || return 0;
+	    } else {
+		msg_error ("Internal error: either IPS or SVr4 should be selected");
+		return 0;
+	    }
 	} else {
 	    install_rpms ($spec_id) || return 0;
 	}

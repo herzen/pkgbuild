@@ -39,6 +39,7 @@ use warnings;
 use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
 use pkgdb;
+use ips_utils;
 use File::Basename;
 
 my $myname = "pkgbuild";
@@ -51,10 +52,9 @@ my $build_skip = 0;
 my $interactive_mode = 0;
 my $check_deps = 1;
 my $pkgdb = new pkgdb;
+my $ips_utils = new ips_utils;
 
-# For the moment this will be the default - We need to override this with local
-# configuration from the macros file
-my $ips_server = 'http://localhost:80';
+my $ips_server = $ENV{PKGBUILD_IPS_SERVER} || $ips_utils->get_local_ips_server();
 
 my $mydir = `pwd`;
 chomp ($mydir);
@@ -63,6 +63,13 @@ my @spec_names = ();
 my $arch;
 my $os;
 my $os_rel;
+
+sub debug_print ($) {
+    my $msg = shift;
+    if ($debug_level > 0) {
+	print "DEBUG:" . $msg . "\n";
+    }
+}
 
 sub init () {
     $arch = `uname -p`;
@@ -1157,7 +1164,7 @@ sub get_doc_proto_line ($$$$) {
 	$doc_subdir = "";
     }
 
-    if (! -f "$blddir/$bsdirname/$fname") {
+    if (! -f "$blddir/$bsdirname/$doc_subdir$fname") {
 	return undef;
     }
     my $mydir = `pwd`;
@@ -1367,7 +1374,7 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
     my $type = get_file_type ($fname);
     my $line;
     
-    print "DEBUG: get_ips_proto_line $fname\n";
+    debug_print "get_ips_proto_line $fname";
     if (($type eq '-') and defined ($file) and $file->is_doc ()) {
 	# documentation file, goes under /usr/share/doc/<package name>
 	# must be copied to $RPM_BUILD_ROOT from the build dir
@@ -1438,10 +1445,8 @@ sub find_all_matches($$) {
     my $fname = shift;
     my $build_path = shift;
     my $dirname = $build_path . $fname;
-    #print "DEBUG: Finding all matches for $fname in dir $build_path\n";
     #delete more duplicates of / - example /usr//lib
     $dirname =~ s/\/\/+/\//g;
-    #print "DEBUG: dirname = $dirname\n";
     my $find_output = `find $dirname`;
     my @file_list = split /\n/, $find_output;
     
@@ -1463,9 +1468,9 @@ sub get_proto_hash ($$$) {
     my $do_ips = shift;
 
     if (defined ($do_ips)) {
-	print("Debug: Collecting IPS proto information\n");
+	debug_print "Collecting IPS proto information";
     } else {
-	print("Debug: Collecting SVr4 proto information\n");
+	debug_print "Collecting SVr4 proto information";
     }
       
     my $has_errors = 0;
@@ -1580,7 +1585,7 @@ sub get_proto_hash ($$$) {
 						     $attribsToUse[1],
 						     $attribsToUse[2],
 						     $hardlink,
-						     $package, $spec);
+						     $package->get_svr4_name(), $spec);
 			if (not defined ($pline)) {
 			    message ("IPS: File not found by glob: $buildroot/$fname");
 			    $has_errors = 1;
@@ -1768,81 +1773,80 @@ sub make_solaris_pkg ($$) {
 }
 
 
+sub _uniq (@) {
+    my @arr = @_;
+
+    my %h;
+
+    foreach my $elem (@arr) {
+	next if not defined $elem;
+	$h{$elem} = 1;
+    }
+    return keys %h;
+}
+
+
 # Write dependency info for pkgsend (without pkgsend command)
 # The first agument contain reference to array - at the end of this
 # array
-sub make_ips_dependency ($$) {
+sub make_ips_dependency ($$$) {
     my $ref_lines = shift;
     my $spec = shift;
+    my $package = shift;
     
-    # Check dependency of main/first package as subpackages can't have
-    # a dependency or can they?
-    my $package = ($spec->get_packages())[0];	
-    
-    my @deps = $package->get_array('requires');
-    my $fav_pkg = 0;
-    my $fav_found;	
-    my @favoured_packages = qw(SUNWcsr SUNWcsu SUNWcsxu SUNWcar SUNWcarx SUNWcsd SUNWcsl SUNWcslx);
-    foreach my $dep (@deps) {
-	$fav_pkg = 0;	
-   	foreach my $p (@favoured_packages) {
-	    # if we depend on a favourate package, depend 
-	    # only on it.
-	    if ( $dep eq $p ) {
-		if ( defined $fav_found ) {
-		    $fav_pkg = -1;
-		    last;
-		}
-		else {
-		    $fav_pkg = 1;
-		    $fav_found = 1;
-		    last;
-		}
-	    }
+    my @packages = $spec->get_packages();
+    my @deps;
+    foreach my $pkg (@packages) {
+	if ($pkg->is_subpkg()) {
+	    # is this a subpkg of $package?
+	    next if ("${package}-" . $pkg->get_pkg_tag() ne "$pkg");
+	} else {
+	    # is this $package?
+	    next if ("${package}" ne "${pkg}");
 	}
-	if ( $fav_pkg >= 0 ) {
-	    #FIXME: Ugly hack as there is bug in IPS that dependency doesn't work
-	    #   across different authorities
-	    # As workaround let's comment all dependencies on SUNW packages
-	    if ( $dep =~ m/^SUNW/ ) {
-		push  @$ref_lines, "#depend type=require fmri=$dep";
-	    } else {
-		push @$ref_lines, "depend type=require fmri=$dep";
-	    }
-	}
-	else {
-	    message("WARNING: Skipping dependency ($dep) on more than 1 favourite package"); 
+	my @pkg_deps = $package->get_array('requires');
+	if (@pkg_deps) {
+	    push (@deps, @pkg_deps);
 	}
     }
+    my @dep_lines = ();
+    foreach my $dep (@deps) {
+	my $ips_dep = svr4_to_ips ($dep);
+	if (not defined ($ips_dep)) {
+	    message("WARNING: Unknown dependency: $dep");
+	    next;
+	}
+	push @dep_lines, "depend fmri=$ips_dep type=require";
+    }
+    push @$ref_lines, _uniq (@dep_lines)
 }
 
 # Add open transaction line - with pkgsend command
 sub open_ips_transaction($$) {
     my $ref_lines = shift;
-    my $spec = shift;
+    my $package = shift;
     
-    my $name = $spec->get_value_of ("name");
-    my $version = $spec->get_value_of("version");
+    my $name = "$package";
+    my $ips_vendor_version = $package->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
+    my $version = $package->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
 	
-    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" . $spec->get_value_of ("name") . ".manifest";
+    my $manifest = $package->eval ("%_pkgmapdir") . "/manifests/${package}.manifest";
 
     if (scalar @lines > 0) {
 	print "Warning: Open transaction isn't first line of pkgsend script!\n";
     }
-    # FIXME: Need to get this from the environmental variable, rather than
-    # set it from the script each time
-    push (@$ref_lines, "export PKG_REPO=$ips_server");
-    push (@$ref_lines, "eval `pkgsend open $name\@$version`");
-    push (@$ref_lines, "pkgsend include $manifest");
+    push (@$ref_lines, "export PKG_REPO=\${PKGBUILD_IPS_SERVER:-$ips_server}");
+    push (@$ref_lines, "eval `pkgsend open $name\@$version` || exit 1");
+    push (@$ref_lines, "pkgsend include $manifest || exit 2");
 } 
 
 # Add summary line 
 sub add_ips_license($$) {
     my $ref_lines = shift;
-    my $spec = shift;
+    my $package = shift;
     
-    my $name = $spec->get_value_of ("name");
-    my $license= $spec->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
+    my $name = $package->get_tag ("name");
+    my $license= $package->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
 
     return if not -f $license;
     push (@$ref_lines, "license $license license=copyright");
@@ -1851,23 +1855,93 @@ sub add_ips_license($$) {
 # Add summary line 
 sub add_ips_summary($$) {
     my $ref_lines = shift;
-    my $spec = shift;
-    
-    my $summary = $spec->get_value_of("summary");
-    my $upstream_url = $spec->get_value_of("url");
-    $upstream_url = "http://pkgbuild.sf.net/" unless defined ($upstream_url);
+    my $package = shift;
 
-    push (@$ref_lines, "set name=description value=\"$summary\"");
-    push (@$ref_lines, "set name=pkg.summary value=\"$summary\"");
-    push (@$ref_lines, "set name=info.upstream_url value=\"$upstream_url\"");
-    
-    # FIXME: This should probably point at individual packagers at some stage in the future
-    push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
+    my $meta_hash_ref = $package->get_meta_hash();
+    if (not defined ($$meta_hash{'pkg.name'})) {
+	my $name = $package->get_tag("name");
+	$$meta_hash{'pkg.name'} = $name;
+    }
+    if (not defined ($$meta_hash{'description'})) {
+	my $summary = $package->get_tag("summary");
+	$$meta_hash{'description'} = $summary;
+    }
+    if (not defined ($$meta_hash{'pkg.summary'})) {
+	my $summary = $package->get_tag("summary");
+	$$meta_hash{'pkg.summary'} = $summary;
+    }
+    if (not defined ($$meta_hash{'info.upstream_url'})) {
+	my $upstream_url = $package->get_tag("url");
+	$upstream_url = "http://pkgbuild.sf.net/" unless defined ($upstream_url);
+	$$meta_hash{'info.upstream_url'} = $upstream_url;
+    }
+    if (not defined ($$meta_hash{'info.maintainer_url'})) {
+	push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
+    }
 
-    my $group = $spec->get_value_of("group");
+    foreach my $meta (keys %$meta_hash) {
+	push (@$ref_lines, "set name=$meta value=\"$$meta_hash{$meta}\"");
+    }
+
+    # FIXME: this allows up to 2 classifications:
+    #  1) defined using the Group tags, this must be a freedesktop.org group
+    #  2) defined using meta(info.classification)
+    my $group = $package->get_tag("group");
     if (defined $group) {
 	my $classification = "freedesktop.org::" . $group;
 	push (@$ref_lines, "set name=info.classification value=\"$classification\"");
+    }
+}
+
+sub add_ips_legacy($$$) {
+    my $ref_lines = shift;
+    my $spec = shift;
+    my $package = shift;
+
+    my @packages = $spec->get_packages ();
+    foreach my $pkg (@packages) {
+	if ($pkg->is_subpkg()) {
+	    # is this a subpkg of $package?
+	    next if ("${package}-" . $pkg->get_pkg_tag() ne "$pkg");
+	} else {
+	    # is this $package?
+	    next if ("${package}" ne "${pkg}");
+	}
+	# PKG=$pkgname
+	my $pkgname = $pkg->get_tag ('sunw_pkg');
+	$pkgname = "$pkg" unless $pkgname;
+	my $summary = $pkg->get_tag ('summary');
+	$summary = $pkgname unless defined ($summary);
+	# NAME=$desc
+	# DESC=$desc
+	my $desc = $pkg->get_tag ('sunw_desc');
+	$desc = $summary unless defined ($desc);
+	$desc = $pkgname unless defined ($desc);
+	# CATEGORY=$category
+	my $category = $pkg->get_tag ('sunw_category');
+	if (not defined ($category)) {
+	    $category = "application";
+	}
+	# VENDOR=$vendor
+	my $vendor = $pkg->get_tag ('vendor');
+	if (defined ($vendor)) {
+	    $vendor = "vendor=\"$vendor\"";
+	} else {
+	    $vendor = "";
+	}
+	# HOTLINE=$hotline
+	my $hotline = $pkg->get_tag ('sunw_hotline');
+	$hotline = "Please contact your local service provider" 
+	    unless defined ($hotline);
+	# VERSION=$version,REV=$rev
+	my $version = $pkg->get_tag ('version');
+	my $rev = $pkg->get_tag ('sunw_rev');
+	if (not defined $rev) {
+	    $rev = `date +%Y.%m.%d.%H.%M.%S`;
+	}
+	chomp ($rev);
+
+	push (@$ref_lines, "legacy arch=$arch category=$category desc=\"$desc\" hotline=\"$hotline\" name=\"$desc\" pkg=$pkgname $vendor version=$version,REV=$rev");
     }
 }
 
@@ -1876,7 +1950,7 @@ sub close_ips_transaction($) {
     my $ref_lines = shift;
     my @lines = @$ref_lines;
     
-    push (@$ref_lines , "pkgsend close");
+    push (@$ref_lines , "pkgsend close || exit 3");
 }
 
 # Create file list from package with tag for subpackages for pkgsend command
@@ -1910,80 +1984,100 @@ sub make_ips_package ($$$$$) {
     }
 }
 
-# Parse tag from package name
-sub parse_tag($) {
-    my $package = shift;
-    my $tag;
-    print "DEBUG: Parsing tag for package $package\n";
-    if ( $package =~ /devel$/ ) {
-	$tag = "devel";
-    } elsif ( $package =~ /l10n$/ ) {
-	$tag = "l10n";
-    } elsif ( $package =~ /doc$/ ) {
-	$tag = "doc";
-    }
-    
-    return $tag;
-}
-
 # Prepare pkgsend lines, which add files of package to ips repository
-sub make_ips_files ($$) {
+sub make_ips_files ($$$) {
     my $ref_lines = shift;
-	my $spec = shift;
-    my $has_files_at_all = 0;
+    my $spec = shift;
+    my $package = shift;
 
     my @packages = $spec->get_packages ();
     my $tag;
     my %all_files_in_manifest = ();
-    foreach $package (@packages) {
-	print "DEBUG: making package $package\n";
-	if (defined $tag) {
-	    $tag = parse_tag($package);			
+    foreach $pkg (@packages) {
+	$tag = $pkg->get_pkg_tag ();
+	if ($pkg->is_subpkg()) {
+	    # is this a subpkg of $package?
+	    next if ("${package}-$tag"  ne "$pkg");
+	} else {
+	    # is this $package?
+	    next if ("${package}" ne "${pkg}");
 	}
-	make_ips_package($spec, $package, $ref_lines, \%all_files_in_manifest, $tag);
-	# first package is the main one - without tag
-	$tag = "";
+	debug_print "making package $pkg";
+	make_ips_package($spec, $pkg, $ref_lines, \%all_files_in_manifest, $tag);
     }
 }
 
-# Create infrastructure for IPS package
-sub create_ips_package ($) {
+# Create infrastructure for IPS packages
+sub create_ips_packages ($) {
     my $spec = shift;
-    
-    print "DEBUG: Publishing ips package\n";
-    
+
+    my @packages = $spec->get_packages ();
+    foreach $package (@packages) {
+	create_ips_package ($spec, $package) 
+	    unless $package->is_subpkg ();
+    }
+}
+
+sub create_ips_package ($$) {
+    my $spec = shift;
+    my $package = shift;
+
+    debug_print "Publishing ips package";
+
     my @pkg_lines;
     my @manifest_lines;
-    print "DEBUG: Calling ips_transaction\n";
-    open_ips_transaction(\@pkg_lines, $spec);
-    print "DEBUG: Calling make_ips_dependency\n";
-    make_ips_dependency(\@manifest_lines, $spec);
-    print "DEBUG: Calling make_ips_files\n";
-    make_ips_files(\@manifest_lines, $spec);
-    print "DEBUG: Calling add_ips_summary\n";
-    add_ips_summary(\@manifest_lines, $spec);
-    print "DEBUG: Calling add_ips_license\n";
-    add_ips_license(\@manifest_lines, $spec); 
-    print "DEBUG: Calling close_ips_transaction\n";
+    debug_print "Calling ips_transaction";
+    open_ips_transaction(\@pkg_lines, $package);
+    debug_print "Calling make_ips_dependency";
+    make_ips_dependency(\@manifest_lines, $spec, $package);
+    debug_print "Calling make_ips_files";
+    make_ips_files(\@manifest_lines, $spec, $package);
+    debug_print "Calling add_ips_summary";
+    add_ips_summary(\@manifest_lines, $package);
+    debug_print "Calling add_ips_license";
+    add_ips_legacy(\@manifest_lines, $spec, $package);
+    add_ips_license(\@manifest_lines, $package); 
+    debug_print "Calling close_ips_transaction";
     close_ips_transaction(\@pkg_lines);
     
-    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" . $spec->get_value_of ("name") . "_ips.sh";
-    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" . $spec->get_value_of ("name") . ".manifest";
+    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/${package}_ips.sh";
+    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/${package}.manifest";
 
-    print "DEBUG: Prepare script - $script\n";
+    debug_print "Prepare script - $script";
     prepare_ips_script($spec, $script, \@pkg_lines);
-    print "DEBUG: Prepare manifest - $manifest\n";
+    debug_print "Prepare manifest - $manifest";
     prepare_ips_manifest($spec, $manifest, \@manifest_lines);
 }
 
 # publish an IPS package
-sub publish_ips_package ($) {
+sub publish_ips_packages ($) {
     my $spec = shift;
-    
-    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" . $spec->get_value_of ("name") . "_ips.sh";
-    print "DEBUG: Calling script $script\n";
-    `chmod +x $script`;
-    print `$script`;
+
+    my $retval;
+    my @pkgs = $spec->get_packages ();
+    foreach my $pkg (@pkgs) {
+	next if $pkg->is_subpkg ();
+	my $script = $spec->eval ("%_pkgmapdir") . "/scripts/${pkg}_ips.sh";
+	print "Calling script $script\n";
+	`chmod +x $script`;
+	my $msg = `$script`;
+	$retval = (! $?);
+	print $msg;
+    }
+    return $retval;
+}
+
+# translate an svr4 package name to an IPS package name (and version)
+# for use in IPS dependencies
+sub svr4_to_ips($) {
+    my $pkgname = shift;
+
+    my $search_out = `pkg search -l $pkgname 2>&1 | grep '^legacy_pkg'`;
+    chomp ($search_out);
+    if ($search_out =~ /^legacy_pkg\s*legacy\s*${pkgname}\s*pkg:\/(\S+)\s*$/) {
+	return $1;
+    }
+    return undef;
 }
 
 # Save pkg lines array to script, which publish all info to ips repository
@@ -2312,13 +2406,16 @@ sub main () {
 	    	create_svr4_packages ($spec) or 
 				fatal ($spec->get_error ());
 
-		# Create an IPS package
-		create_ips_package ($spec);
+		# Create IPS package(s)
+		create_ips_packages ($spec);
 		# we always create the manifest file, but only publish the
 		# package if the requested pkgformat is ips
 		if ($pkgformat eq "ips") {
 		    # Call the script to publish it
-		    publish_ips_package ($spec);
+		    if (not publish_ips_packages ($spec)) {
+			print "ERROR: failed to publish package to $ips_server\n";
+			exit (1);
+		    }
 		}
 	}
 	if ($build_command =~ /[as]/) {

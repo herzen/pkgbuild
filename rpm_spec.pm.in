@@ -1219,7 +1219,10 @@ sub _process_tag ($$$) {
 		       "sunw_pkgtype", "sunw_desc",
 		       "sunw_copyright",
 		       "sunw_pkg_allzones", "sunw_pkg_hollow",
-		       "sunw_pkg_thiszone");
+		       "sunw_pkg_thiszone",
+	               "ips_component_version",
+	               "ips_build_version",
+	               "ips_vendor_version");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
 		      "buildconflicts", "prereq", "provides", "buildprereq");
     my @ord_tags = ( "source", "patch" );
@@ -1230,6 +1233,15 @@ sub _process_tag ($$$) {
     my $tagname;
     my $value;
     my $package_ref = $self->{_current_package};
+
+    # meta(foo): bar
+    if ($lcline =~ /^meta\s*\(\s*[^\s]+\s*\)\s*:(.*\S)\s*$/) {
+	$line =~ /^\s*[mM][eE][tT][aA]\s*\(\s*(\S+)\s*\)\s*:(.*\S)\s*$/;
+	$value = $2;
+	my $metaname = lc($1);
+	$package_ref->set_meta ($metaname, $value);
+	return 1;
+    }
 
     foreach my $tag (@unique_tags) {
 	if ($lcline =~ /^$tag\s*:\s*/) {
@@ -1312,11 +1324,27 @@ sub _process_package ($$$) {
 
     my $mainpkg_ref = \$self->{_packages}[0];
     my $package_name;
+    # devel, l10n etc.
+    # basically the subpkg name in the svr4 world and a tag in the IPS world
+    my $pkg_tag;
+    # is it a standalone package or a subpackage?
+    # subpackages are merged and tagged in IPS, standalone packages
+    # are packaged separately.  Standalone packages are those
+    # defined using %package -n <name>
+    my $is_subpkg;
+    my $svr4_pkg_name;
 
     if ($line =~ /\s*%package\s+-n\s+(\S+)\s*$/) {
 	$package_name = $1;
+	$is_subpkg = 0;
     } elsif ($line =~ /\s*%package\s+(\S+)\s*$/) {
-	$package_name = $$mainpkg_ref->get_tag ("name") . "-" . $1;
+	$pkg_tag = $1;
+	$is_subpkg = 1;
+	$svr4_pkg_name = $$mainpkg_ref->get_tag ("sunw_pkg");
+	if (defined ($svr4_pkg_name)) {
+	    $svr4_pkg_name = $svr4_pkg_name . "-" . $pkg_tag;
+	}
+	$package_name = $$mainpkg_ref->get_tag ("name") . "-" . $pkg_tag;
     } else {
 	$self->_set_error ("invalid %package directive: $line", $fhandle);
 	return 0;
@@ -1343,12 +1371,13 @@ sub _process_package ($$$) {
 	}
     }
 
-    my $new_package = rpm_package->new_subpackage (\$self, $package_name);
+    my $new_package = rpm_package->new_subpackage (\$self, $package_name, $pkg_tag, $is_subpkg);
     my $ref = $self->{_packages};
     push (@$ref, $new_package);
     my $packagebase = new packagebase;
     $packagebase->add_package ($new_package);
     $self->{_current_package} = $new_package;
+    $new_package->set_tag('sunw_pkg', $svr4_pkg_name);
 
     $line = $self->_get_next_line ($fhandle);
     if (defined ($line)) {
@@ -1423,11 +1452,7 @@ sub find_package_by_name ($) {
     my $ref = $self->{_packages};
     my $pkgname;
     foreach my $package (@$ref) {
-	if ($package->get_tag ("name") eq $name) {
-	    return $package;
-	}
-	$pkgname = $package->get_tag ("sunw_pkg");
-	if (defined ($pkgname) and ($pkgname eq $name)) {
+	if ($package->get_name () eq $name) {
 	    return $package;
 	}
     }

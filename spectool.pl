@@ -30,6 +30,9 @@ use warnings;
 use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
 use config;
+use ips_utils;
+
+my $ips_utils = new ips_utils ();
 
 # --------- global vars ----------------------------------------------------
 # config settings
@@ -49,6 +52,8 @@ my $topdir = "${_homedir}/packages";
 my $read_rc = 1;
 my $exit_val = 0;
 my $full_path = 0;
+my $ips;
+my $svr4;
 # --------- messages -------------------------------------------------------
 sub print_message ($$) {
     my $min_verbose = shift;
@@ -99,6 +104,14 @@ sub init () {
 	# logname is incorrect, look up the uid
 	$logname = (getpwuid($uid))[0];
 	$_homedir = (getpwuid($uid))[7];
+    }
+    if (defined ($ENV{PKGBUILD_IPS_SERVER}) or
+	$ips_utils->is_depotd_enabled()) {
+	$ips = 1;
+	$svr4 = undef;
+    } else {
+	$ips = undef;
+	$svr4 = 1;
     }
 }
 
@@ -235,7 +248,7 @@ sub process_args {
     }
 
     if (not defined ($spec_command)) {
-	if (not $arg =~ /^(eval|get_packages|get_sources|get_public_sources|get_block|get_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_used_spec_files|get_error|verify|get_requires|get_buildrequires|get_prereq)$/) {
+	if (not $arg =~ /^(eval|get_meta|get_packages|get_sources|get_public_sources|get_block|get_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_used_spec_files|get_error|verify|get_requires|get_buildrequires|get_prereq)$/) {
 	    usage (1);
 	}
 	$spec_command = $arg;
@@ -268,6 +281,16 @@ sub process_with ($$) {
     push (@predefs, "_${with}_${optname} --${with}-${opt}");
 }
 
+sub set_ips($) {
+	$ips = shift;
+	$svr4 = undef;
+}
+
+sub set_svr4($) {
+	$svr4 = shift;
+	$ips = undef;
+}
+
 sub process_options {
     
     Getopt::Long::Configure ("bundling");
@@ -296,6 +319,8 @@ sub process_options {
 		    @predefs = ( @predefs, "_topdir $topdir" );
 		},
 		'help' => \&usage,
+		'ips' => sub { set_ips(1); },
+		'svr4' => sub { set_svr4(1); },
 		'<>' => \&process_args);
       
     if ($read_rc) {
@@ -384,6 +409,8 @@ Commands:
     get_public_sources
 
     get_block <block_name>
+
+    get_meta
 
     get_package_names
 
@@ -556,10 +583,26 @@ sub do_get_package_names () {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
 	    $exit_val++;
 	} else {
-	    my @pkgs = $spec->get_package_names ($pkgformat);
-	    if ($full_path) {
-		my $pkgdir = $spec->get_value_of ('_topdir') . "/PKGS";
-		map $_="$pkgdir/$_", @pkgs;
+	    my @pkgs = ();
+	    if ($ips) {
+		my @ps = $spec->get_packages ();
+		foreach my $p (@ps) {
+		    # subpackages are merged in the main package
+		    next if ($p->is_subpkg());
+		    push (@pkgs, $p->get_ips_name());
+		    if ($full_path) {
+			my $auth = $ips_utils->get_pkgbuild_authority();
+			map $_="pkg://$auth/$_", @pkgs;
+		    }
+		}
+	    } elsif ($svr4) {
+		@pkgs = $spec->get_package_names ($pkgformat);
+		if ($full_path) {
+		    my $pkgdir = $spec->get_value_of ('_topdir') . "/PKGS";
+		    map $_="$pkgdir/$_", @pkgs;
+		}
+	    } else {
+		msg_error ("internal error: either svr4 or ips must be selected");
 	    }
 	    print_result ($spec, @pkgs);
 	}
@@ -575,6 +618,34 @@ sub do_get_classes () {
 	} else {
 	    my @pkgs = $spec->get_classes ();
 	    print_result ($spec, @pkgs);
+	}
+    }
+}
+
+sub do_get_meta () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
+	} else {
+	    my @meta;
+	    my $spec = $specs[$spec_id];
+	    my @packages = $spec->get_packages ();
+	    foreach my $package (@packages) {
+		next if (defined $ips and $package->is_subpkg());
+		my $meta_hash_ref = $package->get_meta_hash ();
+		my $pkgname;
+		if (defined $ips) {
+		    $pkgname = $package->get_ips_name();
+		} else {
+		    $pkgname = $package->get_svr4_name();
+		}
+		foreach my $key (keys %$meta_hash_ref) {
+		    push (@meta, $pkgname . ": " . $key . " = " . $$meta_hash_ref{$key});
+		}
+	    }
+	    print_result ($spec, @meta);
 	}
     }
 }
@@ -739,6 +810,8 @@ sub main {
 	do_get_package_names ();
     } elsif ($spec_command eq "get_classes") {
 	do_get_classes ();
+    } elsif ($spec_command eq "get_meta") {
+	do_get_meta ();
     } elsif ($spec_command eq "get_class_script_names") {
 	do_get_class_script_names ();
     } elsif ($spec_command eq "get_included_files") {
