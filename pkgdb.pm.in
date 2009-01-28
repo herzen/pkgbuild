@@ -30,15 +30,19 @@ package pkgdb;
 
 use constant CONTENTS => '/var/sadm/install/contents';
 
-sub new {
+sub new($;$) {
     my $ref = shift;
-    my %args = ( contents => CONTENTS, @_ );
+    my $is_ips = shift;
+
     my $self = {};
+
+    $self->{_is_ips} = $is_ips;
+
     bless ($self, $ref);
     $self->{contents} = "/dev/null";
     $self->{cache} = {};
 
-    $self->set_contents($args{contents})
+    $self->set_contents(CONTENTS)
         or return undef;
     return $self;
 }
@@ -47,7 +51,8 @@ sub set_contents($$) {
     my $self = shift;
     my $contents = shift;
     if (! -r $contents) {
-        die "Cannot open $contents: $!";
+        print "ERROR: Cannot open $contents: $!";
+	return 0;
     }
     $self->{contents} = $contents;
     return 1;
@@ -61,7 +66,26 @@ sub file2pkgs($$) {
 	my $result_ref = $self->{cache}->{$file};
 	return @$result_ref;
     }
+
     my $result;
+
+    if ($self->{_is_ips}) {
+	my @ips_lines = `/usr/bin/pkg search -l '${file}' | grep '^path'`;
+	my @pkglist = ();
+	foreach my $ips_line (@ips_lines) {
+	    if ($ips_line =~ /\s+(pkg:\/\S+)/) {
+# Disable for now -- it's currently slow and we don't use the extra info anyway
+#	        $result = $self->_parse_ips_line($1, $file, $ips_lines[0]);
+#	        $self->{cache}->{$file} = \@{$result->{packages}};
+#	        return @{$result->{packages}};
+# Instead: make a list of all package names that match the given file:
+		push (@pkglist, $1);
+	    }
+	}
+	$self->{cache}->{$file} = \@pkglist;
+	return @pkglist;
+    }
+
     my $command = "@PKGBUILD_LIBDIR@/pkgdbgrep -c '$self->{contents}' '${file}'";
     my @grepped_lines = `$command`;
     foreach my $line (@grepped_lines) {
@@ -73,6 +97,49 @@ sub file2pkgs($$) {
     }
     $self->{cache}->{$file} = \@{$result->{packages}};
     return @{$result->{packages}};
+}
+
+sub _parse_ips_line($$$$) {
+    my $self = shift;
+    my $pkg = shift;
+    my $file = shift;
+    my $line = shift;
+
+    my $file =~ s/^\/*//;
+    my %result;
+    my $output = `/usr/bin/pkg contents -m '$pkg' | /usr/bin/grep 'path=${file} '`;
+    $output=" $output ";
+    if ($line =~ /^path\s+dir\s/) {
+	$result{type} = 'd';
+    } elsif ($line =~ /^path\s+link\s/) {
+	$result{type} = 's';
+    } elsif ($line =~ /^path\s+hardlink\s/) {
+	$result{type} = 'l';
+    } elsif ($line =~ /^path\s+file\s/) {
+	$result{type} = 'f';
+    }
+
+    $result{class} = 'none';
+
+    if ($output =~ /\sgroup=(\S+)\s/) {
+	$result{group} = $1;
+    }
+
+    if ($output =~ /\sowner=(\S+)\s/) {
+	$result{owner} = $1;
+    }
+
+    if ($output =~ /\smode=(\S+)\s/) {
+	$result{mode} = $1;
+    }
+
+    if ($output =~ /\spkg\.size=(\S+)\s/) {
+	$result{size} = $1;
+    }
+
+    my @pkgs = ($pkg);
+    $result{packages} = \@pkgs;
+    return \%result;
 }
 
 sub _parse_line($$) {

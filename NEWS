@@ -6,6 +6,9 @@ Version 1.3.98:
 	  recognises that the packages are installed.
 	- handle errors running pkg(1)
 	- fix detecting whether the user has permission to install packages
+        - Requires: /path/to/file now works for IPS packages as well,
+          detects if the file was installed with IPS or pkgadd and
+	  adds the matching dependency
 
 	New features:
 
@@ -26,6 +29,11 @@ Version 1.3.98:
 	- spectool has a new get_meta mode for querying Meta tags.
 	  Example:
 	      spectool get_meta foo.spec
+        - new options for spectool get_used_spec_files: -l prints the
+          labels of the sub-spec files, e.g.
+	      spectool get_used_spec_files -l SUNWgnome-base-libs.spec
+	      pango = /path/to/pango.spec
+	      ...
 	- Packages not defined with %package -n are considered
           "subpackages" and are merged in the main IPS package and
           tagged with the suffix.  Packages defined with %package -n
@@ -47,9 +55,9 @@ Version 1.3.98:
 	- IPS packages are automatically installed in "build" mode
 	- IPS package versioning now conforms to pkg(5), new tags have
 	  been added for controlling elements of the version string:
-	  IPS_component_version (defaults to "0." + `uname -r`, e.g. 0.5.11)
+	  IPS_component_version (defaults to %version)
 	  IPS_build_version (defaults to `uname -r`)
-	  IPS_vendor_version (defaults to %version)
+	  IPS_vendor_version (defaults to "0." + Solaris build number)
 	- new --update option of pkgtool (and corresponding update_if_newer
 	  .pkgtoolrc setting) makes pkgtool rebuild and update packages
 	  if the version in the spec file is newer than the installed version

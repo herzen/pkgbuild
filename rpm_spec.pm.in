@@ -2930,6 +2930,29 @@ sub get_used_spec_files ($) {
     return _uniq (@used_specs);
 }
 
+sub get_used_spec_labels ($;$) {
+    my $self = shift;
+    my $prefix = shift;
+
+    if (! $self->{_loaded} and ! $self->{_being_loaded}) {
+	if (not $self->_read_spec ()) {
+	    return undef;
+	}
+    }
+
+    my @used_labels;
+    foreach $used_spec_name (keys %{$self->{_specs_used}}) {
+	next if not defined $used_spec_name;
+	my $used_spec = $self->{_specs_used}->{$used_spec_name};
+	if (defined ($prefix)) {
+	    push (@used_labels, "${prefix}.${used_spec_name}");
+	} else {
+	    push (@used_labels, ${used_spec_name});
+	}
+    }
+    return _uniq (@used_labels);
+}
+
 sub get_topdir ($$) {
     my $build_engine = shift;
     my $predef_ref = shift;
@@ -2938,6 +2961,9 @@ sub get_topdir ($$) {
 	$defines = $defines . " --define \"$def\"";
     }
     $_topdir = `$build_engine $defines -bp $_pkgbuild_libdir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
+    if ($? != 0) {
+	die ("pkgbuild internal error: could not determine the value of %topdir");
+    }
     chomp ($_topdir);
     return $_topdir;
 }

@@ -1418,6 +1418,9 @@ sub install_pkgs_ips ($) {
     my $auth = $ips_utils->get_pkgbuild_authority ();
     if (not defined $auth) {
 	msg_error ("Unable to identify the authority for $ips_server");
+	msg_info (0, "Hint: use \"pfexec pkg set-authority -O $ips_server mypkgs\"");
+	msg_info (0, "to define a repository called \"mypkgs\"");
+	return 0;
     }
 
     my @pkgs = $spec->get_packages ();

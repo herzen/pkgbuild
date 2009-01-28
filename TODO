@@ -1,12 +1,7 @@
 Things broken by IPS support:
  - add legacy tag in manifest for -devel pkg and also for the runtime (base)
    package, if SUNW_Pkg is different from Name
- - Requires: /path/to/file (this currently parses /var/sadm/install/contents,
-   need to use pkg search)
  - uninstall-pkgs should detect if the pkg was installed with pkgadd or pkg
- - install-pkgs and build should detect if the default pkging system is
-   svr4 or ips and install using that format (unless --ips or --svr4 is
-   used to force one or the other)
 
 Additional stuff needed for full IPS support:
  - need to define and implement additional spec file elements for
@@ -17,16 +12,17 @@ Additional stuff needed for full IPS support:
    - rebuilds the manifest (because it's possible that the package was
      previously built as svr4 only)
    - publishes to the repository determined by PKG_REPO
-[- include sources in the binary packages, tagged as sources and not
-   installed by default, to allow automatic rebuilds; filters and
-   filter operations need to be implemented in IPS for this ]
+- create source packages, potentially in a different repo, implement
+  automatic rebuilds
 
 Some things I'm planning fix/add:
+ - implement --rmsource, --rmspec, --clean, --clean, --buildroot
  - bcond_with (http://www.redhat.com/archives/epel-devel-list/2007-July/msg00208.html)
  - S8/S9 compatibility
  - %check scriptlet: http://rpm.org/max-rpm-snapshot/s1-rpm-inside-scripts.html#S3-RPM-INSIDE-CHECK-SCRIPT
  - pkgbuild -ta
  - pkgtool parallel build
+ - md5 checksum for source tarballs
  - support all rpm 4 spec file elements (need to figure out what's missing)
  - fix/implement version checking (currently dependencies check pkg names only)
  - add support for SVr4 "space files", see space(4) on Solaris

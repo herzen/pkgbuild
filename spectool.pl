@@ -52,6 +52,7 @@ my $topdir = "${_homedir}/packages";
 my $read_rc = 1;
 my $exit_val = 0;
 my $full_path = 0;
+my $long_output = 0;
 my $ips;
 my $svr4;
 # --------- messages -------------------------------------------------------
@@ -299,6 +300,7 @@ sub process_options {
     GetOptions ('v|verbose+' => \$verbose,
 		'debug=n' => sub { shift; $defaults->set ('debug', shift); },
 		'q|quiet' => sub { $verbose = 0; },
+		'l|long' => sub { $long_output = 1; },
 		'specdirs|specdir|spec|specs|S=s' => sub { shift; $defaults->set ('specdirs', shift); },
 		'sourcedirs|sourcedir|src|srcdirs|srcdir|sources|source|s=s'  => sub { shift; $defaults->set ('sourcedirs', shift); },
 		'rcfile=s' => sub { shift; my $dummy = shift; $read_rc=0; $defaults->readrc ($dummy) or msg_error ("Config file not found: $dummy"); },
@@ -430,7 +432,7 @@ Commands:
 
     get_included_files
 
-    get_used_spec_files
+    get_used_spec_files [-l]
 
     get_error
 
@@ -696,8 +698,18 @@ sub do_get_used_spec_files () {
 	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
 	    $exit_val++;
 	} else {
-	    my @pkgs = $spec->get_used_spec_files ();
-	    print_result ($spec, @pkgs);
+	    my @output;
+	    if ($long_output) {
+		my @labels = $spec->get_used_spec_labels ();
+		foreach my $label (@labels) {
+		    my $used_spec = $spec->{_specs_used}->{$label};
+
+		    push (@output, "$label = " . $$used_spec->get_file_name());
+		}
+	    } else {
+		@output = $spec->get_used_spec_files ();
+	    }
+	    print_result ($spec, @output);
 	}
     }
 }

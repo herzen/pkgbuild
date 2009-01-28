@@ -51,7 +51,7 @@ my $build_command;
 my $build_skip = 0;
 my $interactive_mode = 0;
 my $check_deps = 1;
-my $pkgdb = new pkgdb;
+my $pkgdb;
 my $ips_utils = new ips_utils;
 
 my $ips_server = $ENV{PKGBUILD_IPS_SERVER} || $ips_utils->get_local_ips_server();
@@ -368,7 +368,7 @@ sub get_versions_installed ($) {
 	    if ($pkginfo =~ /^([^\t]*)\t([^\t]*)\t([^\t]*)$/) {
 		push (@retlist, ($1, $2, $3));
 	    } else {
-		print "WARNING: couldn't parse version number of $pkg\n";
+		message ("WARNING: couldn't parse version number of $pkg");
 	    }
 	}
 	return \@retlist;
@@ -939,33 +939,46 @@ sub make_depend ($$) {
             my @pkgs = $pkgdb->file2pkgs($dep);
             my $pkg;
             if (@pkgs == 1) { 
-                $pkg = $pkgs[0]
-            } elsif(@pkgs) {
+                $pkg = $pkgs[0];
+		if ($pkg =~ /^pkg:\//) {
+		    # we're on an ips-based system, need to translate the
+		    # dependency to a legacy package
+		    $pkg = ips_to_svr4($pkg);
+		}
+            } elsif (@pkgs) {
                 # This /should/ be a directory, rather than a file
                 # (according to contents(4) on solaris-10, only 
                 # directories can be owned by more than one package)
                 # but I bet you can have files owned by more than one.
                 # We'll choose a package and warn.
-                my @favoured_packages = qw(SUNWcsr SUNWcsu SUNWcsxu
+                my @favoured_packages = qw(pkg:/SUNWcs 
+                                           SUNWcsr SUNWcsu SUNWcsxu
                                            SUNWcar SUNWcarx SUNWcsd
                                            SUNWcsl SUNWcslx);
                 foreach my $p (@favoured_packages) {
-                    # if we depend on a favourate package, depend 
+                    # if we depend on a favoured package, depend 
                     # only on it.
-                    if (not defined $pkg and grep $p eq $_, @pkgs) {
-                        $pkg = $p;
-			last;
-                    }
+                    my @ps = grep /^${p}(@.*)?$/, @pkgs;
+		    $pkg = $ps[0];
+		    last if defined ($pkg);
                 }
-                # If we have no better, sun packages are nicer than others
-                my @sunpkgs = grep /^SUNW/, @pkgs;
-                if (not defined $pkg and @sunpkgs == 1) { 
-                    $pkg = $sunpkgs[0];
-                }
+                # If we have no better idea, prefer SUNW packages to others
+		if (not defined ($pkg)) {
+		    my @sunpkgs = grep /^SUNW/, @pkgs;
+		    if (@sunpkgs >= 1) { 
+			$pkg = $sunpkgs[0];
+		    }
+		}
                 # Oh, sod it.  Depend on the first one.  We could perhaps
                 # do better.
                 $pkg = $pkgs[0] unless defined $pkg;
 		
+		if ($pkg =~ /^pkg:\//) {
+		    # we're on an ips-based system, need to translate the
+		    # dependency to a legacy package
+		    $pkg = ips_to_svr4($pkg);
+		}
+
                 message("WARNING: $dep could mean a dependency on "
                         . "many packages.  Choosing $pkg from "
                         . join(', ', map "'$_'", @pkgs));
@@ -1813,7 +1826,29 @@ sub make_ips_dependency ($$$) {
     foreach my $dep (@deps) {
 	my $ips_dep = svr4_to_ips ($dep);
 	if (not defined ($ips_dep)) {
-	    message("WARNING: Unknown dependency: $dep");
+	    if (-e $dep) {
+		my @pkgs = $pkgdb->file2pkgs($dep);
+		if (@pkgs == 1) {
+		    if ($pkgs[0] =~ /^pkg:\//) {
+			push @dep_lines, "depend fmri=$pkgs[0] type=require";
+		    }
+		} elsif (@pkgs) {
+		    # multiple packages found
+		    # see, if SUNWcs is one of them
+		    my @cs = grep /^pkg:\/SUNWcs@/, @pkgs;
+		    if (@cs) {
+			message("WARNING: multiple packages match dependency: $dep, choosing pkg:/SUNWcs");
+			push @dep_lines, "depend fmri=$cs[0] type=require";
+		    } else {
+			# SUNWcs not found
+			# use the first package name found
+			message("WARNING: multiple packages match dependency: $dep");
+			push @dep_lines, "depend fmri=$pkgs[0] type=require";
+		    }
+		} else {
+		    message("WARNING: Unknown dependency: $dep");
+		}
+	    }
 	    next;
 	}
 	push @dep_lines, "depend fmri=$ips_dep type=require";
@@ -2075,6 +2110,20 @@ sub svr4_to_ips($) {
     my $search_out = `pkg search -l $pkgname 2>&1 | grep '^legacy_pkg'`;
     chomp ($search_out);
     if ($search_out =~ /^legacy_pkg\s*legacy\s*${pkgname}\s*pkg:\/(\S+)\s*$/) {
+	return $1;
+    }
+    return undef;
+}
+
+# translate an ips package name and version to an svr4 package name
+# for use in svr4 dependencies
+sub ips_to_svr4($) {
+    my $pkgname = shift;
+
+    return undef if not defined ($pkgname);
+    my $search_out = `pkg contents -Ho action.raw -t legacy $pkgname 2>&1`;
+    chomp ($search_out);
+    if ($search_out =~ /^legacy.*\s+pkg="*(\S+)"*/) {
 	return $1;
     }
     return undef;
@@ -2350,6 +2399,11 @@ sub make_src_package ($) {
 
 sub main () {
     process_options ();
+    if ($pkgformat eq 'ips') {
+	$pkgdb = new pkgdb(1);
+    } else {
+	$pkgdb = new pkgdb;
+    }
     init ();
 
     if (not @spec_names) {
@@ -2393,30 +2447,31 @@ sub main () {
 	    do_block ($spec, 'check') or exit (1);
 	}
 	if ($build_command =~ /[ba]/) {
-	    	my $pkgdir = $spec->eval ("%_pkgdir");
-	    	mkdir_p ($pkgdir) or fatal ("Failed to create directory $pkgdir");
-
-	    	$pkgdir = $spec->eval ("%_pkgmapdir");
-	    	foreach my $subdir ("copyright", "depend", "pkginfo", "proto", "manifests", "scripts") {
-			mkdir_p ("$pkgdir/$subdir")
-		    		or fatal ("Failed to create directory $pkgdir/subdir");
-	    	}
-
-		# Create an SVr4 package
-	    	create_svr4_packages ($spec) or 
-				fatal ($spec->get_error ());
-
-		# Create IPS package(s)
-		create_ips_packages ($spec);
-		# we always create the manifest file, but only publish the
-		# package if the requested pkgformat is ips
-		if ($pkgformat eq "ips") {
-		    # Call the script to publish it
-		    if (not publish_ips_packages ($spec)) {
-			print "ERROR: failed to publish package to $ips_server\n";
-			exit (1);
-		    }
+	    print "Creating packages...\n";
+	    my $pkgdir = $spec->eval ("%_pkgdir");
+	    mkdir_p ($pkgdir) or fatal ("Failed to create directory $pkgdir");
+	    
+	    $pkgdir = $spec->eval ("%_pkgmapdir");
+	    foreach my $subdir ("copyright", "depend", "pkginfo", "proto", "manifests", "scripts") {
+		mkdir_p ("$pkgdir/$subdir")
+		    or fatal ("Failed to create directory $pkgdir/subdir");
+	    }
+	    
+	    # Create an SVr4 package
+	    create_svr4_packages ($spec) or 
+		fatal ($spec->get_error ());
+	    
+	    # Create IPS package(s)
+	    create_ips_packages ($spec);
+	    # we always create the manifest file, but only publish the
+	    # package if the requested pkgformat is ips
+	    if ($pkgformat eq "ips") {
+		# Call the script to publish it
+		if (not publish_ips_packages ($spec)) {
+		    print "ERROR: failed to publish package to $ips_server\n";
+		    exit (1);
 		}
+	    }
 	}
 	if ($build_command =~ /[as]/) {
 	    $pkgdir = $spec->eval ("%_srcpkgdir");

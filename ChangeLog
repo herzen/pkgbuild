@@ -1,3 +1,18 @@
+2009-01-28  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: implement Requires: /path/to/file for IPS
+	* pkgdb.pm.in: add IPS support (very slow!)
+	* pkgtool.pl: installation aborts if the local authority is not
+	  defined and a hint is printed.
+	* rpm_package.pm: update versioning to match OpenSolaris spec
+	* rpm_spec.pm.in: (get_used_spec_labels): new function for
+	  getting the labels assigned to sub-specs, e.g %use label = foo.spec
+	* spectool.pl: add -l option for spectool get_used_spec, which
+	  makes it print the labels as well.
+	* configure.in: bump version to 1.3.98
+	* NEWS: update
+	* TODO: udpate
+
 2008-12-08  Laszlo Peter  <laca@sun.com>
 
 	* Makefile.am: add ips_utils.pm

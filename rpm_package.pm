@@ -48,8 +48,12 @@ sub new ($$;&) {
     $self->{_tags}->{release} = 0;
     my $ips_os_rel = `uname -r`;
     chomp ($ips_os_rel);
-    $self->{_tags}->{ips_component_version} = "0." . $ips_os_rel;
+    $self->{_tags}->{ips_component_version} = '%{version}';
     $self->{_tags}->{ips_build_version} = $ips_os_rel;
+    my $os_build = `uname -v`;
+    chomp ($os_build);
+    $os_build =~ s/^\S+_([0-9]+).*/$1/;
+    $self->{_tags}->{ips_vendor_version} = "0.$os_build";
     my $target = $$parent_spec_ref->{_defines}->{"_target"};
     if (defined $target) {
 	$self->{_tags}->{buildarchitectures} = $target;
