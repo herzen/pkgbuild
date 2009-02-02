@@ -54,7 +54,12 @@ my $check_deps = 1;
 my $pkgdb;
 my $ips_utils = new ips_utils;
 
-my $ips_server = $ENV{PKGBUILD_IPS_SERVER} || $ips_utils->get_local_ips_server();
+my $ips_server = $ENV{PKGBUILD_IPS_SERVER};
+if (not defined($ips_server)) {
+    if (defined ($ips_utils)) {
+	$ips_server = $ips_utils->get_local_ips_server();
+    }
+}
 
 my $mydir = `pwd`;
 chomp ($mydir);
