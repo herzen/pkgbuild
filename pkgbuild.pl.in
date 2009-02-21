@@ -1886,10 +1886,18 @@ sub add_ips_license($$) {
     my $package = shift;
     
     my $name = $package->get_tag ("name");
-    my $license= $package->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
+    my $license_file= $package->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
 
-    return if not -f $license;
-    push (@$ref_lines, "license $license license=copyright");
+    return if not -f $license_file;
+    my $license = $package->get_tag ("license");
+    if (not defined ($license)) {
+	# License is the new name for the Copyright tag
+	$license = $package->get_tag ("copyright");
+    }
+    if (not defined ($license)) {
+	$license = "unknown";
+    }
+    push (@$ref_lines, "license $license_file license=\"$license\"");
 }
 
 # Add summary line 

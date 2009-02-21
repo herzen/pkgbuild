@@ -267,6 +267,14 @@ sub wget_in_path () {
 	    return 0;
 	}
 	msg_info (2, "Found $wget");
+	
+	# find out which option to use for the disabling checking ssl certs
+	my $check_cert_option = `$wget --help 2>&1 | grep 'check.*cert'`;
+	if ($check_cert_option =~ /--no-check-certificate/s) {
+	    $wget = "$wget --no-check-certificate";
+	} elsif ($check_cert_option =~ /--sslcheckcert/s) {
+	    $wget = "$wget --sslcheckcert=0";
+	}
 	return 1;
     } elsif ($wget ne "-") {
 	return 1;

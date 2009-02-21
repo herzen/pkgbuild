@@ -48,6 +48,7 @@ sub new ($;$) {
     $self->{_authorities} = {};
     $self->{_properties} = {};
     $self->{_filter} = {};
+    $self->{_policy} = {};
     $self->{_unknown} = {};
     bless ($self, $class);
     $self->read_cfg_cache ();
@@ -89,8 +90,11 @@ sub read_cfg_cache ($) {
 	} elsif ($line eq '[property]') {
 	    $section = '_properties';
 	    $authority = undef;
+	} elsif ($line eq '[policy]') {
+	    $section = '_policy';
+	    $authority = undef;
 	} elsif ($line =~ /^\[(.*)\]$/) {
-	    print "ips_utils: unknown section $1\n";
+	    print "ips_utils: warning: unknown section \"$1\"\n";
 	    $section = '_unknown';
 	    $authority = undef;
 	} else {

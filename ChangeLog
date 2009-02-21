@@ -1,3 +1,12 @@
+2009-02-22  Laszlo Peter  <laca@sun.com>
+
+	* TODO: we need some way to associate actions in %files
+	* ips_utils.pm: define 'policy' section to get rid of warning
+	* pkgbuild.pl.in: set correct license name, based on License
+	* pkgtool.pl: use wget option to disable checking ssl certs so
+	  that automatic download of https works (--sslcheckcert=0 or
+	  --no-check-certificate depending on the wget version)
+
 2009-02-02  Laszlo Peter  <laca@sun.com>
 
 	* pkgtool.pl: fix ips_utils undef problem when IPS is not found;

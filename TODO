@@ -8,10 +8,7 @@ Additional stuff needed for full IPS support:
    attributes and tags, e.g.
    %tag (foo) in %files and
    Attribute(name): value
- - implement publish subcommand that:
-   - rebuilds the manifest (because it's possible that the package was
-     previously built as svr4 only)
-   - publishes to the repository determined by PKG_REPO
+   %action(foo=bar)
 - create source packages, potentially in a different repo, implement
   automatic rebuilds
 
