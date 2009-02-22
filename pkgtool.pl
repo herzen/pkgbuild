@@ -1945,10 +1945,6 @@ sub wget_source ($$$) {
     my $target = shift;
     my $protocol;
 
-    if (! -x $wget) {
-	print "WARNING: assertion failed: wget_source();\n";	
-    }
-
     if ($src =~ /^(http|ftp):\/\//) {
 	$protocol = $1;
     } else {

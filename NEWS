@@ -9,6 +9,9 @@ Version 1.3.98:
         - Requires: /path/to/file now works for IPS packages as well,
           detects if the file was installed with IPS or pkgadd and
 	  adds the matching dependency
+        - use wget option to disable checking ssl certs so that automatic
+          download of https works (--sslcheckcert=0 or --no-check-certificate
+          depending on the wget version), reported by Ghee Teo
 
 	New features:
 

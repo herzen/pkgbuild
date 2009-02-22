@@ -1,5 +1,14 @@
 2009-02-22  Laszlo Peter  <laca@sun.com>
 
+	* NEWS: add info about wget and ssl cert check
+	* pkgbuild.pl.in: add info.source_url tags for each source specified
+	  with a url and not hidden by NoSource
+	* pkgtool.pl: remove incorrect assertion
+	* rpm_package.pm: (get_spec) new method that returns the spec file
+	  that the package belongs to (parent spec)
+
+2009-02-22  Laszlo Peter  <laca@sun.com>
+
 	* TODO: we need some way to associate actions in %files
 	* ips_utils.pm: define 'policy' section to get rid of warning
 	* pkgbuild.pl.in: set correct license name, based on License

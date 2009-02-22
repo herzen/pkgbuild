@@ -1939,6 +1939,13 @@ sub add_ips_summary($$) {
 	my $classification = "freedesktop.org::" . $group;
 	push (@$ref_lines, "set name=info.classification value=\"$classification\"");
     }
+
+    # add pointers sources specified by URLs and not listed in NoSource
+    my @sources = $package->get_spec()->get_public_sources ();
+    foreach my $src (@sources) {
+	next if (not $src =~ /^(http|https|ftp):\/\//);
+	push (@$ref_lines, "set name=info.source_url value=\"$src\"");
+    }
 }
 
 sub add_ips_legacy($$$) {

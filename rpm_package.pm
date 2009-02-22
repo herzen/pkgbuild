@@ -123,6 +123,12 @@ sub new_subpackage ($$$;$$) {
     return (bless $self, $class);
 }
 
+sub get_spec ($) {
+    my $self = shift;
+    return undef unless defined ($self->{_parent_spec_ref});
+    return ${$self->{_parent_spec_ref}};
+}
+
 sub get_svr4_name ($) {
     my $self = shift;
     if (defined $self->{_tags}->{sunw_pkg}) {
