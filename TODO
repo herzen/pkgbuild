@@ -1,6 +1,4 @@
 Things broken by IPS support:
- - add legacy tag in manifest for -devel pkg and also for the runtime (base)
-   package, if SUNW_Pkg is different from Name
  - uninstall-pkgs should detect if the pkg was installed with pkgadd or pkg
 
 Additional stuff needed for full IPS support:
