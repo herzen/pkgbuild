@@ -1,5 +1,10 @@
 2009-02-27  Laszlo Peter  <laca@sun.com>
 
+	* pkgbuild.pl.in: fix bug where the copyright file is not found
+	  if specified by a URL.  Reported by Baban Kenkre.
+
+2009-02-27  Laszlo Peter  <laca@sun.com>
+
 	* pkgbuild.pl.in: fix typo that causes Meta tags not to be added
 	  to the manifest; add variant.arch tag
 	* rpm_spec.pm.in: remove leading whitespace from Meta values

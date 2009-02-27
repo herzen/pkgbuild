@@ -885,6 +885,9 @@ sub make_copyright ($$;$) {
     }
     return undef unless defined $cr_file;
 
+    # in case it's a URL
+    $cr_file = basename($cr_file);
+
     my $srcdir = $spec->eval ('%_sourcedir');
     if (not -f "$srcdir/$cr_file") {
 	message ("warning: copyright file $srcdir/$cr_file not found");
