@@ -1905,7 +1905,7 @@ sub add_ips_summary($$) {
     my $ref_lines = shift;
     my $package = shift;
 
-    my $meta_hash_ref = $package->get_meta_hash();
+    my $meta_hash = $package->get_meta_hash();
     if (not defined ($$meta_hash{'pkg.name'})) {
 	my $name = $package->get_tag("name");
 	$$meta_hash{'pkg.name'} = $name;
@@ -1927,7 +1927,7 @@ sub add_ips_summary($$) {
 	push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
     }
 
-    foreach my $meta (keys %$meta_hash) {
+    foreach my $meta (keys %{$meta_hash}) {
 	push (@$ref_lines, "set name=$meta value=\"$$meta_hash{$meta}\"");
     }
 
@@ -1997,6 +1997,10 @@ sub add_ips_legacy($$$) {
 	chomp ($rev);
 
 	push (@$ref_lines, "legacy arch=$arch category=$category desc=\"$desc\" hotline=\"$hotline\" name=\"$desc\" pkg=$pkgname $vendor version=$version,REV=$rev");
+
+	# as seen in Bart's blog:
+        # http://blogs.sun.com/barts/?cat=packaging+and+patching&date=20090204
+	push (@$ref_lines, "set name=variant.arch value=$arch");
     }
 }
 

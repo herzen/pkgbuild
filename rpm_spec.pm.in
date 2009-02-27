@@ -1236,7 +1236,7 @@ sub _process_tag ($$$) {
 
     # meta(foo): bar
     if ($lcline =~ /^meta\s*\(\s*[^\s]+\s*\)\s*:(.*\S)\s*$/) {
-	$line =~ /^\s*[mM][eE][tT][aA]\s*\(\s*(\S+)\s*\)\s*:(.*\S)\s*$/;
+	$line =~ /^\s*[mM][eE][tT][aA]\s*\(\s*(\S+)\s*\)\s*:\s*(.*\S)\s*$/;
 	$value = $2;
 	my $metaname = lc($1);
 	$package_ref->set_meta ($metaname, $value);
