@@ -5,20 +5,20 @@ Additional stuff needed for full IPS support:
  - need to define and implement additional spec file elements for
    attributes and tags, e.g.
    %tag (foo) in %files and
-   Attribute(name): value
-   %action(foo=bar)
+   %action(foo=bar), or %actions section akin to %files
 - create source packages, potentially in a different repo, implement
   automatic rebuilds
 
 Some things I'm planning fix/add:
+ - %if foo == bar
+ - version checking in requires/buildrequires
  - implement --rmsource, --rmspec, --clean, --clean, --buildroot
  - bcond_with (http://www.redhat.com/archives/epel-devel-list/2007-July/msg00208.html)
  - S8/S9 compatibility
- - %check scriptlet: http://rpm.org/max-rpm-snapshot/s1-rpm-inside-scripts.html#S3-RPM-INSIDE-CHECK-SCRIPT
  - pkgbuild -ta
  - pkgtool parallel build
  - md5 checksum for source tarballs
- - support all rpm 4 spec file elements (need to figure out what's missing)
+ - support all rpm4 spec file elements (need to figure out what's missing)
  - fix/implement version checking (currently dependencies check pkg names only)
  - add support for SVr4 "space files", see space(4) on Solaris
  - on Linux, generate plain rpm spec files and call rpmbuild to do the build
@@ -31,8 +31,6 @@ Some things I'm planning fix/add:
  - implement RequireArch / RequireOS
  - rpm seems to accept %Package, check if all directives are indeed
    case insensitive and implement accordingly
- - %if foo == bar
- - version checking in requires/buildrequires
  - requires(pre|post|preun|postun)
  - spec file lint
  - rpm compat: only Name, Version and Release define %name, %version, %release

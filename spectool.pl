@@ -107,7 +107,7 @@ sub init () {
 	$_homedir = (getpwuid($uid))[7];
     }
     if (defined ($ENV{PKGBUILD_IPS_SERVER}) or
-	$ips_utils->is_depotd_enabled()) {
+	(defined($ips_utils) and $ips_utils->is_depotd_enabled())) {
 	$ips = 1;
 	$svr4 = undef;
     } else {

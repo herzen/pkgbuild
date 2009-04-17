@@ -12,14 +12,22 @@ URL:	      http://pkgbuild.sourceforge.net/
 Version:      @PKGBUILD_VERSION@
 Release:      1
 BuildArch:    noarch
-Vendor:	      Sun Microsystems, Inc.
+Vendor:	      OpenSolaris Community
 Summary:      pkgbuild - rpmbuild-like tool for building Solaris packages
-Source:       pkgbuild-%{version}.tar.bz2
+Source:       http://prdownloads.sourceforge.net/pkgbuild/pkgbuild-%{version}.tar.bz2
 BuildRoot:    %{_tmppath}/%{name}-%{version}-build
 
-%{?_pkgbuild:SUNW_Pkg:                  SFpkgbuild}
-%{?_pkgbuild:SUNW_MaxInst:              1000}
-%{?_pkgbuild:SUNW_BaseDir:              %{pkgbuild_prefix}}
+%if %_is_pkgbuild
+SUNW_Pkg:                  SFpkgbuild
+SUNW_MaxInst:              1000
+SUNW_BaseDir:              %{pkgbuild_prefix}
+SUNW_Copyright:            http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+# OpenSolaris IPS Package Manifest Fields
+Meta(info.upstream):	 	Laszlo (Laca) Peter <laca@sun.com>
+Meta(info.maintainer):	 	Laszlo (Laca) Peter <laca@opensolaris.org>
+Meta(info.repository_url):	http://pkgbuild.cvs.sourceforge.net/viewvc/pkgbuild/pkgbuild/
+Meta(info.classification):	org.opensolaris.category.2008:System/Packaging
+%endif
 
 %ifos Solaris
 Requires:     SUNWbash
@@ -56,6 +64,8 @@ rm -rf $RPM_BUILD_ROOT
 %attr (0755, root, bin) %{_libdir}
 
 %changelog
+* Fri Apr 17 2009 - laca@sun.com
+- add IPS Meta tags
 * Fri Aug 11 2006 - <laca@sun.com>
 - delete topdir stuff, we have per-user topdirs now
 * Mon Aug 08 2005 - <laca@sun.com>

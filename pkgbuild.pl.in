@@ -10,7 +10,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright 2008 Sun Microsystems, Inc.
+#  Copyright 2009 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -458,7 +458,9 @@ sub check_dep ($$) {
     }
 
     my $pkg = $dep;
-    $pkg =~ s/\s+.*$//;
+    # FIXME: we're simple chopping off any version comparisons
+    # should really verify them instead
+    $dep =~ s/(\S+).*/$1/;
     if (not defined ($pkg)) {
 	print "empty dependency: $dep\n";
 	return 0;
@@ -926,6 +928,9 @@ sub make_depend ($$) {
 	if (not defined ($dep)) {
 	    next;
 	}
+	# FIXME: we're simple chopping off any version comparisons
+	# should really verify them instead
+	$dep =~ s/(\S+).*/$1/;
 	# look for a package defined in this spec file first
 	my $subpkg = $spec->find_package_by_name ($dep);
 	if (defined ($subpkg)) {
@@ -1231,7 +1236,7 @@ sub get_doc_proto_line ($$$$) {
     if ($type eq 'svr4') {
 	return "f none $docdir/$fname=$pkgbasedir$docdir/$fname 0444 root bin";
     } elsif ($type eq 'ips') {
-	my $svr_package = basename ($docdir);
+	my $svr_package = $file->get_package->get_svr4_name();
 	my $svrfname = $file->get_package ()->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . "$docdir/$fname";
 	return "file $svrfname mode=0444 owner=root group=bin path=\"$pkgbasedir$docdir/$fname\" doc=true";
     } else {
@@ -1688,7 +1693,7 @@ sub get_proto_hash ($$$) {
 						    $defattr[1],
 						    $defattr[2],
 						    undef,
-						    $package, $spec);
+						    $package->get_svr4_name(), $spec);
 		    } else {
 			$pline = get_proto_line (undef,
 						 "none",
@@ -1832,6 +1837,9 @@ sub make_ips_dependency ($$$) {
     }
     my @dep_lines = ();
     foreach my $dep (@deps) {
+	# FIXME: we're simple chopping off any version comparisons
+	# should really verify them instead
+	$dep =~ s/(\S+).*/$1/;
 	my $ips_dep = svr4_to_ips ($dep);
 	if (not defined ($ips_dep)) {
 	    if (-e $dep) {
@@ -1888,8 +1896,8 @@ sub add_ips_license($$) {
     my $ref_lines = shift;
     my $package = shift;
     
-    my $name = $package->get_tag ("name");
-    my $license_file= $package->eval ("%_pkgdir") . "/" . $name . "/install/copyright";
+    my $svr4_name = $package->get_svr4_name ();
+    my $license_file= $package->eval ("%_pkgdir") . "/" . $svr4_name . "/install/copyright";
 
     return if not -f $license_file;
     my $license = $package->get_tag ("license");
@@ -1931,6 +1939,9 @@ sub add_ips_summary($$) {
     }
 
     foreach my $meta (keys %{$meta_hash}) {
+	# handle info.classification separately, as there may be more than one
+	# and they need to be in the same action
+	next if $meta eq "info.classification";
 	push (@$ref_lines, "set name=$meta value=\"$$meta_hash{$meta}\"");
     }
 
@@ -1938,16 +1949,32 @@ sub add_ips_summary($$) {
     #  1) defined using the Group tags, this must be a freedesktop.org group
     #  2) defined using meta(info.classification)
     my $group = $package->get_tag("group");
+    my $classification_value;
     if (defined $group) {
-	my $classification = "freedesktop.org::" . $group;
-	push (@$ref_lines, "set name=info.classification value=\"$classification\"");
+	$classification_value = "value=\"org.freedesktop:" . $group . "\"";
+    }
+
+    if (defined $$meta_hash{"info.classification"}) {
+	if (defined($classification_value)) {
+	    $classification_value .= "value=\"" . $$meta_hash{"info.classification"} . "\"";
+	} else {
+	    $classification_value = " value=\"" . $$meta_hash{"info.classification"} . "\"";
+	}
+    }
+
+    if (defined ($classification_value)) {
+	push (@$ref_lines, "set name=info.classification $classification_value");
     }
 
     # add pointers sources specified by URLs and not listed in NoSource
     my @sources = $package->get_spec()->get_public_sources ();
+    my $source_values = "";
     foreach my $src (@sources) {
 	next if (not $src =~ /^(http|https|ftp):\/\//);
-	push (@$ref_lines, "set name=info.source_url value=\"$src\"");
+	$source_values .= " value=\"$src\"";
+    }
+    if ($source_values ne "") {
+	push (@$ref_lines, "set name=info.source_url$source_values");
     }
 }
 
@@ -2488,11 +2515,9 @@ sub main () {
 	    create_svr4_packages ($spec) or 
 		fatal ($spec->get_error ());
 	    
-	    # Create IPS package(s)
-	    create_ips_packages ($spec);
-	    # we always create the manifest file, but only publish the
-	    # package if the requested pkgformat is ips
 	    if ($pkgformat eq "ips") {
+		# Create IPS package(s)
+		create_ips_packages ($spec);
 		# Call the script to publish it
 		if (not publish_ips_packages ($spec)) {
 		    print "ERROR: failed to publish package to $ips_server\n";

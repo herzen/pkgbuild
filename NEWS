@@ -1,3 +1,30 @@
+Version 1.3.98.3:
+
+	Bugs fixed:
+
+	- SUNW_Pkg ignored by pkgtool when looking for dependent packages.
+          Patch from Jan Hnatek.
+
+	- fix the local IPS server URL to include a trailing /
+	  Bug reported by Jan Hnatek
+
+	- rewrite much of ips_utils to parse the output of 'pkg authority'
+          instead of parsing /var/pkg/cfg_cache
+
+	- ignore version specs in Requires/BuildRequires statements
+	  (for now...)
+
+	- use a single "info.source_url" IPS attribute for all sources,
+	  rather than one for each, which is illegal
+
+	- use a single "info.classification" IPS attribute if multiple
+	  classifications are specified (one using Meta, one using the
+          Group tag)
+
+	- do not try to create IPS packages on non-IPS systems
+
+	- other minor fixes
+
 Version 1.3.98:
 
 	Bugs fixed:

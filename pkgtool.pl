@@ -2,7 +2,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright 2008 Sun Microsystems, Inc.
+#  Copyright 2009 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -1257,14 +1257,21 @@ sub is_provided ($) {
 	    $version =~ s/([^,]+)(,|$).*/$1/;
             $pkginfo_version{$capability} = $version;
 	}
-	if (not $result) {
-	    # no svr4 package (or IPS package with a legacy action) found
-	    # let's look for an IPS package
-	    my $pkg_out = `pkg info -l $capability 2>&1`;
-	    $result = (! $?);
-	    my $version = $pkg_out;
-	    $version =~ s/^.*\n\s*Branch:\s([0-9.]+)\s*\n.*$/$1/s;
-	    $pkginfo_version{$capability} = $version;
+	if (defined ($ips)) {
+	    if (not $result) {
+		# no svr4 package (or IPS package with a legacy action) found
+		# let's look for an IPS package
+		my $pkg_out = `pkg info -l $capability 2>&1`;
+		$result = (! $?);
+		my $version = $pkg_out;
+		$version =~ s/^.*\n\s*Branch:\s([0-9.]+|None)\s*\n.*$/$1/s;
+		if ($version eq "None") {
+		    # Branch is None, look for Version instead
+		    $version = $pkg_out;
+		    $version =~ s/^.*\n\s*Version:\s([0-9.]+)\s*\n.*$/$1/s;
+		}
+		$pkginfo_version{$capability} = $version;
+	    }
 	}
 	return $result;
     } else {
@@ -1754,6 +1761,7 @@ sub check_dependency ($$&&@) {
 			    return $result;
 			} else {
 			    msg_info (1, "Unfortunately, $autospec does not define $capability");
+			    return 0;
 			}
 		    } else {
 			return 0;
@@ -2852,7 +2860,8 @@ sub process_spec ($) {
     }
     foreach my $pkg (@packages) {
 	next if not defined $pkg;
-	my $pkgname = $pkg->get_name();
+	my $pkgname = $pkg->get_tag ('SUNW_Pkg');
+	$pkgname = "$pkg" unless $pkgname;
 	if (defined ($provider{$pkgname})) {
 	    my $prev_spec = $specs_to_build[$provider{$pkgname}];
 	    msg_warning (0, "skipping spec file " . 

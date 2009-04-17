@@ -9,7 +9,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright (C) 2004, 2006 Sun Microsystems, Inc.
+#  Copyright 2009 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -2960,11 +2960,15 @@ sub get_topdir ($$) {
     foreach my $def (@$predef_ref) {
 	$defines = $defines . " --define \"$def\"";
     }
-    $_topdir = `$build_engine $defines -bp $_pkgbuild_libdir/get_rpm_topdir 2>&1 | grep '^TOPDIR=' | cut -f2 -d=`;
+    $_topdir = `$build_engine $defines -bp $_pkgbuild_libdir/get_rpm_topdir 2>&1`;
     if ($? != 0) {
-	die ("pkgbuild internal error: could not determine the value of %topdir");
+	die ("pkgbuild internal error: could not determine the value of %_topdir\nDetails:\n$_topdir");
     }
-    chomp ($_topdir);
+    if ($_topdir =~ /\nTOPDIR=([^\n]*)\n/s) {
+	$_topdir = $1;
+    } else {
+	die ("pkgbuild internal error: could not determine the value of %_topdir\nDetails:\n$_topdir");
+    }
     return $_topdir;
 }
 

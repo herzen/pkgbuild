@@ -186,7 +186,6 @@ SUNWcakrnt2000:Platform Specific Drivers for Netra-T2000, (Root)
 SUNWcamdt:Central America CDE Support
 SUNWcamos:Central America OS Support
 SUNWcamow:Central America OW Support
-SUNWcar:Core Architecture, (Root)
 SUNWcart200:Core Architecture Sun-Fire-T200 Sun-Fire-T100, (Root)
 SUNWcasu:Simplified Chinese Sun Java System Application Server (usr)
 SUNWcbcp:Simplified Chinese (EUC) Language Environment Binary Compatibility
@@ -1206,7 +1205,6 @@ SUNWkttfe:Korean True Type Font Extension
 SUNWkudc:Korean User Defined Character tool for Solaris CDE
 SUNWkupdatemgru:Korean Update Manager GUI
 SUNWkuxft:Korean (UTF-8) X Windows Platform Required Fonts
-SUNWkvm:Core Architecture, (Kvm)
 SUNWkvmt200:Core Architecture Sun-Fire-T200 Sun-Fire-T1000, (Kvm)
 SUNWkwbc:Korean WBEM Services
 SUNWkwbcp:Korean OpenWindows Binary Compatibility Package

@@ -1,7 +1,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright (C) 2004, 2005 Sun Microsystems, Inc.
+#  Copyright 2009 Sun Microsystems, Inc.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -104,6 +104,9 @@ sub new_subpackage ($$$;$$) {
 	$self->{_tags}->{$tag_name} = ();
     }
 
+    my $meta = $packages[0]->{_meta};
+    $self->{_meta} = {%$meta};
+    
     $self->{_blocks} = {};
     my @metafiles = ();
     $self->{_metafiles} = \@metafiles;

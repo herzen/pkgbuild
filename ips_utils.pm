@@ -1,7 +1,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+#  Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
 #  Use is subject to license terms.
 #
 #  pkgbuild is free software; you can redistribute it and/or
@@ -42,27 +42,29 @@ sub new ($;$) {
     $self->{_altroot} = $altroot;
     $altroot = "" if not defined ($altroot);
 
-    if (! -f "${altroot}/var/pkg/cfg_cache") {
+    if (! -d "${altroot}/var/pkg") {
 	return undef;
     }
     $self->{_authorities} = {};
     $self->{_properties} = {};
     $self->{_filter} = {};
+    $self->{_variant} = {};
     $self->{_policy} = {};
     $self->{_unknown} = {};
     bless ($self, $class);
-    $self->read_cfg_cache ();
+    $self->read_cfg ();
     return $self;
 }
 
-sub read_cfg_cache ($) {
+sub read_cfg ($) {
     my $self = shift;
 
     my $altroot = $self->{_altroot};
     $altroot = "" if not defined ($altroot);
 
-    open CFG_CACHE, "<${altroot}/var/pkg/cfg_cache" or
-	die "Cannot open IPS configuration file";
+    # FIXME: does not consider an altroot scenario
+    open IPS_AUTH, "/usr/bin/pkg authority -H |" or
+	die "Cannot read IPS configuration";
     my $pkgbuild_ips_host;
     my $pkgbuild_ips_port;
     my $pkgbuild_ips_server = $ENV{PKGBUILD_IPS_SERVER};
@@ -72,84 +74,52 @@ sub read_cfg_cache ($) {
 	    $pkgbuild_ips_port = $2;
 	}
     }
-    my $section;
-    my $authority;
-    while (my $line = <CFG_CACHE>) {
+    while (my $line = <IPS_AUTH>) {
 	chomp ($line);
-	if ($line =~ /^#/) {
-	    next;
-	} elsif ($line =~ /^\s*$/) {
-	    next;
-	} elsif ($line =~ /^\[authority_([a-zA-Z0-9._-]+)\]$/) {
-	    $authority = $1;
-	    $section = '_authorities';
+	if ($line =~ /^(\S+)\s+(?:\(preferred\))?\s+(\S+)$/) {
+	    my $authority = $1;
+	    my $origin = $2;
 	    $self->{_authorities}->{$authority} = {};
-	} elsif ($line eq '[filter]') {
-	    $section = '_filter';
-	    $authority = undef;
-	} elsif ($line eq '[property]') {
-	    $section = '_properties';
-	    $authority = undef;
-	} elsif ($line eq '[policy]') {
-	    $section = '_policy';
-	    $authority = undef;
-	} elsif ($line =~ /^\[(.*)\]$/) {
-	    print "ips_utils: warning: unknown section \"$1\"\n";
-	    $section = '_unknown';
-	    $authority = undef;
-	} else {
-	    if ($line =~ /^([a-zA-Z_0-9-]+) = (.+)$/) {
-		my $key = $1;
-		my $val = $2;
-		if (defined ($authority)) {
-		    $self->{_authorities}->{$authority}->{$key} = $val;
-		    if ($key eq "origin") {
-			if ($val =~ /^http:\/\/(.+):(.+)\/$/) {
-			    my $host = $1;
-			    my $port = $2;
-			    my $local_port = $self->get_local_ips_port ();
-			    if ($port == $local_port) {
-				my $packed_ip = gethostbyname ($host);
-				my $local_packed_ip = 
-				    gethostbyname ($my_hostname);
-				if (defined $packed_ip and
-				    defined $local_packed_ip) {
-				    my $ip_address = Socket::inet_ntoa($packed_ip);
-				    my $local_ip = Socket::inet_ntoa ($local_packed_ip);
-				    if (($ip_address eq $local_ip) or
-					($ip_address eq "127.0.0.1")) {
-					$self->{_local_authority} = $authority;
-				    }
-				}
-				
-			    }
-			    if (defined ($pkgbuild_ips_server) and
-				($port == $pkgbuild_ips_port)) {
-				my $packed_ip = gethostbyname ($host);
-				my $pkgbuild_packed_ip = 
-				    gethostbyname ($pkgbuild_ips_host);
-				if (defined $packed_ip and
-				    defined $pkgbuild_packed_ip) {
-				    my $ip_address = Socket::inet_ntoa($packed_ip);
-				    my $pkgbuild_ip = Socket::inet_ntoa ($pkgbuild_packed_ip);
-				    if (($ip_address eq $pkgbuild_ip) or
-					($ip_address eq "127.0.0.1")) {
-					$self->{_pkgbuild_authority} = $authority;
-				    }
-				}
-				
+	    $self->{_authorities}->{$authority}->{origin} = $origin;
+	    if ($origin =~ /^http:\/\/(.+):(.+)\/$/) {
+		my $host = $1;
+		my $port = $2;
+		my $local_port = $self->get_local_ips_port ();
+		if ($port == $local_port) {
+		    my $packed_ip = gethostbyname ($host);
+		    my $local_packed_ip = 
+			gethostbyname ($my_hostname);
+		    if (defined $packed_ip and
+			defined $local_packed_ip) {
+			my $ip_address = Socket::inet_ntoa($packed_ip);
+			my $local_ip = Socket::inet_ntoa ($local_packed_ip);
+			if (($ip_address eq $local_ip) or
+			    ($ip_address eq "127.0.0.1")) {
+			    $self->{_local_authority} = $authority;
+			}
+		    }
+		    if (defined ($pkgbuild_ips_server) and
+			($port == $pkgbuild_ips_port)) {
+			my $packed_ip = gethostbyname ($host);
+			my $pkgbuild_packed_ip = 
+			    gethostbyname ($pkgbuild_ips_host);
+			if (defined $packed_ip and
+			    defined $pkgbuild_packed_ip) {
+			    my $ip_address = Socket::inet_ntoa($packed_ip);
+			    my $pkgbuild_ip = Socket::inet_ntoa ($pkgbuild_packed_ip);
+			    if (($ip_address eq $pkgbuild_ip) or
+				($ip_address eq "127.0.0.1")) {
+				$self->{_pkgbuild_authority} = $authority;
 			    }
 			}
 		    }
-		} else {
-		    $self->{$section}->{$1} = $2;
 		}
-	    } else {
-		print "ips_utils: failed to parse line: $line\n";
 	    }
+	} else {
+	    print "ips_utils: failed to parse line: $line\n";
 	}
     }
-    close CFG_CACHE;
+    close IPS_AUTH;
     if (not defined ($pkgbuild_ips_server)) {
 	$self->{_pkgbuild_authority} = $self->{_local_authority};
     }
@@ -179,7 +149,7 @@ sub get_local_ips_server ($) {
 
     if (not defined ($self->{_local_ips_server})) {
 	my $port = $self->get_local_ips_port ();
-	$self->{_local_ips_server} = "http://localhost:$port";
+	$self->{_local_ips_server} = "http://localhost:$port/";
     }
     return $self->{_local_ips_server};
 }
