@@ -76,7 +76,7 @@ sub read_cfg ($) {
     }
     while (my $line = <IPS_AUTH>) {
 	chomp ($line);
-	if ($line =~ /^(\S+)\s+(?:\(preferred\))?\s+(\S+)$/) {
+	if ($line =~ /^(\S+)\s+.*\s*(https?:\/\/\S+).*$/) {
 	    my $authority = $1;
 	    my $origin = $2;
 	    $self->{_authorities}->{$authority} = {};
