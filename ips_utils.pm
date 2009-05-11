@@ -89,6 +89,9 @@ sub read_cfg ($) {
 		    my $packed_ip = gethostbyname ($host);
 		    my $local_packed_ip = 
 			gethostbyname ($my_hostname);
+		    if (not defined ($local_packed_ip)) {
+			print "WARNING: could not resolve your hostname: $my_hostname\n";
+		    }
 		    if (defined $packed_ip and
 			defined $local_packed_ip) {
 			my $ip_address = Socket::inet_ntoa($packed_ip);

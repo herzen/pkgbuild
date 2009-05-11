@@ -179,6 +179,9 @@ sub process_defaults () {
 		    "%{topdir}/SOURCES");
     $defaults->add ('source_mirrors', 's',
 		    'comma-separated list of mirror sites for source downloads');
+    $defaults->add ('rmlog', '!',
+                   'whether to remove the log file with each build',
+                   0);
 }
 
 # --------- utility functions ----------------------------------------------
@@ -848,6 +851,7 @@ sub process_options {
 		},
 		'ips' => sub { set_ips(1); },
 		'svr4' => sub { set_svr4(1); },
+                'rmlog' => sub { shift; $defaults->set ('rmlog', shift); },
 		'<>' => \&process_args);
 
     if ($topdir ne $default_topdir) {
@@ -915,14 +919,18 @@ Options:
                   the standard output; pkgbuild is executed in interactive
                   mode which makes it start a subshell if the build fails
 
-    --ips  [EXPERIMENTAL]
+    --ips
 
 		  Install IPS packages by default to local repository
 		  http://localhost:80/
 
-    --svr4  [EXPERIMENTAL]
+    --svr4
 
 		  Install SVr4 packages by default.
+
+    --rmlog
+
+                  Automatically remove the log file with each build
 
   Directories and search paths:
 
@@ -2280,6 +2288,7 @@ sub build_spec ($$$) {
     my $prep_only = shift;
     my $spec = $specs_to_build[$spec_id];
 
+    my $rmlog = $defaults->get ('rmlog');
     my $logname = $defaults->get ('logdir') . "/" . get_log_name ($spec_id);
 
     msg_debug (0, "Trying to build $spec");
@@ -2297,6 +2306,10 @@ sub build_spec ($$$) {
 
     my @packages = $spec->get_packages ();
     msg_debug (3, "packages: " . $spec->get_file_name () . " defines: @packages");
+
+    if ($rmlog > 0) {
+        `rm -f $logname`
+    }
 
     my $check_deps = $defaults->get ('deps');
     if (not $build_only) {

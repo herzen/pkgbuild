@@ -1,3 +1,12 @@
+2009-05-11  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: bump version to 1.3.99
+	* NEWS: update
+	* ips_utils.pm: add warning when the current hostname cannot be
+	  resolved
+	* pkgtool.pl: --rmlog option, deletes log instead of appending to it.
+	  Patch from John Fischer.
+
 	======= pkgbuild 1.3.98.4 =======
 
 2009-04-22  Laszlo Peter  <laca@sun.com>
