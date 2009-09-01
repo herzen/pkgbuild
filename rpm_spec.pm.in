@@ -1220,6 +1220,8 @@ sub _process_tag ($$$) {
 		       "sunw_copyright",
 		       "sunw_pkg_allzones", "sunw_pkg_hollow",
 		       "sunw_pkg_thiszone",
+		       "ips_package_name",
+		       "ips_sourcepackage",
 	               "ips_component_version",
 	               "ips_build_version",
 	               "ips_vendor_version");
@@ -2580,6 +2582,33 @@ sub get_base_file_name ($) {
     return $self->{_base_file_name};
 }
 
+sub get_svr4_name ($) {
+    my $self = shift;
+    my $svr4_pkg_name = $self->get_value_of ("sunw_pkg");
+    $svr4_pkg_name = "$self" unless defined($svr4_pkg_name);
+    return $svr4_pkg_name;
+}
+
+sub get_ips_name ($) {
+    my $self = shift;
+    my $ips_pkg_name = $self->get_value_of ("ips_package_name");
+    $ips_pkg_name = "$self" unless defined($ips_pkg_name);
+    return $ips_pkg_name;
+}
+
+sub get_svr4_src_pkg_name ($) {
+    my $self = shift;
+
+    my $svr4_pkg_name = $self->get_value_of ("sunw_pkg");
+    $svr4_pkg_name = $self->get_name () if not defined $svr4_pkg_name;
+    my $svr4_src_pkg_name = $self->get_value_of ("sourcepackage");
+    if (not defined $svr4_src_pkg_name) {
+	$svr4_src_pkg_name = $svr4_pkg_name;
+	$svr4_src_pkg_name .= "-src";
+    }
+    return $svr4_src_pkg_name;
+}
+
 sub get_rpms ($) {
     my $self = shift;
 
@@ -2760,7 +2789,7 @@ sub get_public_sources ($) {
     my @values = ($package_ref->get_array ('source'));
     my $nosrc = $package_ref->get_tag ("nosource");
     if (defined $nosrc) {
-	my @nosrcs = split /[,\s]*/, $nosrc;
+	my @nosrcs = split /[,\s]+/, $nosrc;
 	foreach my $nosrcid (@nosrcs) {
 	    next if not defined $nosrcid;
 	    $values[$nosrcid] = undef;
@@ -2810,7 +2839,7 @@ sub get_public_patches ($) {
     my @values = ($package_ref->get_array ('patch'));
     my $noptch = $package_ref->get_tag ("nopatch");
     if (defined $noptch) {
-	my @noptchs = split /[,\s]*/, $noptch;
+	my @noptchs = split /[,\s]+/, $noptch;
 	foreach my $noptchid (@noptchs) {
 	    next if not defined $noptchid;
 	    $values[$noptchid] = undef;

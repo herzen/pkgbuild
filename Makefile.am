@@ -22,7 +22,8 @@ pkgbuilddir = $(PKGBUILD_LIBDIR)
 pkgbuild_DATA = $(all_modules) \
 	get_rpm_topdir \
 	pkgnames \
-	macros
+	macros \
+	version-file
 pkgbuild_SCRIPTS = \
 	pkgbuild.pl \
 	pkgbuild-postprocess \
@@ -52,4 +53,6 @@ EXTRA_DIST= $(plain_modules) $(gen_module_sources) \
 	pkgtool.pl \
 	pkgbuild-postprocess \
 	pkgnames \
-	macros.in
+	macros.in \
+	version-file.in
+

@@ -6,8 +6,8 @@ Additional stuff needed for full IPS support:
    attributes and tags, e.g.
    %tag (foo) in %files and
    %action(foo=bar), or %actions section akin to %files
-- create source packages, potentially in a different repo, implement
-  automatic rebuilds
+- implement automatic rebuild of IPS source packages
+- phat packages
 
 Some things I'm planning fix/add:
  - %if foo == bar

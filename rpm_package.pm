@@ -144,8 +144,11 @@ sub get_ips_name ($) {
     my $self = shift;
     if ($self->{_is_subpkg}) {
 	my $parent_ref = $self->{_parent_spec_ref};
-	return $$parent_ref->get_name();
+	return $$parent_ref->get_ips_name();
     } else {
+	if (defined $self->{_tags}->{ips_package_name}) {
+	    return $self->{_tags}->{ips_package_name};
+	}
 	return $self->{_tags}->{name};
     }
 }
@@ -202,6 +205,12 @@ sub eval ($$) {
     my $string = shift;
 
     return ${$self->{_parent_spec_ref}}->eval($string);
+}
+
+sub get_svr4_src_pkg_name ($) {
+    my $self = shift;
+
+    return ${$self->{_parent_spec_ref}}->get_svr4_src_pkg_name();
 }
 
 sub _set_error ($$;$) {

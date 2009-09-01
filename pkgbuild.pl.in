@@ -60,6 +60,10 @@ if (not defined($ips_server)) {
 	$ips_server = $ips_utils->get_local_ips_server();
     }
 }
+my $src_ips_server = $ENV{PKGBUILD_SRC_IPS_SERVER};
+if (not defined($src_ips_server)) {
+    $src_ips_server = $ips_server;
+}
 
 my $mydir = `pwd`;
 chomp ($mydir);
@@ -521,10 +525,20 @@ sub check_dep ($$) {
 		}
 	    }
 	} elsif ($os eq "solaris") {
+	    # search for an SVr4 or IPS legacy package
 	    `/usr/bin/pkginfo -q '$pkg.*'`;
-	    if ($? != 0) {
-		return 0;
+	    if ($? == 0) {
+		return 1;
 	    }
+	    # search for an IPS package
+	    if (-x "/usr/bin/pkg") {
+		my $search_out = `pkg info -l '$pkg' 2>&1`;
+		chomp ($search_out);
+		if ($search_out =~ /^\s+Name:\s*${pkg}\s*\n/s) {
+		    return 1;
+		}
+	    }
+	    return 0;
 	} else {
 	    print "WARNING: I don't know how to verify dependency $pkg ".
 		"on this OS.\n";
@@ -670,6 +684,18 @@ sub mkdir_p ($) {
     return 1;
 }
 
+sub url_escape ($) {
+    my $url = shift;
+
+    # FIXME: escape and url and return
+    $url =~ s/@/%40/g;
+    $url =~ s/,/%2C/g;
+    $url =~ s/\//%2F/g;
+    $url =~ s/:/%3A/g;
+   return $url;
+}
+
+
 my $file_id = 0;
 sub open_tempfile ($) {
     my $spec = shift;
@@ -737,7 +763,7 @@ sub make_pkginfo ($$) {
     my $fhandle = "pkginfo" . ++$file_id;
 
     my $pkginfodir = $spec->eval ("%_topdir") . "/PKGMAPS/pkginfo";
-    my $fname = $package . ".pkginfo";
+    my $fname = $package->get_svr4_name() . ".pkginfo";
     open $fhandle, ">$pkginfodir/$fname" or
 	fatal ("failed to create file $pkginfodir/$fname");
 
@@ -897,8 +923,9 @@ sub make_copyright ($$;$) {
     }
 
     my $copyrightdir = $spec->eval ("%_pkgmapdir") . "/copyright";
-    if (defined $package) {
-	$pkgname = "$package";
+    if (defined ($package) and not defined($pkgname)) {
+	$pkgname = $package->get_tag ('SUNW_Pkg');
+	$pkgname = "$package" unless $pkgname;
     }
     eval_file ($spec, "$srcdir/$cr_file", "$copyrightdir/${pkgname}.copyright");
 
@@ -919,7 +946,7 @@ sub make_depend ($$) {
     my $fhandle = "pkginfo" . ++$file_id;
 
     my $pkgdependdir = $spec->eval ("%_pkgmapdir") . "/depend";
-    my $fname = $package . ".depend";
+    my $fname = $package->get_svr4_name() . ".depend";
     my $topdir = $spec->eval ("%_topdir");
     open $fhandle, ">$pkgdependdir/$fname" or
 	fatal ("failed to create file $pkgdependdir/$fname");
@@ -937,94 +964,14 @@ sub make_depend ($$) {
 	    print $fhandle "P $dep " . $subpkg->get_tag ("summary") . "\n";
 	    next;
 	}
-	# look for packages installed on the system
-	my $pkgname = `/usr/bin/pkginfo '$dep.*' 2>/dev/null | head -1`;
-	chomp ($pkgname);
-	if ($pkgname ne '') {
-	    $pkgname =~ s/^\S*\s*$dep\s*(\S.*)$/$1/;
-	    print $fhandle "P $dep $pkgname\n"; 
-	    next;
-	}
-	
-        # If the dep is a file that exists, see if we can work out what
-        # package(s) own it
-        if (-e $dep) {
-            my @pkgs = $pkgdb->file2pkgs($dep);
-            my $pkg;
-            if (@pkgs == 1) { 
-                $pkg = $pkgs[0];
-		if ($pkg =~ /^pkg:\//) {
-		    # we're on an ips-based system, need to translate the
-		    # dependency to a legacy package
-		    $pkg = ips_to_svr4($pkg);
-		}
-            } elsif (@pkgs) {
-                # This /should/ be a directory, rather than a file
-                # (according to contents(4) on solaris-10, only 
-                # directories can be owned by more than one package)
-                # but I bet you can have files owned by more than one.
-                # We'll choose a package and warn.
-                my @favoured_packages = qw(pkg:/SUNWcs 
-                                           SUNWcsr SUNWcsu SUNWcsxu
-                                           SUNWcar SUNWcarx SUNWcsd
-                                           SUNWcsl SUNWcslx);
-                foreach my $p (@favoured_packages) {
-                    # if we depend on a favoured package, depend 
-                    # only on it.
-                    my @ps = grep /^${p}(@.*)?$/, @pkgs;
-		    $pkg = $ps[0];
-		    last if defined ($pkg);
-                }
-                # If we have no better idea, prefer SUNW packages to others
-		if (not defined ($pkg)) {
-		    my @sunpkgs = grep /^SUNW/, @pkgs;
-		    if (@sunpkgs >= 1) { 
-			$pkg = $sunpkgs[0];
-		    }
-		}
-                # Oh, sod it.  Depend on the first one.  We could perhaps
-                # do better.
-                $pkg = $pkgs[0] unless defined $pkg;
-		
-		if ($pkg =~ /^pkg:\//) {
-		    # we're on an ips-based system, need to translate the
-		    # dependency to a legacy package
-		    $pkg = ips_to_svr4($pkg);
-		}
 
-                message("WARNING: $dep could mean a dependency on "
-                        . "many packages.  Choosing $pkg from "
-                        . join(', ', map "'$_'", @pkgs));
-	    }
-	    if ($pkg) {
-		my $pkgname = `/usr/bin/pkginfo '$pkg.*' 2>/dev/null | head -1`;
-		chomp ($pkgname);
-		if ($pkgname ne '') {
-		    $pkgname =~ s/^\S*\s*$pkg\s*(\S.*)$/$1/;
-		    print $fhandle "P $pkg $pkgname\n";
-		    next;
-		}
-	    }
-        } else {
-	    # look in list of packages built by pkgtool on this system
-	    $pkgname = `grep "^${dep}:" "$topdir/.pkgnames" | head -1`;
-	    chomp ($pkgname);
-	    if ($pkgname ne '') {
-		$pkgname =~ s/^${dep}:(.*)/$1/;
-	    } else {
-		# look in a predefined list of package names
-		$pkgname = `grep "^${dep}:" "@PKGBUILD_LIBDIR@/pkgnames" | head -1`;
-		chomp ($pkgname);
-		if ($pkgname ne '') {
-		    $pkgname =~ s/^${dep}:(.*)/$1/;
-		} else {
-		    message ("warning: could not find the description of "
-			     . "package $dep", "omitting from depend file");
-		    next;
-		}
-	    }
+	my $pkg = $pkgdb->get_svr4_pkgname($dep);
+	my $pkgname = $pkgdb->get_description($dep);
+	if (defined ($pkg) and defined($pkgname)) {
+	    print $fhandle "P $pkg $pkgname\n"; 
+	} else {
+	    print "WARNING: omitting $dep from the SVr4 depend file\n";
 	}
-	print $fhandle "P $dep $pkgname\n"; 
     }
 
     close $fhandle;
@@ -1041,7 +988,7 @@ sub make_scripts ($$) {
     my $pre = $package->get_block ("pre");
     if (defined ($pre)) {
 	my $fhandle = "script" . ++$file_id;
-	my $fname = $package . ".preinstall";
+	my $fname = $package->get_svr4_name() . ".preinstall";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
 	print $fhandle "$pre\n";
@@ -1052,7 +999,7 @@ sub make_scripts ($$) {
     my $post = $package->get_block ("post");
     if (defined ($post)) {
 	my $fhandle = "script" . ++$file_id;
-	my $fname = $package . ".postinstall";
+	my $fname = $package->get_svr4_name() . ".postinstall";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
 	print $fhandle "$post\n";
@@ -1063,7 +1010,7 @@ sub make_scripts ($$) {
     my $preun = $package->get_block ("preun");
     if (defined ($preun)) {
 	my $fhandle = "script" . ++$file_id;
-	my $fname = $package . ".preremove";
+	my $fname = $package->get_svr4_name() . ".preremove";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
 	print $fhandle "$preun\n";
@@ -1074,7 +1021,7 @@ sub make_scripts ($$) {
     my $postun = $package->get_block ("postun");
     if (defined ($postun)) {
 	my $fhandle = "script" . ++$file_id;
-	my $fname = $package . ".postremove";
+	my $fname = $package->get_svr4_name() . ".postremove";
 	open $fhandle, ">$scriptdir/$fname" or
 	    fatal ("failed to create file $scriptdir/$fname");
 	print $fhandle "$postun\n";
@@ -1758,7 +1705,7 @@ sub make_solaris_pkg ($$) {
     my $fhandle = "proto" . ++$file_id;
 
     my $protodir = $spec->eval ("%_pkgmapdir") . "/proto";
-    my $fname = $package . ".proto";
+    my $fname = $package->get_svr4_name() . ".proto";
     open $fhandle, ">$protodir/$fname" or
 	fatal ("failed to create file $protodir/$fname");
 
@@ -1840,53 +1787,45 @@ sub make_ips_dependency ($$$) {
 	# FIXME: we're simple chopping off any version comparisons
 	# should really verify them instead
 	$dep =~ s/(\S+).*/$1/;
-	my $ips_dep = svr4_to_ips ($dep);
-	if (not defined ($ips_dep)) {
-	    if (-e $dep) {
-		my @pkgs = $pkgdb->file2pkgs($dep);
-		if (@pkgs == 1) {
-		    if ($pkgs[0] =~ /^pkg:\//) {
-			push @dep_lines, "depend fmri=$pkgs[0] type=require";
-		    }
-		} elsif (@pkgs) {
-		    # multiple packages found
-		    # see, if SUNWcs is one of them
-		    my @cs = grep /^pkg:\/SUNWcs@/, @pkgs;
-		    if (@cs) {
-			message("WARNING: multiple packages match dependency: $dep, choosing pkg:/SUNWcs");
-			push @dep_lines, "depend fmri=$cs[0] type=require";
-		    } else {
-			# SUNWcs not found
-			# use the first package name found
-			message("WARNING: multiple packages match dependency: $dep");
-			push @dep_lines, "depend fmri=$pkgs[0] type=require";
-		    }
-		} else {
-		    message("WARNING: Unknown dependency: $dep");
-		}
-	    }
-	    next;
+
+	my $ips_dep = $pkgdb->get_ips_pkgname ($dep);
+	if (defined ($ips_dep)) {
+	    push @dep_lines, "depend fmri=$ips_dep type=require";
+	} else {
+	    print "WARNING: omitting $dep from the IPS manifest\n";
 	}
-	push @dep_lines, "depend fmri=$ips_dep type=require";
     }
     push @$ref_lines, _uniq (@dep_lines)
 }
 
 # Add open transaction line - with pkgsend command
-sub open_ips_transaction($$) {
+sub open_ips_transaction($$;$) {
     my $ref_lines = shift;
     my $package = shift;
+    my $src = shift;
+
+    my $src_name = "";
+    my $name = $package->get_ips_name();
+    # is it a source package?
+    if (defined ($src)) {
+	$src_name = "_src";
+	$name = $package->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:${name}/src}");
+    }
     
-    my $name = "$package";
     my $ips_vendor_version = $package->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
     my $version = $package->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
 	
-    my $manifest = $package->eval ("%_pkgmapdir") . "/manifests/${package}.manifest";
+    my $manifest = $package->eval ("%_pkgmapdir") . "/manifests/" .
+	$package->get_svr4_name() . "${src_name}.manifest";
 
     if (scalar @lines > 0) {
 	print "Warning: Open transaction isn't first line of pkgsend script!\n";
     }
-    push (@$ref_lines, "export PKG_REPO=\${PKGBUILD_IPS_SERVER:-$ips_server}");
+    if (defined ($src)) {
+	push (@$ref_lines, "export PKG_REPO=\${PKGBUILD_SRC_IPS_SERVER:-\${PKGBUILD_IPS_SERVER:-$ips_server}}");
+    } else {
+	push (@$ref_lines, "export PKG_REPO=\${PKGBUILD_IPS_SERVER:-$ips_server}");
+    }
     push (@$ref_lines, "eval `pkgsend open $name\@$version` || exit 1");
     push (@$ref_lines, "pkgsend include $manifest || exit 2");
 } 
@@ -1911,14 +1850,19 @@ sub add_ips_license($$) {
     push (@$ref_lines, "license $license_file license=\"$license\"");
 }
 
-# Add summary line 
-sub add_ips_summary($$) {
+# Add summary line
+# src_fmri == "-src" means this is the source package
+sub add_ips_summary($$;$) {
     my $ref_lines = shift;
     my $package = shift;
+    my $src_fmri = shift;
 
     my $meta_hash = $package->get_meta_hash();
     if (not defined ($$meta_hash{'pkg.name'})) {
-	my $name = $package->get_tag("name");
+	my $name = $package->get_ips_name();
+	if (defined ($src_fmri) and ($src_fmri eq "-src")) {
+	    $name = $package->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:${name}/src}");
+	}
 	$$meta_hash{'pkg.name'} = $name;
     }
     if (not defined ($$meta_hash{'description'})) {
@@ -1965,6 +1909,28 @@ sub add_ips_summary($$) {
     if (defined ($classification_value)) {
 	push (@$ref_lines, "set name=info.classification $classification_value");
     }
+    if (defined ($src_fmri)) {
+	if ($src_fmri eq "-src") {
+	    # is this the source package?
+	    push (@$ref_lines, "set name=build.tool value=\"pkgbuild\"");
+	    push (@$ref_lines, "set name=net.sourceforge.pkgbuild,version value=\"@PKGBUILD_VERSION@\"");
+	} else {
+	    push (@$ref_lines, "set name=build.tool value=\"pkgbuild\"");
+	    push (@$ref_lines, "set name=net.sourceforge.pkgbuild,version value=\"@PKGBUILD_VERSION@\"");
+	    if (not $src_ips_server =~ /\/$/) {
+		$src_ips_server .= "/";
+	    }
+	    push (@$ref_lines, "set name=build.source_uri value=\"${src_ips_server}p5i/0/" . url_escape ("$src_fmri") . "\"");
+	    # FIXME: build date?  e.g. build.date
+	    if (@predefines) {
+		my $values = "";
+		foreach my $predef (@predefines) {
+		    $values .= " value=\"$predef\"";
+		}
+		push (@$ref_lines, "set name=net.sourceforge.pkgbuild,defines$values");	    
+	    }
+	}
+    }
 
     # add pointers sources specified by URLs and not listed in NoSource
     my @sources = $package->get_spec()->get_public_sources ();
@@ -1978,10 +1944,11 @@ sub add_ips_summary($$) {
     }
 }
 
-sub add_ips_legacy($$$) {
+sub add_ips_legacy($$$;$) {
     my $ref_lines = shift;
     my $spec = shift;
     my $package = shift;
+    my $src = shift;
 
     my @packages = $spec->get_packages ();
     foreach my $pkg (@packages) {
@@ -1995,13 +1962,25 @@ sub add_ips_legacy($$$) {
 	# PKG=$pkgname
 	my $pkgname = $pkg->get_tag ('sunw_pkg');
 	$pkgname = "$pkg" unless $pkgname;
+	if (defined ($src)) {
+	    my $src_pkg_name = $spec->get_value_of ("sourcepackage");
+	    if (defined $src_pkg_name) {
+		$pkgname = $src_pkg_name;
+	    } else {
+		$pkgname .= "-src";
+	    }
+	}
 	my $summary = $pkg->get_tag ('summary');
-	$summary = $pkgname unless defined ($summary);
+	$summary = "$pkg" unless defined ($summary);
 	# NAME=$desc
 	# DESC=$desc
 	my $desc = $pkg->get_tag ('sunw_desc');
 	$desc = $summary unless defined ($desc);
-	$desc = $pkgname unless defined ($desc);
+	$desc = "$pkg" unless defined ($desc);
+	if (defined ($src)) {
+	    $summary = "Source package for $summary";
+	    $desc = "Source package for $summary";
+	}
 	# CATEGORY=$category
 	my $category = $pkg->get_tag ('sunw_category');
 	if (not defined ($category)) {
@@ -2030,7 +2009,12 @@ sub add_ips_legacy($$$) {
 
 	# as seen in Bart's blog:
         # http://blogs.sun.com/barts/?cat=packaging+and+patching&date=20090204
-	push (@$ref_lines, "set name=variant.arch value=$arch");
+	if (defined ($src)) {
+	    push (@$ref_lines, "set name=variant.arch value=$arch");
+	    # only add 1 legacy action in a source package,
+	    # not one for each subpackage.
+	    last;
+	}
     }
 }
 
@@ -2097,19 +2081,21 @@ sub make_ips_files ($$$) {
 }
 
 # Create infrastructure for IPS packages
-sub create_ips_packages ($) {
+sub create_ips_packages ($$) {
     my $spec = shift;
+    my $src_fmri = shift;
 
     my @packages = $spec->get_packages ();
     foreach $package (@packages) {
-	create_ips_package ($spec, $package) 
+	create_ips_package ($spec, $package, $src_fmri) 
 	    unless $package->is_subpkg ();
     }
 }
 
-sub create_ips_package ($$) {
+sub create_ips_package ($$$) {
     my $spec = shift;
     my $package = shift;
+    my $src_fmri = shift;
 
     debug_print "Publishing ips package";
 
@@ -2122,20 +2108,78 @@ sub create_ips_package ($$) {
     debug_print "Calling make_ips_files";
     make_ips_files(\@manifest_lines, $spec, $package);
     debug_print "Calling add_ips_summary";
-    add_ips_summary(\@manifest_lines, $package);
+    add_ips_summary(\@manifest_lines, $package, $src_fmri);
     debug_print "Calling add_ips_license";
     add_ips_legacy(\@manifest_lines, $spec, $package);
     add_ips_license(\@manifest_lines, $package); 
     debug_print "Calling close_ips_transaction";
     close_ips_transaction(\@pkg_lines);
     
-    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/${package}_ips.sh";
-    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/${package}.manifest";
+    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
+	$package->get_svr4_name() . "_ips.sh";
+    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" .
+	$package->get_svr4_name() . ".manifest";
 
     debug_print "Prepare script - $script";
     prepare_ips_script($spec, $script, \@pkg_lines);
     debug_print "Prepare manifest - $manifest";
     prepare_ips_manifest($spec, $manifest, \@manifest_lines);
+}
+
+sub create_ips_src_package ($) {
+    my $spec = shift;
+
+    my @packages = $spec->get_packages ();
+    return if not defined $packages[0];
+    my $package = $packages[0];
+
+    debug_print "Publishing ips source package";
+
+    my @pkg_lines;
+    my @manifest_lines;
+    debug_print "Calling ips_transaction";
+    open_ips_transaction(\@pkg_lines, $package, 1);
+    debug_print "Calling make_ips_files";
+    make_ips_src_files(\@manifest_lines, $spec);
+    debug_print "Calling add_ips_summary";
+    add_ips_summary(\@manifest_lines, $package, "-src");
+    debug_print "Calling add_ips_license";
+    add_ips_legacy(\@manifest_lines, $spec, $package, 1);
+    add_ips_license(\@manifest_lines, $package); 
+    debug_print "Calling close_ips_transaction";
+    close_ips_transaction(\@pkg_lines);
+    
+    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
+	$package->get_svr4_name() . "_src_ips.sh";
+    my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" .
+	$package->get_svr4_name() . "_src.manifest";
+
+    debug_print "Prepare script - $script";
+    prepare_ips_script($spec, $script, \@pkg_lines);
+    debug_print "Prepare manifest - $manifest";
+    prepare_ips_manifest($spec, $manifest, \@manifest_lines);
+}
+
+# publish the source package, return the fmri so it can be included
+# in the metainfo of the binary package
+sub publish_src_ips_package ($) {
+    my $spec = shift;
+
+    my $retval;
+    my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
+	$spec->get_svr4_name() . "_src_ips.sh";
+    print "Calling script $script\n";
+    `chmod +x $script`;
+    my $msg = `$script`;
+    $retval = (! $?);
+    print $msg;
+
+    my $src_pkgname = $spec->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:%name/src}");
+    if (defined ($msg) and $msg =~ /^PUBLISHED\npkg:\/([^@]+@[^\n]+)/s) {
+	return $1;
+    } else {
+	return undef;
+    }
 }
 
 # publish an IPS package
@@ -2146,7 +2190,8 @@ sub publish_ips_packages ($) {
     my @pkgs = $spec->get_packages ();
     foreach my $pkg (@pkgs) {
 	next if $pkg->is_subpkg ();
-	my $script = $spec->eval ("%_pkgmapdir") . "/scripts/${pkg}_ips.sh";
+	my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
+	    ${pkg}->get_svr4_name() . "_ips.sh";
 	print "Calling script $script\n";
 	`chmod +x $script`;
 	my $msg = `$script`;
@@ -2156,34 +2201,7 @@ sub publish_ips_packages ($) {
     return $retval;
 }
 
-# translate an svr4 package name to an IPS package name (and version)
-# for use in IPS dependencies
-sub svr4_to_ips($) {
-    my $pkgname = shift;
-
-    my $search_out = `pkg search -l $pkgname 2>&1 | grep '^legacy_pkg'`;
-    chomp ($search_out);
-    if ($search_out =~ /^legacy_pkg\s*legacy\s*${pkgname}\s*pkg:\/(\S+)\s*$/) {
-	return $1;
-    }
-    return undef;
-}
-
-# translate an ips package name and version to an svr4 package name
-# for use in svr4 dependencies
-sub ips_to_svr4($) {
-    my $pkgname = shift;
-
-    return undef if not defined ($pkgname);
-    my $search_out = `pkg contents -Ho action.raw -t legacy $pkgname 2>&1`;
-    chomp ($search_out);
-    if ($search_out =~ /^legacy.*\s+pkg="*(\S+)"*/) {
-	return $1;
-    }
-    return undef;
-}
-
-# Save pkg lines array to script, which publish all info to ips repository
+# Save pkg lines array to a script that publishes all info to the ips repository
 sub prepare_ips_script($$$) {
     my $spec = shift;
     my $file = shift;
@@ -2201,8 +2219,8 @@ sub prepare_ips_script($$$) {
     close FW; 
 }
 
-# Save manifest lines array to file, which gets included when the package is sent
-# to the IPS repository
+# Save manifest lines array to a file that gets included when the package
+# is sent to the IPS repository
 
 sub prepare_ips_manifest($$$) {
     my $spec = shift;
@@ -2345,6 +2363,86 @@ sub make_src_pkginfo ($$) {
 #    $self->{file_name}
 #    %use'd spec files (recursively)
 #    %include'd files (recursively)
+sub make_ips_src_files ($$$) {
+    my $ref_lines = shift;
+    my $spec = shift;
+
+    if ($os ne 'solaris') {
+#	return 1;
+    }
+
+    my $svr4_pkg_name = $spec->get_value_of ("sunw_pkg");
+    $svr4_pkg_name = $spec->get_name () if not defined $svr4_pkg_name;
+    my $base_pkg_version = $spec->eval ("%version");
+    my $svr4_src_pkg_name = $spec->get_svr4_src_pkg_name ();
+
+    my @sources = $spec->get_public_sources ();
+
+    my @patches = $spec->get_public_patches ();
+
+    my $copyright = $spec->get_value_of ("sunw_copyright");
+
+    my @script_files = $spec->get_class_script_names ();
+
+    my @includes = $spec->get_included_files ();
+
+    my $this_spec_file = $spec->get_file_name ();
+    if (not $this_spec_file =~ /^\//) {
+	$this_spec_file = "$mydir/$this_spec_file";
+    }
+
+    my @used_spec_files = $spec->get_used_spec_files ();
+
+    my $relocdir = $spec->eval ("%_srcpkgdir") . "/" . $svr4_src_pkg_name . "/reloc/share/src/" . $svr4_pkg_name . "-" . $base_pkg_version;
+    my $dirname = "$spec";
+    while ($dirname =~ /\//) {
+	# the package name is "foo/bar/blah" style
+	# so create directory entries for "foo" and "foo/bar"
+	$dirname = dirname ($dirname);
+	push (@$ref_lines, "dir mode=0555 owner=root group=bin path=\"share/src/$dirname\"");
+    }
+    my $srcdir = "share/src/${spec}-${base_pkg_version}/SOURCES";
+    my $specdir = "share/src/${spec}-${base_pkg_version}/SPECS";
+
+    push(@$ref_lines, "dir mode=0555 owner=root group=bin path=\"share/src/${spec}-${base_pkg_version}\"");
+     push(@$ref_lines, "dir mode=0555 owner=root group=bin path=\"$srcdir\"");
+    push(@$ref_lines, "dir mode=0555 owner=root group=bin path=\"$specdir\"");
+    
+    my $topdir = $spec->eval ("%_topdir");
+    foreach my $fname (@sources, @patches, $copyright, @script_files) {
+	next if not $fname;
+	$fname =~ s/^.*\/([^\/]+)/$1/;
+	push(@$ref_lines, "file $relocdir/SOURCES/$fname mode=0444 owner=root group=bin path=\"usr/$srcdir/$fname\"");
+    }
+
+    foreach my $fname (@includes, @used_spec_files) {
+	next if not $fname;
+	if (not $fname =~ /\//) {
+	    push(@$ref_lines, "file $relocdir/SPECS/$fname mode=0444 owner=root group=bin path=\"usr/$specdir/$fname\"");
+        } else {
+            my $basefname = $fname;
+            $basefname =~ s/^.*\/([^\/]+)/$1/;
+	    push(@$ref_lines, "file $relocdir/SPECS/$basefname mode=0444 owner=root group=bin path=\"usr/$specdir/$basefname\"");
+        }
+    }
+    my $base_spec_name = $this_spec_file;
+    $base_spec_name =~ s/^.*\/([^\/]*)$/$1/;
+    push(@$ref_lines, "file $relocdir/SPECS/$base_spec_name mode=0444 owner=root group=bin path=\"usr/$specdir/$base_spec_name\"");
+    push(@$ref_lines, "link path=\"usr/$specdir/..main.spec\" target=\"$base_spec_name\"");
+    push(@$ref_lines, "file @PKGBUILD_LIBDIR@/version-file mode=0444 owner=root group=bin path=\"usr/$srcdir/..pkgbuild\"");
+}
+
+
+# source package contents:
+# SOURCES/
+#    Source<1..n>
+#    Patch<1..m>
+#    SUNW_CopyRight
+#    Class action script files
+# SPECS/
+#    $self->{file_name}
+#    %use'd spec files (recursively)
+#    %include'd files (recursively)
 sub make_src_package ($) {
     my $spec = shift;
 
@@ -2422,13 +2520,7 @@ sub make_src_package ($) {
     $base_spec_name =~ s/^.*\/([^\/]*)$/$1/;
     print $fhandle "f none $specdir/$base_spec_name=$this_spec_file 644 root other\n";
     print $fhandle "s none $specdir/..main.spec=$base_spec_name\n";
-    my $sourcedir = $spec->eval ("%_sourcedir");
-    open VERSIONFILE, ">$sourcedir/..pkgbuild" or
-	fatal ("failed to create file $sourcedir/..pkgbuild");
-    print VERSIONFILE "pkgbuild_version=$myversion\n";
-    close VERSIONFILE;
-
-    print $fhandle "f none $specdir/..pkgbuild=$sourcedir/..pkgbuild 444 root other\n";
+    print $fhandle "f none $specdir/..pkgbuild=@PKGBUILD_LIBDIR@/version-file 444 root other\n";
 
     close ($fhandle);
 
@@ -2453,11 +2545,13 @@ sub make_src_package ($) {
 
 sub main () {
     process_options ();
+
     if ($pkgformat eq 'ips') {
 	$pkgdb = new pkgdb(1);
     } else {
 	$pkgdb = new pkgdb;
     }
+
     init ();
 
     if (not @spec_names) {
@@ -2477,6 +2571,10 @@ sub main () {
 	    fatal ("File is not a regular file: $spec_name");
 	}
 	my $name = $spec->get_value_of ("name");
+
+	my $topdir = $spec->eval ("%_topdir");
+	$pkgdb -> set_topdir ($topdir);
+
 	if (defined ($spec->{error})) {
 	    fatal ($spec->{error});
 	}
@@ -2500,6 +2598,27 @@ sub main () {
 	    do_block ($spec, 'install') or exit (1);
 	    do_block ($spec, 'check') or exit (1);
 	}
+
+	if ($build_command =~ /[bas]/) {
+	    $pkgdir = $spec->eval ("%_pkgmapdir");
+	    foreach my $subdir ("copyright", "depend", "pkginfo", "proto", "manifests", "scripts") {
+		mkdir_p ("$pkgdir/$subdir")
+		    or fatal ("Failed to create directory $pkgdir/$subdir");
+	    }
+	}
+
+	my $src_fmri;
+	if ($build_command =~ /[as]/) {
+	    $pkgdir = $spec->eval ("%_srcpkgdir");
+	    mkdir_p ($pkgdir) or fatal ("Failed to create directory $pkgdir");
+	    make_src_package ($spec) or
+		fatal ($spec->get_error ());
+	    if ($pkgformat eq "ips") {
+		# Create IPS source package
+		create_ips_src_package ($spec);
+		$src_fmri = publish_src_ips_package ($spec);
+	    }
+	} 
 	if ($build_command =~ /[ba]/) {
 	    print "Creating packages...\n";
 	    my $pkgdir = $spec->eval ("%_pkgdir");
@@ -2508,7 +2627,7 @@ sub main () {
 	    $pkgdir = $spec->eval ("%_pkgmapdir");
 	    foreach my $subdir ("copyright", "depend", "pkginfo", "proto", "manifests", "scripts") {
 		mkdir_p ("$pkgdir/$subdir")
-		    or fatal ("Failed to create directory $pkgdir/subdir");
+		    or fatal ("Failed to create directory $pkgdir/$subdir");
 	    }
 	    
 	    # Create an SVr4 package
@@ -2517,7 +2636,7 @@ sub main () {
 	    
 	    if ($pkgformat eq "ips") {
 		# Create IPS package(s)
-		create_ips_packages ($spec);
+		create_ips_packages ($spec, $src_fmri);
 		# Call the script to publish it
 		if (not publish_ips_packages ($spec)) {
 		    print "ERROR: failed to publish package to $ips_server\n";
@@ -2525,12 +2644,6 @@ sub main () {
 		}
 	    }
 	}
-	if ($build_command =~ /[as]/) {
-	    $pkgdir = $spec->eval ("%_srcpkgdir");
-	    mkdir_p ($pkgdir) or fatal ("Failed to create directory $pkgdir");
-	    make_src_package ($spec) or
-		fatal ($spec->get_error ());
-	} 
 	if ($build_command =~ /[ba]/) {
 		do_block ($spec, 'clean') or exit (1);
 	}

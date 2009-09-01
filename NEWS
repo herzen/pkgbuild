@@ -1,11 +1,27 @@
-Version 1.3.99:
+Version 1.3.101:
+
+	Bugs fixed:
+
+	- fix NoSource and NoPatch to work for patch and source numbers >9
+
+	- do not attempt to rewrite SOURCES/..pkgbuild for each package
 
 	New Features:
 
-	- pkgtool's --rmlog option, removed the existing log file when
+	- IPS source packages are created on $PKGBUILD_SRC_IPS_SERVER (if
+          defined) or $PKGBUILD_IPS_SERVER or on the local IPS server.
+	  Use the IPS_sourcepackage tag to define the IPS source package
+          name.  The default is <IPS package name>/src.
+
+	- Use the IPS_package_name tag to set the IPS package name
+	  (defaults to %{name}).  Allows long package names.
+
+	- Requires/BuildRequires now supports IPS package names.
+
+	- pkgtool's --rmlog option, removes the existing log file when
           a new build starts instead of appending to it
 	  Patch from John Fischer.
-	
+
 Version 1.3.98.4:
 
 	Bug fixed:

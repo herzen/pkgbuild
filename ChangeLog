@@ -1,3 +1,23 @@
+	======= pkgbuild 1.3.101 =======
+
+2009-09-01  Laszlo Peter  <laca@sun.com>
+
+	* Makefile.am: add version-file
+	* NEWS: update for version 1.3.101
+	* TODO: update
+	* configure.in: update version, add version-file to AC_OUTPUT
+	* pkgbuild.pl.in: implement source IPS packages; move dependency
+	  checking code to pkgdb.pm
+	* pkgdb.pm.in: add lots of dependency checking code that supports
+	  both SVr4 and IPS package dependencies
+	* pkgtool.pl: look for either an IPS or and SVr4 package
+	* rpm_package.pm: add function that returns the SVr4 source package
+	  name (get_svr4_src_pkg_name)
+	* rpm_spec.pm.in: define IPS_package_name and IPS_component_version;
+	  fix nosource and nopatch split regexps
+	* version-file.in: (new) file with the pkgbuild version in it, to be
+	  included in SVr4 source packages.
+
 2009-05-11  Laszlo Peter  <laca@sun.com>
 
 	* configure.in: bump version to 1.3.99

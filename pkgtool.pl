@@ -1255,31 +1255,31 @@ sub is_provided ($) {
 	if (defined $pkginfo{$capability}) {
 	    return $pkginfo{$capability};
 	}
-	`pkginfo -q $capability'.*'`;
-	my $result = (! $?);
+	my $pkg_instance = `pkginfo $capability'.*' 2>/dev/null | awk '{print \$2;}'`;
+	chomp ($pkg_instance);
+	my $result = ($pkg_instance ne "");
 	$pkginfo{$capability} = $result;
 	if ($result) {
-	    # FIXME: should work if only SUNWfoo.2 is installed
-	    my $version = `pkgparam $capability VERSION`;
+	    my $version = `pkgparam $pkg_instance VERSION`;
 	    chomp $version;
 	    $version =~ s/([^,]+)(,|$).*/$1/;
             $pkginfo_version{$capability} = $version;
 	}
-	if (defined ($ips)) {
-	    if (not $result) {
-		# no svr4 package (or IPS package with a legacy action) found
-		# let's look for an IPS package
-		my $pkg_out = `pkg info -l $capability 2>&1`;
-		$result = (! $?);
-		my $version = $pkg_out;
-		$version =~ s/^.*\n\s*Branch:\s([0-9.]+|None)\s*\n.*$/$1/s;
-		if ($version eq "None") {
-		    # Branch is None, look for Version instead
-		    $version = $pkg_out;
-		    $version =~ s/^.*\n\s*Version:\s([0-9.]+)\s*\n.*$/$1/s;
-		}
-		$pkginfo_version{$capability} = $version;
+	# if no svr4 package was found, look for an IPS package
+	if (not $result) {
+	    # no svr4 package (or IPS package with a legacy action) found
+	    # let's look for an IPS package
+	    my $pkg_out = `pkg info -l $capability 2>&1`;
+	    $result = (! $?);
+	    $pkginfo{$capability} = $result;
+	    my $version = $pkg_out;
+	    $version =~ s/^.*\n\s*Branch:\s([0-9.]+|None)\s*\n.*$/$1/s;
+	    if ($version eq "None") {
+		# Branch is None, look for Version instead
+		$version = $pkg_out;
+		$version =~ s/^.*\n\s*Version:\s([0-9.]+)\s*\n.*$/$1/s;
 	    }
+	    $pkginfo_version{$capability} = $version;
 	}
 	return $result;
     } else {
@@ -1299,12 +1299,12 @@ sub is_installed ($) {
 	if (defined $pkginfo{$pkg}) {
 	    return $pkginfo{$pkg};
 	}
-	`pkginfo -q $pkg'.*'`;
-	my $result = (! $?);
+	my $pkg_instance = `pkginfo $pkg'.*' 2>/dev/null | awk '{print \$2;}'`;
+	chomp ($pkg_instance);
+	my $result = ($pkg_instance ne "");
 	$pkginfo{$pkg} = $result;
 	if ($result) {	
-	    # FIXME: should work if only SUNWfoo.2 is installed
-	    my $version = `pkgparam $pkg VERSION`;
+	    my $version = `pkgparam $pkg_instance VERSION`;
 	    chomp $version;
 	    $version =~ s/([^,]+)(,|$).*/$1/;
             $pkginfo_version{$pkg} = $version;
