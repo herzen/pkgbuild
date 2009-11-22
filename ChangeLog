@@ -1,5 +1,9 @@
 2009-11-23  Laszlo Peter  <laca@sun.com>
 
+	* configure.in: post-release version bump
+
+2009-11-23  Laszlo Peter  <laca@sun.com>
+
 	* NEWS: update
 	* macros.in: add _use_ips_autotag default definition
 	* pkgbuild.pl.in: implement autotag; add actions from the
