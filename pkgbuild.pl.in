@@ -464,7 +464,7 @@ sub check_dep ($$) {
     my $pkg = $dep;
     # FIXME: we're simple chopping off any version comparisons
     # should really verify them instead
-    $dep =~ s/(\S+).*/$1/;
+    $dep =~ s/([^\s><=]+).*/$1/;
     if (not defined ($pkg)) {
 	print "empty dependency: $dep\n";
 	return 0;
@@ -514,7 +514,7 @@ sub check_dep ($$) {
 	return 0;
     }
 
-    my $subpkg = $spec->find_package_by_name ($pkg);
+    my $subpkg = $spec->find_package_by_pkg_name ($pkg);
     if (not defined $subpkg) {
 	if ($os eq "linux") {
 	    `rpm -q $pkg`;
@@ -957,9 +957,9 @@ sub make_depend ($$) {
 	}
 	# FIXME: we're simple chopping off any version comparisons
 	# should really verify them instead
-	$dep =~ s/(\S+).*/$1/;
+	$dep =~ s/([^\s><=]+).*/$1/;
 	# look for a package defined in this spec file first
-	my $subpkg = $spec->find_package_by_name ($dep);
+	my $subpkg = $spec->find_package_by_pkg_name ($dep);
 	if (defined ($subpkg)) {
 	    print $fhandle "P $dep " . $subpkg->get_tag ("summary") . "\n";
 	    next;
@@ -1381,9 +1381,18 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
 
     if ( $type eq 'f' and defined $file) {
 	$line = "file $svrfname mode=$mode owner=$user group=$group path=\"$fname\"";
+	# set preserve tag on config files
 	if ($file->is_config()) {
 	    $line .= " preserve=\"renamenew\"";
-	}    
+	}
+	# add additional tags specified with %ips_tag(foo)
+	my $ref_tags = $file->ips_tags();
+	foreach my $tag (@$ref_tags) {
+	    # filter out duplicate tags
+	    if (not $line =~ / $tag( |$)/) {
+		$line .= " $tag"
+	    }
+	}
     } elsif ( $type eq 'd' ) {
 	my $file1 = $fname;
 	if ( not defined $file ) {
@@ -1564,10 +1573,6 @@ sub get_proto_hash ($$$) {
 			    $has_errors = 1;
 			}
 			$file_info{$fname} = $pline;
-			if (defined ($all_files{$fname}) and substr ($pline, 0, 1) ne "d") {
-			    # FIXME: Is this a warning I should care about?
-			    #print "WARNING IPS: $fname is included in both $package and $all_files{$fname}\n";
-			}
 		    }
 		} else {
 		    # Now collect for SVr4 packages
@@ -1786,8 +1791,14 @@ sub make_ips_dependency ($$$) {
     foreach my $dep (@deps) {
 	# FIXME: we're simple chopping off any version comparisons
 	# should really verify them instead
-	$dep =~ s/(\S+).*/$1/;
+	$dep =~ s/([^\s><=]+).*/$1/;
 
+	my $pkg = $spec->find_package_by_pkg_name ($dep);
+	if (defined ($pkg)) {
+	    my $ips_dep = $pkg->get_ips_name();
+	    push @dep_lines, "depend fmri=$ips_dep type=require";
+	    next;
+	}
 	my $ips_dep = $pkgdb->get_ips_pkgname ($dep);
 	if (defined ($ips_dep)) {
 	    push @dep_lines, "depend fmri=$ips_dep type=require";
@@ -2026,6 +2037,59 @@ sub close_ips_transaction($) {
     push (@$ref_lines , "pkgsend close || exit 3");
 }
 
+my @autotag_data = (["/etc/gconf/schemas/.*\.(schemas|entries)$/",
+		     "svc:/applications/desktop-cache/gconf-cache:default",
+		     "SUNWdesktop-cache"],
+		    ["usr/share/icons/.*",
+		     "svc:/applications/desktop-cache/icon-cache:default",
+		     "SUNWdesktop-cache"],
+		    ["usr/lib/.*gtk-2.0/.*/immodule/.*\.so",
+		     "svc:/application/desktop-cache/input-method-cache:default",
+		     "SUNWdesktop-cache"],
+		    ["usr/share/mime/packages/.*",
+		     "svc:/application/desktop-cache/mime-types-cache:default",
+		     "SUNWdesktop-cache"],
+		    ["usr/lib/.*gtk-2.0/.*loaders/.*\.so",
+		     "svc:/application/desktop-cache/pixbuf-loaders-installer:default",
+		     "SUNWdesktop-cache"],
+		    ["usr/share/applications/.*",
+		     "svc:/application/desktop-cache/desktop-mime-cache:default",
+		     "SUNWdesktop-cache"],
+		    ["usr/X11/lib/X11/fonts/.*\.(ttf|pcf|pcf\.gz)",
+		     "svc:/application/font/fc-cache:default",
+		     "SUNWfontconfig"],
+		    ["var/svc/manifest/.*\.xml",
+		     "svc:/system/manifest-import:default"]
+    );
+
+# add automatic tags for files at known locations, e.g. .desktop files,
+# smf manifests, gconf schemas, etc.
+sub autotag ($$$) {
+    my $ref_lines = shift;
+    my $fname = shift;
+    my $pline = shift;
+
+    print "DEBUG: autotag $fname\n";
+    foreach my $aref (@autotag_data) {
+	my ($path, $fmri, $dep) = @$aref;
+	if ($fname =~ /^${path}$/) {
+	    print "DEBUG: --> $fmri matches\n";
+	    if (not $pline =~ /restart_fmri="*${fmri}"*/) {
+		$pline .= " restart_fmri=$fmri";
+	    }
+	    next if not defined ($dep);
+	    my $ips_dep = $pkgdb->get_ips_pkgname ($dep);
+	    if (defined ($ips_dep)) {
+		if(not grep { "$_" eq "depend fmri=$ips_dep type=require" } @$ref_lines) {	
+		    # add dependency if it's not already there
+		    push(@$ref_lines, "depend fmri=$ips_dep type=require");
+		}
+	    }
+	}
+    }
+    return $pline;
+}
+
 # Create file list from package with tag for subpackages for pkgsend command
 sub make_ips_package ($$$$$) {
     my $spec = shift;
@@ -2045,15 +2109,21 @@ sub make_ips_package ($$$$$) {
 	exit (1);
     }
     my %files = %$files_ref;
+    my $pline;
+    my $do_autotag = $spec->eval('%{?_use_ips_autotag}%{!?_use_ips_autotag:0}');
     foreach my $file (keys %files) {
-	push(@$ref_lines, $files{$file} . $tag) 
+	$pline = $files{$file};
+	if ($do_autotag) {
+	    $pline = autotag($ref_lines, $file, $pline);
+	}
+	push(@$ref_lines, $pline . $tag) 
 	    unless defined $$all_files_ref{$file};
 	# only include each file in the manifest once otherwise
 	# we get an error during installation
 	$$all_files_ref{$file} = 1;
     }
     if (not %files) {
-	print "WARNING: empty package: $package\n";
+	print "WARNING: no files in package: $package\n";
     }
 }
 
@@ -2077,6 +2147,18 @@ sub make_ips_files ($$$) {
 	}
 	debug_print "making package $pkg";
 	make_ips_package($spec, $pkg, $ref_lines, \%all_files_in_manifest, $tag);
+    }
+}
+
+# add actions listed in the %actions section, if defined
+sub make_ips_actions($$) {
+    my $ref_lines = shift;
+    my $package = shift;
+    
+    my $actions = $package->{_actions};
+    
+    foreach $action_string (@$actions) {
+        push(@$ref_lines, $action_string);
     }
 }
 
@@ -2107,6 +2189,8 @@ sub create_ips_package ($$$) {
     make_ips_dependency(\@manifest_lines, $spec, $package);
     debug_print "Calling make_ips_files";
     make_ips_files(\@manifest_lines, $spec, $package);
+    debug_print "Calling make_ips_actions";
+    make_ips_actions(\@manifest_lines, $package);
     debug_print "Calling add_ips_summary";
     add_ips_summary(\@manifest_lines, $package, $src_fmri);
     debug_print "Calling add_ips_license";

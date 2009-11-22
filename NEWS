@@ -1,3 +1,55 @@
+Version 1.3.102:
+
+	Bugs fixed:
+
+	- don't require whitespaces around version specifications in
+          Requires/BuildRequires tags
+	- %packages that define IPS_package_name should be separate
+	  packages, not merged in the main package and tagged
+
+	New features:
+
+	- %actions section for adding arbitrary IPS actions to packages.
+	  Examples:
+
+		%actions
+		group groupname="testpkg"
+		user username="testuser" group="testpkg"
+
+		%actions -n foo-driver
+		driver name=foo perms="dump 0660 root sys"
+
+	  Based on patches by Emanuele Pucciarelli and Andras Barna
+
+	- %ips_tag(tag) modifier for elements of the %files lists:
+
+	        %files
+		%ips_tag(restart_fmri=svc:/some/svc:default) %{_datadir}/foo/bar
+
+        - "autotag" adds tags and package dependencies for well known
+	  file locations.  For example, /usr/share/applications/*.desktop
+	  files are automatically tagged with
+	  restart_fmri=svc:/application/desktop-cache/desktop-mime-cache:default
+	  and a dependency on SUNWdesktop-cache is added, if it's not
+	  already there.  Other autotagged file types:
+
+	    - GConf schemas and entries
+	    - desktop icons (/usr/share/icons/*)
+	    - gtk input method modules
+	    - gtk pixbuf loader modules
+	    - mime types definitions (/usr/share/mime/packages/*)
+	    - X11 fonts
+	    - SMF service manifests
+
+	  To disable autotag, redefine the _use_ips_autotag macro to 0:
+
+	    %define _use_ips_autotag 0
+
+	  or on the command line:
+
+	    pkgbuild --define '_use_ips_autotag 0' ...
+	    pkgtool --define '_use_ips_autotag 0' ...
+
 Version 1.3.101:
 
 	Bugs fixed:
@@ -6,7 +58,7 @@ Version 1.3.101:
 
 	- do not attempt to rewrite SOURCES/..pkgbuild for each package
 
-	New Features:
+	New features:
 
 	- IPS source packages are created on $PKGBUILD_SRC_IPS_SERVER (if
           defined) or $PKGBUILD_IPS_SERVER or on the local IPS server.

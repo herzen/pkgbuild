@@ -96,6 +96,7 @@
 %_unpackaged_files_terminate_build      1
 %_missing_doc_files_terminate_build     1
 %_use_internal_dependency_generator     1
+%_use_ips_autotag                       1
 %__find_provides        /bin/true
 %__find_requires        /bin/true
 

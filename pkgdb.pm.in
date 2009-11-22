@@ -266,8 +266,8 @@ sub get_ips_pkgname($$) {
     if ($search_out =~ /^legacy_pkg\s*legacy\s*${pkg}\s*pkg:\/(\S+)\s*$/) {
 	$self->{ips_pkgname_cache}->{$pkg} = $1;
 	return $1;
-    } elsif ($search_out =~ /^fmri\s*set\s*${pkg}\s*pkg:\/(\S+)\s*$/) {
-	$self->{ips_pkgname_cache}->{$pkg} = $1;
+    } elsif ($search_out =~ /^fmri\s*set(\s+|\s+[^\/]*\/)${pkg}\s*pkg:\/(\S+)\s*$/) {
+	$self->{ips_pkgname_cache}->{$pkg} = $2;
         return $1;
     }
     if ($search_out eq "") {

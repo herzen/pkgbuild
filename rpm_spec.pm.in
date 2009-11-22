@@ -62,7 +62,7 @@ my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 # i.e. pre|preun wrong,  preun|pre good.
 my $all_script_names = "preun|postun|pre|post|verifyscript|triggerin|triggerun|triggerpostun|check";
 my $all_block_names = "prep|build|install|clean|check|changelog|$all_script_names";
-my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use";
+my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use|actions";
 
 sub get_version () {
     my $version = "@PKGBUILD_VERSION@";
@@ -1252,6 +1252,11 @@ sub _process_tag ($$$) {
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
 	    $package_ref->set_tag ($tagname, $value);
+	    if ($tagname eq "ips_package_name") {
+		# if there is an IPS_package_name defined for this %package
+		# then it's not a subpkg
+		$package_ref->set_subpkg(0);
+	    }
 	    return 1;
 	}
     }
@@ -1455,6 +1460,57 @@ sub find_package_by_name ($) {
     my $pkgname;
     foreach my $package (@$ref) {
 	if ($package->get_name () eq $name) {
+	    return $package;
+	}
+    }
+    return undef;
+}
+
+sub find_package_by_svr4_name ($) {
+    my $self = shift;
+    my $name = shift;
+
+    return if not defined ($name);
+
+    my $ref = $self->{_packages};
+    my $pkgname;
+    foreach my $package (@$ref) {
+	if ($package->get_svr4_name () eq $name) {
+	    return $package;
+	}
+    }
+    return undef;
+}
+
+sub find_package_by_ips_name ($) {
+    my $self = shift;
+    my $name = shift;
+
+    return if not defined ($name);
+
+    my $ref = $self->{_packages};
+    my $pkgname;
+    foreach my $package (@$ref) {
+	if ($package->get_ips_name () eq $name) {
+	    return $package;
+	}
+    }
+    return undef;
+}
+
+sub find_package_by_pkg_name ($) {
+    my $self = shift;
+    my $name = shift;
+
+    return if not defined ($name);
+
+    my $ref = $self->{_packages};
+    my $pkgname;
+    foreach my $package (@$ref) {
+	if ($package->get_svr4_name () eq $name) {
+	    return $package;
+	}
+	if ($package->get_ips_name () eq $name) {
 	    return $package;
 	}
     }
@@ -2188,6 +2244,7 @@ sub _process_files ($$$;$) {
     my @this_attr = ();
     my $is_doc = 0;
     my $is_config = 0;
+    my @ips_tags = ();
     my $is_ghost = 0;
     my $is_hardlink = 0;
     my @this_verify = (@all_verify);
@@ -2267,8 +2324,8 @@ sub _process_files ($$$;$) {
 		my $file = rpm_file->new ($package_ref, $doc_name,
 					  \@this_attr, \@defattr, \@this_verify,
 					  not ($is_dir), $is_doc,
-					  $is_config, $class_name, $is_ghost,
-					  $is_hardlink);
+					  $is_config, \@ips_tags, $class_name,
+					  $is_ghost, $is_hardlink);
 		$package_ref->add_file ($file);
 		if (defined ($compression)) {
 		    $file->set_compression ($compression);
@@ -2282,6 +2339,10 @@ sub _process_files ($$$;$) {
 	    $eline =~ s/^\s*%config\s*\([^)]*\)\s*// or
 		$eline =~ s/^\s*%config\s*//;
 	    next;	    
+	} elsif ($eline =~ s/^\s*%ips_tag\s*\(([^)]*)\)\s*//) {
+	    push(@ips_tags, $1);
+	    $eline =~ s/^\s*%ips_tag\s*\([^)]*\)\s*//;
+	    next;
 	} elsif ($eline =~ /^\s*%ghost/) {
 	    $is_ghost = 1;
 	    $eline =~ s/^\s*%ghost\s*\([^)]*\)\s*// or
@@ -2321,8 +2382,8 @@ sub _process_files ($$$;$) {
 	    my $file = rpm_file->new ($package_ref, $1,
 				      \@this_attr, \@defattr, \@this_verify,
 				      not ($is_dir), $is_doc,
-				      $is_config, $class_name, $is_ghost,
-				      $is_hardlink);
+				      $is_config, \@ips_tags, $class_name,
+				      $is_ghost, $is_hardlink);
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
 	    $self->_set_error ("File must begin with \"/\": $1", $fhandle);
@@ -2334,6 +2395,7 @@ sub _process_files ($$$;$) {
 	@this_attr = ();
 	$is_doc = 0;
 	$is_config = 0;
+	@ips_tags = ();
         $is_ghost = 0;
         $is_hardlink = 0;
 	@this_verify = (@all_verify);
@@ -2349,6 +2411,95 @@ sub _process_files ($$$;$) {
 
     if (defined $self->{error}) {
 	return 0;
+    }
+
+    return 1;
+}
+
+# process that contents of an %actions section
+sub _process_actions ($$$;$) {
+    my $self = shift;
+    my $fhandle = shift;
+    my $line = shift;
+    my $package_name = shift;
+
+    my $package_ref;
+
+    if (defined $line) {
+       my %macro_opts = $self->_process_macro_opts ('n:f@', $line, "actions");
+       if (defined ($self->{error})) {
+           return 0;
+       }
+       if (($macro_opts{'argc'} > 1) or
+           (defined ($macro_opts{'n'}) and ($macro_opts{'argc'} > 0))) {
+           $self->_set_error ("Too many names: $line", $fhandle);
+           return 0;
+       }
+       $package_ref = $self->{_packages}[0];
+       if (not defined($package_name)) {
+           if (defined ($macro_opts{'n'})) {
+               $package_name = $macro_opts{'n'};
+           } elsif (defined ($macro_opts{'argv0'})) {
+               $package_name = $package_ref->get_name() . "-" . 
+                   $macro_opts{'argv0'};
+           } else {
+               $package_name = $package_ref->get_name();
+           }
+       }
+       $package_ref = undef;
+       $package_ref = $self->find_package_by_name ($package_name);
+       if (defined ($macro_opts{"f"}) and defined ($package_ref)) {
+           my @metafiles = split /\n/, $macro_opts{"f"};
+           foreach my $mf (@metafiles) {
+                   $package_ref->add_metafile ($self->eval($mf));
+           }
+       }
+    } else {
+       if (not defined ($package_name)) {
+           $self->_set_error ("assertion failed: _process_actions: \$line or \$package_name must be defined");
+           return 0;
+       }
+       $package_ref = $self->find_package_by_name ($package_name);
+    }
+
+    if (not defined ($package_ref)) {
+       $self->_set_error ("Undefined package $package_name", $fhandle);
+       return 0;
+    }
+
+    $line = $self->_get_next_line ($fhandle);
+    if (not defined($line)) {
+       if (defined $self->{error}) {
+           return 0;
+       }
+           return 1;
+    }
+    my $eline = $self->_preprocess_line ($line);
+
+    while (1) {
+       if ($eline =~ /^$/) {
+           # ignore empty lines
+       } elsif ($eline =~ /^#/) {
+           # comment, skip to next line
+       } elsif ($eline =~ /^\s*%define/) {
+           if (not $self->_process_define ($fhandle, $self->_pre_eval ($line))) {
+                   return (0);
+           }
+       } elsif ($eline =~ /^\s*([^%].*)$/) {
+           $package_ref->add_action($1);
+       } else {
+           return $self->_process_top_level ($fhandle, $line);
+       }
+
+       $line = $self->_get_next_line ($fhandle);
+       if (not defined($line)) {
+           last;
+       }
+       $eline = $self->_preprocess_line ($line);
+    }
+
+    if (defined $self->{error}) {
+           return 0;
     }
 
     return 1;
@@ -2381,6 +2532,8 @@ sub _process_top_level ($$$) {
 	    $self->_process_block ($fhandle, $line) or return 0;
 	} elsif ($eline =~ /^%files/) {
 	    $self->_process_files ($fhandle, $line) or return 0;
+	} elsif ($eline =~ /^%actions/) {
+	    $self->_process_actions($fhandle, $line) or return 0;
 	} elsif ($eline =~ /^\s*%define/) {
 	    $self->_process_define ($fhandle, $self->_pre_eval ($line))
 		or return 0;

@@ -37,7 +37,7 @@ my @_all_verify =  ('owner', 'group', 'mode', 'md5', 'size', 'maj', 'min',
 		    'symlink', 'mtime');
 
 # Create a new rpm_file object.
-sub new ($$$;$$$$$$$$) {
+sub new ($$$;$$$$$$$$$) {
     my $class = shift;
     my $package = shift;
     my $glob = shift;
@@ -47,6 +47,7 @@ sub new ($$$;$$$$$$$$) {
     my $is_recursive = shift;
     my $is_doc = shift;
     my $is_config = shift;
+    my $ips_tags = shift;
     my $class_name = shift;
     my $is_ghost = shift;
     my $is_hardlink = shift;
@@ -75,6 +76,10 @@ sub new ($$$;$$$$$$$$) {
 	$is_config = 0;
     }
 
+    if (not @$ips_tags) {
+       $ips_tags = [];
+    }
+
     if (not defined $is_ghost) {
 	$is_ghost = 0;
     }
@@ -94,6 +99,7 @@ sub new ($$$;$$$$$$$$) {
     $self->{_verify} = $verify;
     $self->{_is_doc} = $is_doc;
     $self->{_is_config} = $is_config;
+    $self->{_ips_tags} = [ @$ips_tags ];
     $self->{_is_ghost} = $is_ghost;
     $self->{_is_hardlink} = $is_hardlink;
     $self->{_is_recursive} = $is_recursive;
@@ -216,6 +222,12 @@ sub is_config ($) {
     my $self = shift;
 
     return $self->{_is_config};
+}
+
+sub ips_tags ($) {
+    my $self = shift;
+
+    return $self->{_ips_tags};
 }
 
 sub is_ghost ($) {

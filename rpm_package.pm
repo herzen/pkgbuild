@@ -200,6 +200,12 @@ sub is_subpkg ($) {
     return $self->{_is_subpkg};
 }
 
+sub set_subpkg ($$) {
+    my $self = shift;
+    my $val = shift;
+    $self->{_is_subpkg} = $val;
+}
+
 sub eval ($$) {
     my $self = shift;
     my $string = shift;
@@ -305,6 +311,19 @@ sub append_to_block ($$$) {
     } else {
 	$self->{_blocks}->{$block_name} = $text_to_append;
     }
+}
+
+sub add_action($$) {
+    my $self = shift;
+    my $action_string = shift;
+    
+    if (not defined $self->{_actions}) {
+        my @actions_array = ();
+        $self->{_actions} = \@actions_array;
+    }
+    return if not defined $action_string;
+    my $actions = $self->{_actions};
+    push(@$actions, $action_string);
 }
 
 sub add_file ($$) {

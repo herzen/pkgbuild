@@ -1,3 +1,23 @@
+2009-11-23  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: update
+	* macros.in: add _use_ips_autotag default definition
+	* pkgbuild.pl.in: implement autotag; add actions from the
+	  %actions section to the manifest; adjust regexps so that whitespaces
+	  are not required around version specs in Requires/BuildRequires tags;
+	  create separate packages for %packages that define an IPS name;
+	  correctly recognise self-dependencies, even if separate IPS and SVr4
+	  package names are used
+	* pkgdb.pm.in: adjust regexp to work with new IPS output format
+	* rpm_file.pm: implement ips_tags
+	* rpm_package.pm: implement set_subpkg() for setting/unsetting
+	  subpkg status of a %package; implement add_action() for adding
+	  actions to a package, based on the %actions section
+	* rpm_spec.pm.in: process %actions in parser; implement
+	  find_package_by_{ips,svr4,pkg}_name() functions that find
+	  rpm_package objects based on IPS, SVr4 or either names;
+	  process %ips_tags modifiers
+
 	======= pkgbuild 1.3.101 =======
 
 2009-09-01  Laszlo Peter  <laca@sun.com>
