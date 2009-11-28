@@ -1266,7 +1266,7 @@ sub is_provided ($) {
             $pkginfo_version{$capability} = $version;
 	}
 	# if no svr4 package was found, look for an IPS package
-	if (not $result) {
+	if (not $result and defined ($ips)) {
 	    # no svr4 package (or IPS package with a legacy action) found
 	    # let's look for an IPS package
 	    my $pkg_out = `pkg info -l $capability 2>&1`;
@@ -1492,7 +1492,7 @@ sub install_pkgs_ips ($) {
     my $auth = $ips_utils->get_pkgbuild_authority ();
     if (not defined $auth) {
 	msg_error ("Unable to identify the authority for $ips_server");
-	msg_info (0, "Hint: use \"pfexec pkg set-authority -O $ips_server mypkgs\"");
+	msg_info (0, "Hint: use \"pfexec pkg set-publisher -O $ips_server mypkgs\"");
 	msg_info (0, "to define a repository called \"mypkgs\"");
 	return 0;
     }

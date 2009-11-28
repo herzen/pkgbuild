@@ -1,3 +1,8 @@
+2009-11-28  Laszlo Peter  <laca@sun.com>
+
+	* pkgtool.pl: fix [ 2744961 ] warning message printed during build
+	* NEWS: update
+
 2009-11-23  Laszlo Peter  <laca@sun.com>
 
 	* configure.in: post-release version bump

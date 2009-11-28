@@ -6,6 +6,7 @@ Version 1.3.102:
           Requires/BuildRequires tags
 	- %packages that define IPS_package_name should be separate
 	  packages, not merged in the main package and tagged
+	- [ 2744961 ] warning message printed during build
 
 	New features:
 
