@@ -55,6 +55,9 @@ Version 1.3.102:
         - [ 2904561 ] support '--target' command line
 	  Patch by Paolo Abeni
 
+	- [ 2904564 ] use buildarch tag for svr4 packages
+	  Patch by Paolo Abeni
+
 Version 1.3.101:
 
 	Bugs fixed:

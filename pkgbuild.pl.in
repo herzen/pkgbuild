@@ -2633,6 +2633,22 @@ sub make_src_package ($) {
     return (not $retval);
 }
 
+sub set_arch($) {
+    my $spec = shift;
+
+    # look after for package-provided arch, if any
+    my @packages = $spec->get_packages ();
+    foreach my $pkg (@packages) {
+	my $pkg_arch = $pkg->get_tag ("buildarch");
+	next if not defined($pkg_arch);
+
+	# rpm noarch is mapped on svr4 all
+	$pkg_arch = "sparc,i386,ppc" if $pkg_arch eq "noarch";
+	$arch = $pkg_arch;
+	return;
+    }
+}
+
 sub main () {
     process_options ();
 
@@ -2672,6 +2688,7 @@ sub main () {
 	    fatal ("The Name tag is not defined in " .
 		   $spec->get_file_name());
 	}
+	set_arch($spec);
 	if ($check_deps) {
 	    check_build_requires ($spec) or exit (1);
 	}

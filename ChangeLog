@@ -1,3 +1,9 @@
+2009-11-29  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: update
+	* pkgbuild.pl.in: [ 2904564 ] use buildarch tag for svr4 packages
+	  Patch by Paolo Abeni
+
 2009-11-28  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update
