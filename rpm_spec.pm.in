@@ -69,6 +69,12 @@ sub get_version () {
     return $version;
 }
 
+sub set_target($) {
+    my $target = shift;
+    %all_archs = ( $target, 1 );
+    $arch = $target;
+}
+
 sub _init () {
     $arch = `uname -p`;
     chomp ($arch);

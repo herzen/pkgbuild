@@ -1,5 +1,11 @@
 2009-11-28  Laszlo Peter  <laca@sun.com>
 
+	* NEWS: update
+	* pkgbuild.pl.in, rpm_spec.pm.in: [ 2904561 ] support '--target'
+	  command line.  Patch by Paolo Abeni
+
+2009-11-28  Laszlo Peter  <laca@sun.com>
+
 	* pkgtool.pl: fix [ 2744961 ] warning message printed during build
 	* NEWS: update
 

@@ -52,6 +52,7 @@ my $build_skip = 0;
 my $interactive_mode = 0;
 my $check_deps = 1;
 my $pkgdb;
+my $target = '';
 my $ips_utils = new ips_utils;
 
 my $ips_server = $ENV{PKGBUILD_IPS_SERVER};
@@ -91,6 +92,10 @@ sub init () {
 	} elsif ($arch eq 'i686') {
 	    $arch = 'i386';
 	}
+    }
+    if ($target ne '') {
+        $arch = $target;
+	rpm_spec::set_target($target);
     }
 
     $os = `uname -s`;
@@ -251,6 +256,7 @@ sub process_options {
 		'pkgformat=s' => \&set_pkgformat,
 		'short-circuit' => \&short_circuit_option, 
 		'build=s'   => \$build_command,
+		'target=s'  => \$target,
 		'rcfile=s'  => sub { print "--rcfile option not implemented\n" },
 			'<>' => \&process_args)) {
 	exit 1;

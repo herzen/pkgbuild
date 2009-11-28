@@ -7,6 +7,7 @@ Version 1.3.102:
 	- %packages that define IPS_package_name should be separate
 	  packages, not merged in the main package and tagged
 	- [ 2744961 ] warning message printed during build
+	- 
 
 	New features:
 
@@ -50,6 +51,9 @@ Version 1.3.102:
 
 	    pkgbuild --define '_use_ips_autotag 0' ...
 	    pkgtool --define '_use_ips_autotag 0' ...
+
+        - [ 2904561 ] support '--target' command line
+	  Patch by Paolo Abeni
 
 Version 1.3.101:
 
