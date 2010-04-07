@@ -1,3 +1,21 @@
+2010-04-07  Laszlo Peter  <laca@sun.com>
+
+	* Makefile.am: add ips_package.pm
+	* NEWS: update
+	* ips_package.pm: (new) a module representing an IPS module
+	* ips_utils.pm: new function: is_installed returns if a given package
+	  is installed in the current image
+	* pkgbuild.pl.in: remove some debug code; fix the regexp that parses
+	  the "PUBLISHED..." message; fix a typo in the shebang line of
+	  the publishing scripts; set the verbosity of pkgdb.pm to be the same
+	  as pkgbuild's verbosity
+	* pkgdb.pm.in: print messages prefixed with "PKGDB:"; rewrite the code
+	  that translates dep specs to IPS package names to be faster and
+	  work on 2009.06 and later
+	* pkgtool.pl: implement --update; update incorporations for packages
+	  that has a version change and are included in incorporations.
+	* spectool.pl: implement get_ips_pkgname and get_publish_scripts
+
 2009-11-29  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update

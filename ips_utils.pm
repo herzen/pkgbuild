@@ -1,8 +1,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
-#  Use is subject to license terms.
+#  Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -51,6 +50,8 @@ sub new ($;$) {
     $self->{_variant} = {};
     $self->{_policy} = {};
     $self->{_unknown} = {};
+    $self->{_pkginfo} = {};
+    $self->{_installed} = {};
     bless ($self, $class);
     $self->read_cfg ();
     return $self;
@@ -126,6 +127,20 @@ sub read_cfg ($) {
     if (not defined ($pkgbuild_ips_server)) {
 	$self->{_pkgbuild_authority} = $self->{_local_authority};
     }
+}
+
+sub is_installed($$) {
+    my $self = shift;
+    my $pkgname = shift;
+
+    if (defined ($self->{_installed}->{$pkgname})) {
+	return $self->{_installed}->{$pkgname};
+    }
+    my $pkg_out = `pkg info -l $pkgname 2>&1`;
+    my $result = (! $?);
+    $self->{_pkginfo}->{$pkgname} = $pkg_out;
+    $self->{_installed}->{$pkgname} = $result;
+    return $result;
 }
 
 sub get_authority_setting ($$$) {

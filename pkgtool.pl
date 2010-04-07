@@ -33,6 +33,7 @@ use config;
 use File::Copy;
 use File::Basename;
 use ips_utils;
+use ips_package;
 
 my $ips_utils = new ips_utils ();
 
@@ -147,6 +148,9 @@ sub process_defaults () {
     $defaults->add ('update_if_newer', '!',
 		    'rebuild and update packages if the version in the spec file is newer than the version installed',
 		    0);
+    $defaults->add ('update_always', '!',
+		    'rebuild and update packages, even if the same version is already installed',
+		    0);
     $defaults->add ('notify', '!',
 		    'whether to send a desktop notification when the build passes/fails, use --nonotify to disable',
 		    $can_notify);
@@ -188,6 +192,7 @@ sub process_defaults () {
 my $arch;
 my $os;
 my $os_rel;
+my $os_build;
 
 sub find_in_path ($) {
     my $executable = shift;
@@ -311,6 +316,9 @@ sub init () {
 	if ($os_rel =~ /^5\./) {
 	    $os = 'solaris';
 	}
+	$os_build = `uname -v`;
+	chomp ($os_build);
+	$os_build =~ s/.*_([0-9]+).*/$1/;
     }
 
     my $uid;
@@ -806,7 +814,8 @@ sub process_options {
 		    @predefs = ( @predefs, $def );
 		    $topdir = rpm_spec::get_topdir ($build_engine, \@predefs);
 		},
-		'update!' => sub { shift; $defaults->set ('update_if_newer', shift); },
+		'update!' => sub { shift; $defaults->set ('update_always', shift); },
+		'update-if-newer!' => sub { shift; $defaults->set ('update_if_newer', shift); },
 		'with=s' => \&process_with,
 		'without=s' => \&process_with,
 		'pkgformat=s' => \&process_pkgformat,
@@ -1393,6 +1402,7 @@ sub do_publish_pkgs () {
     for (my $i = 0; $i <= $#specs_to_build; $i++) {
 	$retval += publish_ips_pkg ($i);
     }
+    push_incorporations($specs_to_build[0]->eval ("%_pkgmapdir"));
     return $retval;
 }
 
@@ -1414,6 +1424,9 @@ sub publish_ips_pkg ($) {
 	`chmod +x $script`;
 	my $msg = `$script | sed -e 's/^/INFO: /'`;
 	$retval += ($? != 0);
+	if ($? == 0) {
+	    update_incorporations ($spec_id);
+	}
 	print $msg;
     }
     return $retval;
@@ -1485,36 +1498,107 @@ sub install_pkgs_svr4 ($) {
     return 1;
 }
 
+my %all_incorporations;
+my %incorporated;
+
+sub update_incorporations ($) {
+    my $spec_id = shift;
+    my $spec = $specs_to_build[$spec_id];
+
+    my @ps = $spec->get_packages ();
+    foreach my $p (@ps) {
+	# subpackages are merged in the main package
+	next if ($p->is_subpkg());
+	my $pn = $p->get_ips_name();
+	my $ips_vendor_version = $p->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
+	my $version = $p->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
+	# get all the incorporations the packages are included in
+	my @pkg_inc = 
+	    `pkg search -o pkg.shortfmri -Hl :depend:incorporate:$pn 2>/dev/null`;
+	# always try entire, for older IPS clients that do not support the
+	# pkg search command above
+	if (not @pkg_inc) {
+	    @pkg_inc = ("entire");
+	}
+	foreach my $incorp (@pkg_inc) {
+	    chomp ($incorp);
+	    if (not defined($all_incorporations{$incorp})) {
+		msg_info (1, "Loading incorporation $incorp");
+		$all_incorporations{$incorp} = 
+		    ips_package->new_from_fmri ($incorp) or return 1;
+	    }
+	    msg_info (1, "Updating incorporation $incorp");
+	    $all_incorporations{$incorp}->update_depend ($pn, $version);
+	    if ($all_incorporations{$incorp}->changed()) {
+		$incorporated{$pn} = $incorp;
+	    }
+	}
+    }
+    return 0;
+}
+
+sub push_incorporations ($) {
+    my $pkgmapsdir = shift;
+    foreach my $incorp (keys %all_incorporations) {
+	if ($all_incorporations{$incorp}->changed()) {
+	    msg_info (0, "Publishing updated incorporation $incorp");
+	    $all_incorporations{$incorp}->publish($pkgmapsdir) or return 0;
+	}
+    }
+    return 1;
+}
+
 sub install_pkgs_ips ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
     
     my $auth = $ips_utils->get_pkgbuild_authority ();
     if (not defined $auth) {
-	msg_error ("Unable to identify the authority for $ips_server");
+	msg_error ("Unable to identify the publisher for $ips_server");
 	msg_info (0, "Hint: use \"pfexec pkg set-publisher -O $ips_server mypkgs\"");
 	msg_info (0, "to define a repository called \"mypkgs\"");
 	return 0;
     }
 
+    push_incorporations($spec->eval ("%_pkgmapdir")) or return 0;
+
     my @pkgs = $spec->get_packages ();
     my $verbose = $defaults->get ('verbose');
-    map msg_info (0, "Installing $_ from authority $auth\n"), @pkgs;
+    msg_info (0, "Installing package(s) from publisher $auth\n");
     
     my $all_pkgs = "";
     my $ips_vendor_version = $spec->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
-    my $version = $spec->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");    
+    my $version = $spec->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
+    my $prefix = $ips_utils->get_authority_setting ($auth, 'prefix');
+    # FIXME: hack?
+    $prefix = $auth unless defined ($prefix);
+    my %incorps;
     foreach my $pkg (@pkgs) {
 	# subpackages are merged in the main package
 	next if ($pkg->is_subpkg());
-	my $prefix = $ips_utils->get_authority_setting ($auth, 'prefix');
-	# FIXME: hack?
-	$prefix = $auth unless defined ($prefix);
-	$all_pkgs = "$all_pkgs pkg://$auth/$pkg\@$version";
+	my $pn = $pkg->get_ips_name();
+	# on older than snv_129 versions of pkg,
+	# if the package is in an incorporation that we updated,
+	# only try to install the updated incorporation, it will
+	# pull the updated package, if the package is installed
+	if (defined ($incorporated{$pn})) {
+	    if (not defined ($incorps{$incorporated{$pn}})) {
+		$all_pkgs = "$all_pkgs " . 
+		    $all_incorporations{$incorporated{$pn}}->get_fmri();
+		# don't add the same incorporation name to the args again
+		$incorps{$incorporated{$pn}} = 1;
+	    }
+	}
+	# on newer version of pkg, we also need to specify the package names
+	print "DEBUG: os_build = $os_build\n";
+	if ($os_build >= 129) {
+	    msg_info (2, "New IPS, add package name to command line");
+	    $all_pkgs = "$all_pkgs pkg://$auth/$pn\@$version";
+	}
     }
 
     my $msg;
-    if ( defined $ips ) {
+    if ($all_pkgs ne "") {
 	msg_info (1, "Running pfexec pkg refresh $auth");
 	$msg=`pfexec pkg refresh $auth 2>&1`;
 	if ( $? > 0 ) {
@@ -1531,7 +1615,52 @@ sub install_pkgs_ips ($) {
 	msg_info (1, "Running pfexec pkg install --no-refresh $all_pkgs");
 	$msg=`pfexec pkg install --no-refresh $all_pkgs 2>&1`;
 	if ( $? > 0 ) {
-	    msg_error "failed to install IPS package: $msg";
+	    msg_error "failed to update IPS incorporations: $msg";
+	    $build_status[$spec_id] = 'FAILED';
+	    $status_details[$spec_id] = $msg;
+	    return 0;
+	} else {
+	    my @msg_lines = split /\n/, $msg;
+	    foreach my $msg_line (@msg_lines) {
+		msg_info (1, $msg_line);
+	    }
+	}
+    }
+
+    $all_pkgs = "";
+    # now install all packages that are not already installed
+    # (already installed packages are updated when we update
+    # the incorporations)
+    foreach my $pkg (@pkgs) {
+	# subpackages are merged in the main package
+	next if ($pkg->is_subpkg());
+	my $pn = $pkg->get_ips_name();
+	if ($ips_utils->is_installed($pn)) {
+	    next;
+	}
+	my $prefix = $ips_utils->get_authority_setting ($auth, 'prefix');
+	# FIXME: hack?
+	$prefix = $auth unless defined ($prefix);
+	$all_pkgs = "$all_pkgs pkg://$auth/$pn\@$version";
+    }
+    if ($all_pkgs ne "") {
+	msg_info (1, "Running pfexec pkg refresh $auth");
+	$msg=`pfexec pkg refresh $auth 2>&1`;
+	if ( $? > 0 ) {
+	    msg_error "pkg refresh failed when installing package: $msg";
+	    $build_status[$spec_id] = 'FAILED';
+	    $status_details[$spec_id] = $msg;
+	    return 0;
+	} else {
+	    my @msg_lines = split /\n/, $msg;
+	    foreach my $msg_line (@msg_lines) {
+		msg_info (1, $msg_line);
+	    }
+	}
+	msg_info (1, "Running pfexec pkg install --no-refresh $all_pkgs");
+	$msg=`pfexec pkg install --no-refresh $all_pkgs 2>&1`;
+	if ( $? > 0 ) {
+	    msg_error "failed to update IPS packages: $msg";
 	    $build_status[$spec_id] = 'FAILED';
 	    $status_details[$spec_id] = $msg;
 	    return 0;
@@ -2320,12 +2449,13 @@ sub build_spec ($$$) {
 	    my $svr4_pkg = $pkg->get_svr4_name();
 	    msg_info (3, "Checking if $svr4_pkg is installed");
 	    if (is_provided ("$svr4_pkg") and $check_deps) {
+		if ($defaults->get ('update_always')) {
+		    msg_info (0, "Updating installed package ${pkg}");
+		    next;
+		}
 		my $provider = what_provides ("$svr4_pkg");
 		my $pkgver = $pkg->eval ("%version");
 		if ($provider eq "${svr4_pkg}-${pkgver}") {
-		    msg_warning (0, "skipping package ${pkg}-${pkgver}: already installed");
-		    $status_details[$spec_id]="${pkg}-${pkgver} already installed";
-		} else {
 		    if ($defaults->get ('update_if_newer') and
 			is_newer ("${svr4_pkg}-${pkgver}", $provider)) {
 			msg_info (0, "Updating ${pkg} to version ${pkgver} (from $provider)");
@@ -2333,10 +2463,10 @@ sub build_spec ($$$) {
 		    } else {
 			msg_warning (0, "skipping package ${pkg}-${pkgver}: $provider already installed");
 			$status_details[$spec_id]="$provider installed";
+			$build_status[$spec_id]='SKIPPED';
+			return 1;
 		    }
 		}
-		$build_status[$spec_id]='SKIPPED';
-		return 1;
 	    }
 	}
     }
@@ -2402,6 +2532,7 @@ sub build_spec ($$$) {
     if (not $build_only) {
 	if ($os eq "solaris") {
 	    if (defined ($ips)) {
+		update_incorporations ($spec_id);
 		install_pkgs_ips ($spec_id) || return 0;
 	    } elsif (defined ($svr4)) {
 		install_pkgs_svr4 ($spec_id) || return 0;

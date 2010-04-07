@@ -10,7 +10,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright 2009 Sun Microsystems, Inc.
+#  Copyright (c) 2004, 2010, Oracle and/or its affiliates. All rights reserved.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -468,7 +468,7 @@ sub check_dep ($$) {
     }
 
     my $pkg = $dep;
-    # FIXME: we're simple chopping off any version comparisons
+    # FIXME: we're simply chopping off any version comparisons
     # should really verify them instead
     $dep =~ s/([^\s><=]+).*/$1/;
     if (not defined ($pkg)) {
@@ -2075,11 +2075,9 @@ sub autotag ($$$) {
     my $fname = shift;
     my $pline = shift;
 
-    print "DEBUG: autotag $fname\n";
     foreach my $aref (@autotag_data) {
 	my ($path, $fmri, $dep) = @$aref;
 	if ($fname =~ /^${path}$/) {
-	    print "DEBUG: --> $fmri matches\n";
 	    if (not $pline =~ /restart_fmri="*${fmri}"*/) {
 		$pline .= " restart_fmri=$fmri";
 	    }
@@ -2265,8 +2263,8 @@ sub publish_src_ips_package ($) {
     print $msg;
 
     my $src_pkgname = $spec->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:%name/src}");
-    if (defined ($msg) and $msg =~ /^PUBLISHED\npkg:\/([^@]+@[^\n]+)/s) {
-	return $1;
+    if (defined ($msg) and $msg =~ /^PUBLISHED\npkg:\/[^@]+@([^\n]+)/s) {
+	return "$src_pkgname@$1";
     } else {
 	return undef;
     }
@@ -2301,7 +2299,7 @@ sub prepare_ips_script($$$) {
     my $build_dir = $spec->eval('%buildroot');
     open FW, ">$file" or die "Failed to open file $file for writing\n";
 
-    print FW "#/usr/bin/bash\n";
+    print FW "#!/usr/bin/bash\n";
     
     foreach $line (@lines) {
 	print FW "$line \n";
@@ -2657,6 +2655,8 @@ sub main () {
     } else {
 	$pkgdb = new pkgdb;
     }
+
+    $pkgdb->set_verbosity($verbose);
 
     init ();
 

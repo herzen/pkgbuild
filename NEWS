@@ -7,7 +7,12 @@ Version 1.3.102:
 	- %packages that define IPS_package_name should be separate
 	  packages, not merged in the main package and tagged
 	- [ 2744961 ] warning message printed during build
-	- 
+	- a spec file with a dependency on a package without a branch
+          creates an incorrect fmri in the manifest
+	  (patch by Vitezslav Batrla)
+	- fix the code that translates dependency specifications to
+          IPS package names to work with both older and newer versions
+          of IPS and speed up the translation
 
 	New features:
 
@@ -51,6 +56,11 @@ Version 1.3.102:
 
 	    pkgbuild --define '_use_ips_autotag 0' ...
 	    pkgtool --define '_use_ips_autotag 0' ...
+
+	- when pkgtool builds a different version of a package
+          that is included in an incorporation, it automatically
+          publishes an updated version of the incorporation
+          (making it possible to install the package)
 
         - [ 2904561 ] support '--target' command line
 	  Patch by Paolo Abeni
@@ -185,6 +195,12 @@ Version 1.3.98:
 	  (the Version tag is compared with the pkginfo (legacy) version)
 	- new mode: publish-pkgs publishes the previously built package
           to an IPS repository.  Obviously, only works in ips mode.
+	- new spectool subcommand: "get_ips_pkgname foo" translates a
+          dependency specification "foo" (Requires: foo) to an IPS package
+          name.
+	- new spectool subcommand: "get_publish_scripts" prints the path to
+	  the scripts used for [re-]publishing the IPS packages belonging to
+          the given spec files
 
 Version 1.3.4 / 1.3.92:
 

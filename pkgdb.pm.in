@@ -2,7 +2,7 @@
 #  The pkgbuild build engine
 #
 #  This file Copyright (C) 2007 Mike Bristow <mike@urgle.com>
-#            Copyright 2008 Sun Microsystems, Inc.
+#  Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -52,6 +52,20 @@ sub new($;$) {
     return $self;
 }
 
+sub set_verbosity($$) {
+    my $self = shift;
+    $self->{_verbose} = shift;
+}
+
+sub msg_info ($$$) {
+    my $self = shift;
+    my $min_verb = shift;
+    my $msg = shift;
+    if ($self->{_verbose} > $min_verb) {
+	print "PKGDB: " . $msg . "\n";
+    }
+}
+
 sub set_topdir($$) {
     my $self = shift;
     my $topdir = shift;
@@ -76,16 +90,18 @@ sub get_description($$) {
     my $self = shift;
     my $pkg = shift;
 
-    if ($pkg =~ /^\/./) {
-	# the argument looks like a /path/to/a/file
-	my @pkgnames = $self->file2pkgs($pkg);
-	if (@pkgnames) {
-	    $pkg = _select_package($pkg, @pkgnames);
+    if (defined ($self->{description_cache}->{$pkg})) {
+	if ($self->{description_cache}->{$pkg} eq "%UNDEF%") {
+	    return undef;
 	}
+	return $self->{description_cache}->{$pkg};
     }
 
     $def_pkgname = $self->get_pkgname($pkg);
     if (defined ($self->{description_cache}->{$def_pkgname})) {
+	if ($self->{description_cache}->{$def_pkgname} eq "%UNDEF%") {
+	    return undef;
+	}
 	return $self->{description_cache}->{$def_pkgname};
     }
 
@@ -100,31 +116,33 @@ sub get_description($$) {
 
     # then look in list of packages built by pkgtool on this system
     my $topdir = $self->{_topdir};
-    $pkgdesc = `grep "^${pkg}:" "$topdir/.pkgnames" | head -1`;
-    chomp ($pkgdesc);
-    if ($pkgdesc ne '') {
-	$pkgdesc =~ s/^${pkg}:(.*)/$1/;
-	$self->{description_cache}->{$def_pkgname} = $pkgdesc;
-	return $pkgdesc;
-    } else {
-	# look in a predefined list of package names
-	$pkgdesc = `grep "^${pkg}:" "@PKGBUILD_LIBDIR@/pkgnames" | head -1`;
+    if (-e "$topdir/.pkgnames") {
+	$pkgdesc = `grep "^${pkg}:" "$topdir/.pkgnames" | head -1`;
 	chomp ($pkgdesc);
 	if ($pkgdesc ne '') {
 	    $pkgdesc =~ s/^${pkg}:(.*)/$1/;
 	    $self->{description_cache}->{$def_pkgname} = $pkgdesc;
 	    return $pkgdesc;
+	} else {
+	    # look in a predefined list of package names
+	    $pkgdesc = `grep "^${pkg}:" "@PKGBUILD_LIBDIR@/pkgnames" | head -1`;
+	    chomp ($pkgdesc);
+	    if ($pkgdesc ne '') {
+		$pkgdesc =~ s/^${pkg}:(.*)/$1/;
+		$self->{description_cache}->{$def_pkgname} = $pkgdesc;
+		return $pkgdesc;
+	    }
 	}
     }
 
     if ($self->{_is_ips}) {
 	# if that doesn't work, look for a locally installed IPS package
-	my $pkgdesc = `/usr/bin/pkg info -l '$pkg' 2>/dev/null | grep '^ *Summary:' | head -1`;
+	my $pkgdesc = `/usr/bin/pkg info -l '$def_pkgname' 2>/dev/null | grep '^ *Summary:' | head -1`;
 	chomp ($pkgdesc);
 	if ($pkgdesc eq "") {
 	    # try harder: run a [slow] remote search
-	    print "Package $pkg is not installed, running a remote search for a package description\n";
-	    $pkgdesc = `/usr/bin/pkg info -r '$pkg' 2>/dev/null | grep '^ *Summary:' | head -1`;
+	    $self->msg_info(0, "Package $def_pkgname is not installed, running a remote search for a package description");
+	    $pkgdesc = `/usr/bin/pkg info -r '$def_pkgname' 2>/dev/null | grep '^ *Summary:' | head -1`;
 	    chomp ($pkgdesc);
 	    if ($pkgdesc ne '') {
 		$pkgdesc =~ s/^\s*Summary:\s(.*)$/$1/;
@@ -138,7 +156,8 @@ sub get_description($$) {
 	}
     }
 
-    print "WARNING: could not find a package description for $pkg\n";
+    $self->msg_info (0, "WARNING: could not find a package description for $pkg");
+    $self->{description_cache}->{$def_pkgname} = "%UNDEF%";
     return undef;
 }
 
@@ -151,7 +170,9 @@ sub _select_package($@) {
 
     my @favoured_packages = qw(SUNWcs SUNWcsu SUNWcsr SUNWcsxu
                                SUNWcar SUNWcarx SUNWcsd
-                               SUNWcsl SUNWcslx);
+                               SUNWcsl SUNWcslx
+                               system/locale/.* system/.* library/.*
+                               runtime/.* desktop/.* gnome/.*);
     if (defined($pkg)) {
 	unshift @favoured_packages, "${pkg}.*";
 	unshift @favoured_packages, "${pkg}-devel";
@@ -188,6 +209,9 @@ sub get_svr4_pkgname($$) {
     my $pkg = shift;
 
     if (defined ($self->{svr4_pkgname_cache}->{$pkg})) {
+	if ($self->{svr4_pkgname_cache}->{$pkg} eq "%UNDEF%") {
+	    return undef;
+	}
 	return $self->{svr4_pkgname_cache}->{$pkg};
     }
 
@@ -207,6 +231,7 @@ sub get_svr4_pkgname($$) {
 	    }
 	} else {
 	    # no matching package found
+	    $self->{svr4_pkgname_cache}->{$pkg} = "%UNDEF%";
 	    return undef;
 	}
     }
@@ -218,81 +243,176 @@ sub get_svr4_pkgname($$) {
 	return $pkg;
     }    
 
+    my $ips_pkg = $self->get_ips_pkgname ($pkg);
+
     if ($self->{_is_ips}) {
 	# then look for a legacy action locally
-	my @search_out = `pkg contents -Ho action.raw -t legacy '$pkg' 2>/dev/null`;
+	my @search_out = `pkg contents -Ho action.raw -t legacy '$ips_pkg' 2>/dev/null`;
 	if (not @search_out) {
 	    # try harder, do a remote search
-	    print "Package $pkg is not installed, running a remote search for legacy actions\n";
-	    @search_out = `pkg contents -r -Ho action.raw -t legacy '$pkg' 2>/dev/null`;
+	    $self->msg_info (0, "Package $pkg is not installed, running a remote search for legacy actions");
+	    @search_out = `pkg contents -r -Ho action.raw -t legacy '$ips_pkg' 2>/dev/null`;
 	}
 
-
 	if (@search_out) {
+	    my @s_o_copy = @search_out;
 	    map $_ =~ s/.* pkg=([^ ]*) .*/$1/s, @search_out;
 	    my $spkg = _select_package ($pkg, @search_out);
 	    $self->{svr4_pkgname_cache}->{$pkg} = $spkg;
+	    my $legacy_line = grep / pkg=$spkg /, @s_o_copy;
+	    if ($s_o_copy =~ / name="([^"]+)" /) {
+		$self->{description_cache}->{$pkg} = $1;
+		$self->{description_cache}->{$spkg} = $1;
+	    }
 	    return $spkg;
 	}
     }
 
+    $self->{description_cache}->{$pkg} = "%UNDEF%";
     return undef;
 }
 
 # the argument may be a /file/path or an SVr4 pkg name or an IPS pkg name
 # returns the IPS package name, if exists; undef otherwise
-sub get_ips_pkgname($$) {
+sub get_ips_pkgname($$$) {
     my $self = shift;
     my $pkg = shift;
+    my $search_remote = shift;
 
     if (defined ($self->{ips_pkgname_cache}->{$pkg})) {
+	if ($self->{ips_pkgname_cache}->{$pkg} eq "%UNDEF%") {
+	    return undef;
+	}
 	return $self->{ips_pkgname_cache}->{$pkg};
     }
 
+    if ($search_remote) {
+	$self->msg_info (1, "Resolving $pkg (remote search)");
+    } else {
+	$self->msg_info (1, "Resolving $pkg");
+    }
     if ($pkg =~ /^\/./) {
 	# the argument looks like a /path/to/a/file
+	my $fname = $pkg;
 	my @pkgnames = $self->file2pkgs($pkg);
 	if (@pkgnames) {
-	    my $spkg = _select_package($pkg, @pkgnames);
-	    $self->{ips_pkgname_cache}->{$pkg} = $spkg;
-	    return $spkg;
+	    $pkg = _select_package($pkg, @pkgnames);
+	    return $pkg;
+	} else {
+	    # no matching package found
+	    $self->{ips_pkgname_cache}->{$pkg} = "%UNDEF%";
+	    return undef;
 	}
-	# no matching package found
-	return undef;
     }
 
-    my $search_out = `/usr/bin/pkg search -l '$pkg' 2>/dev/null | egrep "(^legacy_pkg|^fmri)" | head -1`;
-    chomp ($search_out);
-    if ($search_out =~ /^legacy_pkg\s*legacy\s*${pkg}\s*pkg:\/(\S+)\s*$/) {
-	$self->{ips_pkgname_cache}->{$pkg} = $1;
-	return $1;
-    } elsif ($search_out =~ /^fmri\s*set(\s+|\s+[^\/]*\/)${pkg}\s*pkg:\/(\S+)\s*$/) {
-	$self->{ips_pkgname_cache}->{$pkg} = $2;
-        return $1;
+    my @search_out;
+    if ($search_remote) {
+	$self->msg_info (1, "Trying pkg info -r");
+	@search_out = `/usr/bin/pkg info -r '$pkg' 2>/dev/null`;
+    } else {
+	$self->msg_info (1, "Trying pkg info -l");
+	@search_out = `/usr/bin/pkg info -l '$pkg' 2>/dev/null`;
     }
-    if ($search_out eq "") {
-	# check if a package with this name is installed locally
-	$search_out = `/usr/bin/pkg info -l '$pkg' 2>/dev/null`;
-	if ($search_out =~ /Name: $pkg\n.*Version: ([0-9.]*)\n.*Branch: ([0-9.]*)/s) {
-	    $self->{ips_pkgname_cache}->{$pkg} = "${pkg}\@$1-$2";
-	    return "${pkg}\@$1-$2";
-	} else {
-	    if ($search_out eq "") {
-		# this is much more expensive, but let's try a remote search
-		print "Package $pkg is not installed, searching remote repositories\n";
-		$search_out = `/usr/bin/pkg info -r '$pkg' 2>/dev/null`;
-		if ($search_out =~ /Name: $pkg\n/s) {
-		    # if the package is from a remote repo (i.e. not installed)
-		    # don't return a version, it doesn't matter
-		    if ($search_out =~ /Summary: ([^\s]*)\n/s) {
-			$self->{description_cache}->{$pkg} = {$1};
+    my @partial_matches;
+    my $partial_selected = 0;
+    my $partial_name;
+    my $pkg_selected = 0;
+    my $pkg_only = $pkg;
+    $pkg_only =~ s/@.*//;
+    while (@search_out) {
+	my $s_o_line = shift (@search_out);
+	chomp ($s_o_line);
+	if ($s_o_line =~ /^\s*Name:\s*(.*)/) {
+	    if ($1 eq $pkg_only) {
+		$self->msg_info (2, "Exact match found for $pkg_only");
+		# exact match
+		$pkg_selected = 1;
+	    } else {
+		# not an exact match
+		$partial_name = $1;
+		$partial_selected = 1;
+	    }
+	    next;
+	}
+	if ($s_o_line =~ /\s*Renamed to:\s*([^@]+)/) {
+	    if ($pkg_selected) {
+		# there may be multiple packages, get a list of them
+		$self->msg_info (0, "Package $pkg_only was renamed to $1");
+		my @pnames = ($1);
+		my @s_o_copy = @search_out;
+		foreach my $l (@s_o_copy) {
+		    chomp ($l);
+		    if ($l =~ /^\s+(\S+)\@[0-9]\S*$/) {
+			$self->msg_info (0, "      ... and $1");
+			push (@pnames, $1);
+		    } elsif ($l =~ /^\s+([^:@]+)$/) {
+			$self->msg_info (0, "      ... and $1");
+			push (@pnames, $1);
+		    } else {
+			last;
 		    }
-		    $self->{ips_pkgname_cache}->{$pkg} = $pkg;
-		    return $pkg;
 		}
+		my $sel_pname = _select_package ($pkg_only, @pnames);
+		$self->msg_info (0, "Selected $sel_pname for $pkg_only");
+		# look up the package that this package was renamed to
+		$sel_pname = $self->get_ips_pkgname ($sel_pname);
+		$self->{ips_pkgname_cache}->{$pkg} = "$sel_pname";
+		$self->{ips_pkgname_cache}->{$pkg_only} = "$sel_pname";
+		return $self->{ips_pkgname_cache}->{$pkg};
+	    }
+	    if ($partial_selected) {
+		# a non-exact match was renamed to something else
+		$partial_name = $self->get_ips_pkgname ($1);
+		push (@partial_matches, $partial_name);
+		$partial_selected = 0;
 	    }
 	}
+	# parse the FMRI: line
+	if ($pkg_selected and $s_o_line =~ /^\s*FMRI:\s[^@]+@([^:]+):/) {
+	    $self->{ips_pkgname_cache}->{$pkg} = "$pkg_only\@$1";
+	    $self->{ips_pkgname_cache}->{$pkg_only} = "$pkg_only\@$1";
+	    return $self->{ips_pkgname_cache}->{$pkg};
+	}
+	if ($partial_selected and $s_o_line =~ /^\s*FMRI:\s[^@]+@([^:]+):/) {
+	    $partial_selected = 0;
+	    push (@partial_matches, "$partial_name@$1");
+	}
     }
+    # No exact match found, but pkg info did return a match, let's use it
+    if (@partial_matches) {
+	my $best_match = _select_package($pkg, @partial_matches);
+	$self->msg_info (0, "Selected \"$best_match\" for $pkg");
+	# look up the selected package name again for version info
+	$best_match = $self->get_ips_pkgname ($best_match);
+	$self->{ips_pkgname_cache}->{$pkg} = "$best_match";
+	$self->{ips_pkgname_cache}->{$pkg_only} = "$best_match";
+	return $self->{ips_pkgname_cache}->{$pkg};
+    }
+
+    # search for local or remote matches using pkg search
+
+    # file2pkgs works for package names, too
+    my @pkgnames = $self->file2pkgs($pkg, 1);
+    if (@pkgnames) {
+	my $spkg = _select_package($pkg, @pkgnames);
+	# look up package again, in case it was renamed
+	my $pkg_info = `/usr/bin/pkg info -r '$spkg' 2>/dev/null`;
+	if ($pkg_info =~ /\n\s*Renamed to:\s([^\n]+)\n/) {
+	    $spkg = $self->get_ips_pkgname ($spkg, 1);
+	}
+	$self->{ips_pkgname_cache}->{$pkg} = "$spkg";
+	$self->{ips_pkgname_cache}->{$pkg_only} = "$spkg";
+	return $self->{ips_pkgname_cache}->{$pkg};
+    }
+
+    # No local package found, search remote repos
+    if (not $search_remote) {
+	$self->msg_info (0, "No local match found for $pkg, searching remote repos");
+	return $self->get_ips_pkgname ($pkg, 1);
+    }
+    
+    # No match found
+    $self->{ips_pkgname_cache}->{$pkg} = "%UNDEF%";
     return undef;
 }
 
@@ -310,9 +430,11 @@ sub get_pkgname ($$) {
     }
 }
 
-sub file2pkgs($$) {
+sub file2pkgs($$;$) {
     my $self = shift;
     my $file = shift;
+    # [ab]using this function for searching for packages
+    my $is_pkg = shift;
 
     if (defined $self->{fname_cache}->{$file}) {
 	my $result_ref = $self->{fname_cache}->{$file};
@@ -324,25 +446,65 @@ sub file2pkgs($$) {
     if ($self->{_is_ips}) {
 	my @ips_lines;
 	if (-e $file) {
-	    @ips_lines = `/usr/bin/pkg search -l '${file}' | grep '^path'`;
+	    $self->msg_info (1, "Trying pkg search -Il");
+	    @ips_lines = `/usr/bin/pkg search -Il '${file}' | grep '^path'`;
 	} else {
-	    # file does not exist locally, but try searching the remore repos
-	    @ips_lines = `/usr/bin/pkg search -r '${file}' | grep '^path'`;
+	    # file does not exist locally, but try searching the remote repos
+	    if (defined ($is_pkg)) {
+		$self->msg_info (1, "Trying pkg search -Il");
+		# searching for a package name
+		@ips_lines = `/usr/bin/pkg search -Il '${file}' | egrep '^(legacy_pkg|pkg.fmri|require|incorporate)'`;
+		if (not @ips_lines) {
+		    $self->msg_info (1, "Trying pkg search -Ir");
+		    @ips_lines = `/usr/bin/pkg search -Ir '${file}' | egrep '^(legacy_pkg|pkg.fmri|require|incorporate)'`;
+		}
+	    } else {
+		# really search for a file
+		@ips_lines = `/usr/bin/pkg search -Ir '${file}' | grep '^path'`;
+	    }
 	}
 	my @pkglist = ();
+	my $branch = `uname -v`;
+	chomp($branch);
+	$branch =~ s/^[^0-9]*([0-9]+).*/$1/;
+	my $highest_branch;
+	my $pname_h_b;
 	foreach my $ips_line (@ips_lines) {
-	    if ($ips_line =~ /\s+pkg:\/(\S+)/) {
+	    my $pname;
+	    if ($ips_line =~ /^(path|legacy_pkg|pkg.fmri)\s.*pkg:\/(.+)/) {
+		$pname = $2;
+	    } elsif ($ips_line =~ /^(incorporate|require)\s+depend\s+([^\s]+)/) {
+		$pname = $2;
+	    } else {
+		next;
+	    }
+	    if ($pname =~ /.*@.*-0.([0-9]+)/) {
+		if ($branch eq $1) {
+		    push (@pkglist, $pname);
+		} elsif ($branch > $1) {
+		    if (defined ($highest_branch) and $highest_branch < $1) {
+			$pname_h_b = $pname;
+			$highest_branch = $1;
+		    }
+		}
+	    } else {
+		# no branch in version string
+		push (@pkglist, $pname);
+	    }
 # Disable for now -- it's currently slow and we don't use the extra info anyway
-#	        $result = $self->_parse_ips_line($1, $file, $ips_lines[0]);
+#	        $result = $self->_parse_ips_line($pname, $file, $ips_lines[0]);
 #	        $self->{fname_cache}->{$file} = \@{$result->{packages}};
 #	        return @{$result->{packages}};
-# Instead: make a list of all package names that match the given file:
-		push (@pkglist, $1);
-	    }
+# Instead: make a list of all package names that match the given file.
+	}
+	if (not @pkglist and defined($highest_branch)) {
+	    push (@pkglist, $pname_h_b);
 	}
 	$self->{fname_cache}->{$file} = \@pkglist;
 	return @pkglist;
     }
+
+    # SVr4 code
 
     my $command = "@PKGBUILD_LIBDIR@/pkgdbgrep -c '$self->{contents}' '${file}'";
     my @grepped_lines = `$command`;

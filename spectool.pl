@@ -2,7 +2,7 @@
 #
 #  A tool for extracting various info from rpm spec files
 #
-#  Copyright (C) 2004, 2005 Sun Microsystems, Inc.
+#  Copyright (c) 2004, 2010, Oracle and/or its affiliates. All rights reserved.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -31,6 +31,7 @@ use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
 use rpm_spec;
 use config;
 use ips_utils;
+use pkgdb;
 
 my $ips_utils = new ips_utils ();
 
@@ -249,12 +250,12 @@ sub process_args {
     }
 
     if (not defined ($spec_command)) {
-	if (not $arg =~ /^(eval|get_meta|get_packages|get_sources|get_public_sources|get_block|get_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_used_spec_files|get_error|verify|get_requires|get_buildrequires|get_prereq)$/) {
+	if (not $arg =~ /^(eval|get_meta|get_packages|get_sources|get_public_sources|get_block|get_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_publish_scripts|get_used_spec_files|get_error|verify|get_requires|get_buildrequires|get_prereq|get_ips_pkgname)$/) {
 	    usage (1);
 	}
 	$spec_command = $arg;
     } else {
-	if ($spec_command =~ /^(eval|get_block|get_requires|get_prereq)$/
+	if ($spec_command =~ /^(eval|get_block|get_requires|get_prereq|get_ips_pkgname)$/
 	    and not defined ($spec_cmd_arg)) {
 	    $spec_cmd_arg = $arg;
 	} else {
@@ -343,7 +344,7 @@ sub process_options {
 	}
     }
 
-    if (not @spec_names) {
+    if (not @spec_names and not $spec_command =~ /get_ips_pkgname/) {
         msg_warning (0, "No spec files specified, nothing to do.");
         exit (0);
     }
@@ -433,6 +434,10 @@ Commands:
     get_included_files
 
     get_used_spec_files [-l]
+
+    get_publish_scripts
+
+    get_ips_pkgname file|package_name
 
     get_error
 
@@ -678,6 +683,45 @@ sub do_get_included_files () {
     }
 }
 
+sub do_get_publish_scripts () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
+	} else {
+	    my @pkgs = $spec->get_packages ();
+	    my @scripts = ();
+	    foreach my $pkg (@pkgs) {
+		next if $pkg->is_subpkg ();
+		my $script = $spec->eval ("%_pkgmapdir") . "/scripts/${pkg}_ips.sh";
+		push (@scripts, $script);
+	    }
+	    print_result ($spec, @scripts);
+	}
+    }
+}
+
+sub do_get_ips_pkgname () {
+    my $arg = shift;
+    my $pkgdb = new pkgdb(1);
+    my $verbose = $defaults->get ('verbose');
+    $pkgdb->set_verbosity($verbose);
+    my $name = $pkgdb->get_ips_pkgname ($spec_cmd_arg);
+    if (defined ($name)) {
+	if ($verbose > 0) {
+	    print "$spec_cmd_arg ==>  $name\n";
+	} else {
+	    print "$name\n";
+	}
+    } else {
+	if ($verbose > 0) {
+	    print "$spec_cmd_arg: no match found\n";
+	}
+	exit(1);
+    }
+}
+
 sub do_get_error () {
     for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
 	my $spec = $specs[$spec_id];
@@ -791,7 +835,7 @@ sub main {
     process_defaults ();
     process_options ();
 
-    if (not defined ($spec_names[0])) {
+    if (not defined ($spec_names[0]) and not $spec_command =~ /get_ips_pkgname/) {
 	msg_info (0, "No spec files specified: nothing to do.");
 	exit (0);
     }
@@ -828,6 +872,10 @@ sub main {
 	do_get_class_script_names ();
     } elsif ($spec_command eq "get_included_files") {
 	do_get_included_files ();
+    } elsif ($spec_command eq "get_publish_scripts") {
+	do_get_publish_scripts ();
+    } elsif ($spec_command eq "get_ips_pkgname") {
+	do_get_ips_pkgname ();
     } elsif ($spec_command eq "get_requires") {
 	do_get_requires ();
     } elsif ($spec_command eq "get_buildrequires") {
