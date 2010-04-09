@@ -13,6 +13,8 @@ Version 1.3.102:
 	- fix the code that translates dependency specifications to
           IPS package names to work with both older and newer versions
           of IPS and speed up the translation
+        - evaluate macros in package name arguments to %package and %files
+          (reported by Norm Jacobs)
 
 	New features:
 

@@ -375,6 +375,7 @@ sub has_files ($) {
     my $self = shift;
 
     return 1 if defined $self->{_files};
+    return 1 if defined $self->{_actions};
     my $metafiles = $self->{_metafiles};
     return 1 if @$metafiles;
     return 0;

@@ -27,11 +27,11 @@
 use strict;
 use warnings;
 use Socket;
-use Sys::Hostname;
-
-my $my_hostname = hostname ();
+use IO::Socket::INET;
 
 package ips_utils;
+
+my $my_local_ip;
 
 sub new ($;$) {
     my $class = shift;
@@ -44,7 +44,7 @@ sub new ($;$) {
     if (! -d "${altroot}/var/pkg") {
 	return undef;
     }
-    $self->{_authorities} = {};
+    $self->{_publishers} = {};
     $self->{_properties} = {};
     $self->{_filter} = {};
     $self->{_variant} = {};
@@ -64,7 +64,7 @@ sub read_cfg ($) {
     $altroot = "" if not defined ($altroot);
 
     # FIXME: does not consider an altroot scenario
-    open IPS_AUTH, "/usr/bin/pkg authority -H |" or
+    open IPS_AUTH, "/usr/bin/pkg publisher -H |" or
 	die "Cannot read IPS configuration";
     my $pkgbuild_ips_host;
     my $pkgbuild_ips_port;
@@ -78,28 +78,34 @@ sub read_cfg ($) {
     while (my $line = <IPS_AUTH>) {
 	chomp ($line);
 	if ($line =~ /^(\S+)\s+.*\s*(https?:\/\/\S+).*$/) {
-	    my $authority = $1;
+	    my $publisher = $1;
 	    my $origin = $2;
-	    $self->{_authorities}->{$authority} = {};
-	    $self->{_authorities}->{$authority}->{origin} = $origin;
+	    $self->{_publishers}->{$publisher} = {};
+	    $self->{_publishers}->{$publisher}->{origin} = $origin;
 	    if ($origin =~ /^http:\/\/(.+):(.+)\/$/) {
 		my $host = $1;
 		my $port = $2;
 		my $local_port = $self->get_local_ips_port ();
 		if ($port == $local_port) {
 		    my $packed_ip = gethostbyname ($host);
-		    my $local_packed_ip = 
-			gethostbyname ($my_hostname);
-		    if (not defined ($local_packed_ip)) {
-			print "WARNING: could not resolve your hostname: $my_hostname\n";
+		    if (not defined($my_local_ip)) {
+			my $sock = IO::Socket::INET->new(
+			    PeerAddr=> "${host}",
+			    PeerPort=> 80,
+			    Proto   => "tcp");
+			if (defined ($sock)) {
+			    $my_local_ip = $sock->sockhost;
+			    shutdown ($sock, 2);
+			} else {
+			    print "WARNING: failed to connect to IPS server $host\n";
+			}
 		    }
 		    if (defined $packed_ip and
-			defined $local_packed_ip) {
+			defined $my_local_ip) {
 			my $ip_address = Socket::inet_ntoa($packed_ip);
-			my $local_ip = Socket::inet_ntoa ($local_packed_ip);
-			if (($ip_address eq $local_ip) or
+			if (($ip_address eq $my_local_ip) or
 			    ($ip_address eq "127.0.0.1")) {
-			    $self->{_local_authority} = $authority;
+			    $self->{_local_publisher} = $publisher;
 			}
 		    }
 		    if (defined ($pkgbuild_ips_server) and
@@ -113,7 +119,7 @@ sub read_cfg ($) {
 			    my $pkgbuild_ip = Socket::inet_ntoa ($pkgbuild_packed_ip);
 			    if (($ip_address eq $pkgbuild_ip) or
 				($ip_address eq "127.0.0.1")) {
-				$self->{_pkgbuild_authority} = $authority;
+				$self->{_pkgbuild_publisher} = $publisher;
 			    }
 			}
 		    }
@@ -124,8 +130,8 @@ sub read_cfg ($) {
 	}
     }
     close IPS_AUTH;
-    if (not defined ($pkgbuild_ips_server)) {
-	$self->{_pkgbuild_authority} = $self->{_local_authority};
+    if (not defined ($pkgbuild_ips_server) and defined($self->{_local_publisher})) {
+	$self->{_pkgbuild_publisher} = $self->{_local_publisher};
     }
 }
 
@@ -143,12 +149,12 @@ sub is_installed($$) {
     return $result;
 }
 
-sub get_authority_setting ($$$) {
+sub get_publisher_setting ($$$) {
     my $self = shift;
     my $auth_name = shift;
     my $setting = shift;
 
-    return $self->{_authorities}->{$auth_name}->{$setting};
+    return $self->{_publisher}->{$auth_name}->{$setting};
 }
 
 sub get_local_ips_port ($) {
@@ -172,16 +178,16 @@ sub get_local_ips_server ($) {
     return $self->{_local_ips_server};
 }
 
-sub get_local_authority ($) {
+sub get_local_publisher ($) {
     my $self = shift;
 
-    return $self->{_local_authority};
+    return $self->{_local_publisher};
 }
 
-sub get_pkgbuild_authority ($) {
+sub get_pkgbuild_publisher ($) {
     my $self = shift;
 
-    return $self->{_pkgbuild_authority};
+    return $self->{_pkgbuild_publisher};
 }
 
 sub is_depotd_enabled ($) {

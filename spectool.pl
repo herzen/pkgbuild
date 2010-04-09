@@ -598,7 +598,7 @@ sub do_get_package_names () {
 		    next if ($p->is_subpkg());
 		    push (@pkgs, $p->get_ips_name());
 		    if ($full_path) {
-			my $auth = $ips_utils->get_pkgbuild_authority();
+			my $auth = $ips_utils->get_pkgbuild_publisher();
 			map $_="pkg://$auth/$_", @pkgs;
 		    }
 		}

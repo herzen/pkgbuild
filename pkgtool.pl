@@ -2,7 +2,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright 2009 Sun Microsystems, Inc.
+#  Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -1552,11 +1552,13 @@ sub install_pkgs_ips ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
     
-    my $auth = $ips_utils->get_pkgbuild_authority ();
+    my $auth = $ips_utils->get_pkgbuild_publisher ();
     if (not defined $auth) {
 	msg_error ("Unable to identify the publisher for $ips_server");
 	msg_info (0, "Hint: use \"pfexec pkg set-publisher -O $ips_server mypkgs\"");
-	msg_info (0, "to define a repository called \"mypkgs\"");
+	msg_info (0, "to define a repository called \"mypkgs\" or set the");
+	msg_info (0, "PKGBUILD_IPS_SERVER environment variable to one of the URIs");
+	msg_info (0, "listed by the \"pkg publisher\" command.");
 	return 0;
     }
 
@@ -1569,7 +1571,7 @@ sub install_pkgs_ips ($) {
     my $all_pkgs = "";
     my $ips_vendor_version = $spec->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
     my $version = $spec->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
-    my $prefix = $ips_utils->get_authority_setting ($auth, 'prefix');
+    my $prefix = $ips_utils->get_publisher_setting ($auth, 'prefix');
     # FIXME: hack?
     $prefix = $auth unless defined ($prefix);
     my %incorps;
@@ -1590,7 +1592,6 @@ sub install_pkgs_ips ($) {
 	    }
 	}
 	# on newer version of pkg, we also need to specify the package names
-	print "DEBUG: os_build = $os_build\n";
 	if ($os_build >= 129) {
 	    msg_info (2, "New IPS, add package name to command line");
 	    $all_pkgs = "$all_pkgs pkg://$auth/$pn\@$version";
@@ -1638,7 +1639,7 @@ sub install_pkgs_ips ($) {
 	if ($ips_utils->is_installed($pn)) {
 	    next;
 	}
-	my $prefix = $ips_utils->get_authority_setting ($auth, 'prefix');
+	my $prefix = $ips_utils->get_publisher_setting ($auth, 'prefix');
 	# FIXME: hack?
 	$prefix = $auth unless defined ($prefix);
 	$all_pkgs = "$all_pkgs pkg://$auth/$pn\@$version";

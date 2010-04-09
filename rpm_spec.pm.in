@@ -1348,10 +1348,10 @@ sub _process_package ($$$) {
     my $svr4_pkg_name;
 
     if ($line =~ /\s*%package\s+-n\s+(\S+)\s*$/) {
-	$package_name = $1;
+	$package_name = $self->eval ($1);
 	$is_subpkg = 0;
     } elsif ($line =~ /\s*%package\s+(\S+)\s*$/) {
-	$pkg_tag = $1;
+	$pkg_tag = $self->eval ($1);
 	$is_subpkg = 1;
 	$svr4_pkg_name = $$mainpkg_ref->get_tag ("sunw_pkg");
 	if (defined ($svr4_pkg_name)) {
@@ -2213,10 +2213,10 @@ sub _process_files ($$$;$) {
 	$package_ref = $self->{_packages}[0];
 	if (not defined($package_name)) {
 	    if (defined ($macro_opts{'n'})) {
-		$package_name = $macro_opts{'n'};
+		$package_name = $self->eval ($macro_opts{'n'});
 	    } elsif (defined ($macro_opts{'argv0'})) {
 		$package_name = $package_ref->get_name() . "-" . 
-		    $macro_opts{'argv0'};
+		    $self->eval ($macro_opts{'argv0'});
 	    } else {
 		$package_name = $package_ref->get_name();
 	    }
@@ -2444,10 +2444,10 @@ sub _process_actions ($$$;$) {
        $package_ref = $self->{_packages}[0];
        if (not defined($package_name)) {
            if (defined ($macro_opts{'n'})) {
-               $package_name = $macro_opts{'n'};
+               $package_name = $self->eval ($macro_opts{'n'});
            } elsif (defined ($macro_opts{'argv0'})) {
                $package_name = $package_ref->get_name() . "-" . 
-                   $macro_opts{'argv0'};
+                   $self->eval ($macro_opts{'argv0'});
            } else {
                $package_name = $package_ref->get_name();
            }
