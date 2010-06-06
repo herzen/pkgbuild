@@ -1,0 +1,1379 @@
+The description of pkgbuild's spec files
+
+
+1 Introduction
+
+  pkgbuild uses build "recipes" called spec files to define what sources
+  are used for building a component, how to set up the source tree, build
+  the binaries and how to package them.
+
+  The spec files used by pkgbuild are similar to RPM's spec files, but
+  there are some differences.  Because the resulting package formats
+  (SVr4 and/or IPS) have different characteristics from RPM packages,
+  pkgbuild uses additional spec file elements not used by RPM and there
+  are also many elements of RPM spec files that are ignored by pkgbuild.
+
+  This document describes the pkgbuild's spec file format with an
+  emphasis on the differences from RPM spec files.
+
+  A good general introduction to RPM spec files can be found in
+  Chapter 13 of Maximum RPM by Edward C. Bailey. The book's ISBN
+  is 0672311054 and is available as a PDF at
+  http://www.redhat.com/docs/books/max-rpm/max-rpm.pdf or as HTML
+  at http://www.rpm.org/max-rpm-snapshot/ch-rpm-inside.html
+
+
+2 Overview of the format
+
+  Spec files are plain text files.  Lines starting with a # are comments.
+  The percent character has a special meaning therefore it has to be
+  escaped by another percent character, example:
+
+  ./configure --default-zoom-level="50%%"
+
+  Tags define various attributes of the package, for example the name,
+  the locations of sources, build-time and runtime dependencies.
+
+  Lines that define tags start with the name of the tag followed by a
+  colon followed by the value of the tag, for example:
+
+  Name: pkgbuild
+  Version: 1.3.102
+
+  The %package directive can be used to assign a name to a subset of
+  files.  A package usually corresponds to a separate SVr4 and/or IPS
+  package.
+
+  A number of shell script fragments (scriptlets) control the build process:
+  %prep sets up the source tree from tarballs and/or patches and/or other
+  source files.  %build is used to create the binaries.  %install places
+  the binaries in a temporary package prototype area in the same layout at
+  they will appear in the binary package.  %check performs sanity testing.
+  %clean is used to clean up the build directories after the build.  Each
+  scriptlet is executed separately, which means that the environment
+  variables set in one scriptlet do not affect other scriptlets.
+
+  The binaries in the prototype area are used to create one or more
+  packages (SVr4 and/or IPS).  The contents of these packages are
+  defined in %files and optionally, in the case of IPS packages, %actions
+  sections.  Macros and wildcards (globs) can be used in the package
+  definitions.
+
+  pkgbuild allows building hierarchical spec file structures by using
+  information from other spec files or including them.  The %use directive
+  assigns a label to another spec file.  The label can be used to refer
+  to tags, macros and scriptlets in other spec files.  For example:
+
+  %use glib2 = glib2.spec
+  ...
+  Version: %{glib2.version}
+
+  The %include directive is similar to the #include C preprocessor
+  directive.
+
+  While spec files are best written as generic and platform-agnostic as
+  possible, sometimes it's necessary to add conditional statements.
+  These are similar to the #if / #ifdef C preprocessor directives.
+
+  Spec files include a %changelog section that documents the changes
+  made to the file, including the date, the name or email address of
+  the person who made the change and the description of the change.
+
+
+3 Macros
+
+3.1 Macro definitions
+
+  Macros are defined using the %define statement:
+
+  %define project_name pkgbuild
+
+  Macro names can include letters, numbers and underscores (_) and
+  they are case-sensitive.
+
+  The percent character is used for expanding macros or tags.  Macro
+  or tag names can be enclosed in curly brackets when they would
+  otherwise become ambiguous because of the characters that follow
+  the macro name, e.g:
+
+  %define _prefix /usr
+  %define _lib  lib
+  %define _libdir %_prefix/lib
+
+  %_libdir    -->  /usr/lib
+  %{_lib}dir  -->  libdir
+  %_libfoo    -->  %_libfoo     (undefined macro)
+  %{_lib}foo  -->  libfoo
+
+  %project_name  or  %{project_name}
+  
+  In case of a conflict, tags mask macros:
+
+  Version: 1.0
+  %define version 2.0
+
+  %{version} expands to 1.0
+
+
+3.2 Conditional macro expansion
+
+  Undefined macros do not get expanded.  In most cases this is not
+  desirable so conditional macro expansions can be used to deal with
+  undefined macros.  The following table summarizes the expansion of
+  conditional macros when the "foo" macro is defined and the value
+  is "bar" or not defined:
+
+                    |               Expansion when %foo is
+  Macro             |    defined as bar        |    undefined
+  ------------------+--------------------------+-------------------------
+  %foo              |    bar                   |    %foo
+  %{?foo}           |    bar                   |    <empty string>
+  %{?foo:fred}      |    fred                  |    <empty string>
+  %{?!foo:fred}     |    <empty string>        |    fred
+  %{!?foo:fred}     |    <empty string>        |    fred
+
+  Macro expansions can be nested:
+
+  %define fred %{?foo}%{!?foo:%{bar}}
+
+
+3.3 Using the output of external commands
+
+  The %(command) expression can be used to colled the output of
+  an external command, just like $(command) or `command` in shell
+  scripts:
+
+  %define os_release %(uname -r)
+
+
+3.4 Predefined macros
+
+  A number of commonly used macros are predefined in the
+  macros file under $(libdir)/pkgbuild-$(version).  The most
+  useful ones are summarized below:
+
+  Macro name         |      Default value
+  -------------------+------------------------------
+  %_pkgbuild         | pkgbuild
+  %_is_pkgbuild      | 1
+  %_pkgbuild_version | <the version of pkgbuild>
+  %buildroot         | /var/tmp/<package name>-<version>-build
+                     | (this is the location of the proto area)
+  %__install         | /usr/bin/ginstall
+  %__make            | /usr/bin/make
+  %__patch           | /usr/bin/gpatch
+  %__perl            | /usr/perl5/bin/perl
+  %__python          | /usr/bin/python
+  %__strip           | /usr/ccs/bin/strip
+  %_topdir           | %{__homedir}/packages
+  %_buildshell       | /bin/bash
+  %_builddir         | %{_topdir}/BUILD
+  %_pkgdir           | %{_topdir}/PKGS
+  %_sourcedir        | %{_topdir}/SOURCES
+  %_specdir          | %{_topdir}/SPECS
+  %_srcpkgdir        | %{_topdir}/SPKGS
+  %_pkgmapdir        | %{_topdir}/PKGMAPS
+  %_tmppath          | %{_var}/tmp/pkgbuild-%__logname
+  %_prefix           | /usr
+  %_exec_prefix      | %{_prefix}
+  %_bindir           | %{_exec_prefix}/bin
+  %_sbindir          | %{_exec_prefix}/sbin
+  %_libexecdir       | %{_exec_prefix}/libexec
+  %_datadir          | %{_prefix}/share
+  %_sysconfdir       | %{_prefix}/etc
+  %_sharedstatedir   | %{_prefix}/com
+  %_localstatedir    | %{_prefix}/var
+  %_lib              | lib
+  %_libdir           | %{_exec_prefix}/%{_lib}
+  %_includedir       | %{_prefix}/include
+  %_oldincludedir    | /usr/include
+  %_infodir          | %{_datadir}/info
+  %_mandir           | %{_datadir}/man
+  %_docdir           | %{_datadir}/doc
+  %_pkg_docdir       | %{_docdir}/%{name}
+
+  The following macros can be used to control pkgbuild's behavior:
+
+  %_unpackaged_files_terminate_build      1
+
+    When set to 1, this requires all files in the proto area to be
+    included in a binary package.
+
+  %_missing_doc_files_terminate_build     1
+
+    This means that all documentation files flagged with the %doc
+    modified in the %files list must exist.
+
+  %_invalid_patches_terminate_build       1
+
+    When set to 0, patches that cannot be applied to the sources
+    are skipped and the build continues without them.  The default
+    is that all patches must apply.
+
+  %_use_ips_autotag                       1
+
+    When set to 1, automatically add actuators to some well known
+    file types (e.g. GNOME .desktop files, desktop icons, gconf schemas)
+
+
+4 Tags
+
+  Spec files contains lots of information about the component they
+  belong to.  Some of this information is used during the build
+  process others are directly or indirectly used for in the
+  binary packages to describe the package.  Since spec files were
+  invented for building RPM packages, not all tags make sense when
+  building SVr4 or IPS packages and similarly, there are aspects of
+  SVr4 and IPS packages that cannot be described by RPM's tags.
+
+  Most tags are not required and either have a default value or
+  can be omitted from the corresponding package's pkginfo or manifest
+  file.
+
+  The required tags are Name and Version.  Note that RPM also requires
+  Release, License, Summary and Group to be defined.
+
+
+4.1  pkgbuild-specific tags
+
+  This section describes the tags specific to pkgbuild's spec files
+  and explains their use.
+
+
+  Tags used for Solaris SVr4 packaging are prefixed with SUNW:
+
+  SUNW_BaseDir:
+    corresponds to BASEDIR in the pkginfo(4) file, default: /
+
+  SUNW_Pkg:
+    the package abbreviation (PKG parameter) in the pkginfo(4),
+    defaults to %{name}
+
+  SUNW_ProdName:
+    SUNW_PRODNAME in pkginfo(4), omitted from pkginfo if not defined.
+
+  SUNW_ProdVers:
+    SUNW_PRODVERS in pkginfo(4), omitted from pkginfo if not defined.
+
+  SUNW_Category:
+    CATEGORY in pkginfo(4), default: application
+
+  SUNW_Hotline:
+    HOTLINE in pkginfo(4), omitted from pkginfo if not defined.
+
+  SUNW_MaxInst:
+    MAXINST in pkginfo(4), omitted from pkginfo if not defined.
+
+  SUNW_Rev:
+    REV part of the SVr4 version string.  Defaults to
+    $(date +%Y.%m.%d.%H.%M.%S)
+    The full SVr4 version string is %{version},REV=%{sunw_rev}
+
+  SUNW_Copyright:
+    Name of the copyright file to be included in the prototype(4) file.
+    Omitted, if not defined.  The copyright file with the given name
+    is expected to be in %_sourcedir (the SOURCES directory in the
+    build area).  Copyright files are passed through pkgbuild's parser
+    for expanding macros.  This is useful for repeating information
+    from the spec file in the copyright file, for example the download
+    URL:
+
+    ... the source code was downloaded from %{SOURCE.url} ...
+
+  SUNW_PkgList:
+    SUNW_PKGLIST parameter in pkginfo(4), omitted if missing.
+
+  SUNW_Loc:
+    SUNW_LOC parameter in pkginfo(4), omitted if missing.
+
+  SUNW_PkgType:
+    SUNW_PKGTYPE parameter in pkginfo(4), defaults to "usr" if
+    SUNW_BaseDir is /usr, "root, if SUNW_BaseDir is /, omitted
+    otherwise.
+
+  SUNW_Desc:
+    DESC parameter in pkginfo(4), defaults to %{summary}
+
+  SUNW_Pkg_AllZones:
+    SUNW_PKG_ALLZONES in pkginfo(4), omitted from pkginfo if missing.
+
+  SUNW_Pkg_Hollow:
+    SUNW_PKG_HOLLOW in pkginfo(4), omitted from pkginfo if missing.
+
+  SUNW_Pkg_ThisZone:
+    SUNW_PKG_THISZONE in pkginfo(4), omitted from pkginfo if missing.
+
+
+  Tags used for building IPS packages are prefixed with "IPS_":
+
+  IPS_Package_Name:
+    Defines the name of the IPS package.  Default: %name
+
+  IPS_SourcePackage:
+    Defines the name IPS source package.  Default: %{name}/src
+
+  IPS_Component_Version:
+    Sets the component version portion of the IPS package version string,
+    as described in pkg(5).  For example 2.20 in the case of this package:
+
+    gtk2@2.20.0,5.11-0.133:<timestamp>
+
+  IPS_Build_Version:
+    Sets the build version portion of the IPS version string.  5.11 in the
+    above example.  See pkg(5).
+  
+  IPS_Vendor_Version:
+    Sets the vendor-specific branch version portion of the IPS version
+    string, 0.133 in the above example.  See pkg(5).
+
+  Meta is a special tag introduced for adding arbitrary metadata to
+  IPS packages (using the 'set' action).  The syntax is:
+
+  Meta(attribute_name): value
+
+  Example:
+
+  Meta(info.classification): org.opensolaris.category.2008:Applications/Games
+
+  Other commonly used Meta tags are:
+
+  Meta(info.upstream):	 	[name email of open source project leader]
+  Meta(info.maintainer):	[name email of ips pkg porter/maintainer]
+  Meta(info.repository_url):	[open source code repository]
+
+  Spec file tags translate to IPS package attributes as follows:
+
+  Name 	          pkg.name
+  Summary 	  description
+  Summary 	  pkg.summary
+  Url 		  info.upstream_url
+  		  (defaults to http://pkgbuild.sf.net/)
+  Group 	  info.classification
+  		  (freedesktop.org:: is prepended to the value of Group)
+  Meta(<name>) 	  <name>
+  SUNW_Copyright  payload of the license action
+  License         the description of the license in the license action
+  Requires        depend action
+
+  A "legacy" action is also added to the manifest.  It uses the package
+  data defined for SVr4 packaging, for example SUNW_Pkg and SUNW_Category.
+
+
+4.2  Source and Patch tags
+
+  The names (and locations) of source files and patches (source diffs)
+  are added as tags.  The Source<n> tag defines the nth source file
+  name or URL and similarly, Patch<N> defines the Nth patch file name
+  or URL.  Special macros exist for unpacking sources and applying
+  patches in the %prep section, see 7.1 for details.  The %SOURCE<n>
+  and %PATCH<N> macros can be used to refer to the full local path to
+  a copy of the given source or patch.  They can also be written as
+  %{S:<n>} and %{P:<N>}.  A Source or Patch tag without a number is
+  equivalent with Source0 or Patch0 respectively.
+
+  To refer to the source URL, use %{SOURCE<n>.url}.
+
+
+4.3  Other tags
+
+  The following tags are also implemented by pkgbuild:
+
+  Name: name of the component (upstream package)
+  Version: version of the component
+  License: identification of the license, e.g. GPLv2
+  Copyright: (Obsolete) same as License
+  BuildRoot: location of the prototype directory
+  Group: classification of the package according to the freedesktop.org
+         classification scheme
+  NoSource: list of Source numbers not to be included in the source package,
+         e.g. NoSource: 1 2
+  NoPatch: list of Patch numbers not to be included in the source package
+  Vendor: name of package vendor
+  Summary: one-line description of the package
+  BuildRequires: build-time dependency
+  Requires: runtime dependency
+  BuildConflicts: package with a build-time conflict
+  BuildPrereq: same as BuildRequires
+  
+
+  These tags are accepted by the parser but currently ignored by pkgbuild:
+
+  Release, Epoch, Distribution, Icon, URL, Packager, AutoReqProv, Serial,
+  BuildArchitectures, BuildArch, ExcludeArch, ExclusiveArch, ExcludeOS,
+  ExclusiveOS, Prefix, Obsoletes, Provides, Conflicts, Prereq
+
+
+5 Preamble
+
+  Spec files start with a list of tag definitions that describe the
+  entire component.  This is called the Preamble in RPM's terminology.
+  The information conveyed by the tags in the Preamble is generally
+  stored as metadata in the generated package.
+
+  Although only Name and Version are required, the following tags are
+  usually present in the preamble:
+
+  Name: the name of the component, preferably the upstream name, if the
+        module comes from an external community
+
+  Summary: a one-line description of the component
+
+  Version: this tag defines the version of the binary package(s) built
+        from the module therefore it has to meet the requirements of
+        the packaging systems: a sequence of numbers separated by dots,
+        no leading zeros.  While it's a good idea to keep the Version
+	the same as the upstream version, sometimes changes need to be
+	made in order to meet the above requirement.  In these cases a
+	common practice is to define a macro called tarball_version and
+	use it throughout the spec file whenever the upstream version
+	number is needed.  Examples:
+
+	Name: jpeg
+	%define tarball_version 6b
+	Version: 6.2
+
+	Name: foo
+	%define tarball_version 2.06
+	Version: 2.0.6
+
+  License: identification of the main license(s) in the package, for example
+
+  	License: GPLv3
+
+  Vendor: the name of the organization that builds the package.  This tag
+        is often found in an include file that is shared across a build
+	environment, such as the OpenSolaris Desktop consolidations's
+	Solaris.inc file.
+
+  BuildRoot: location of the proto area where the binaries are laid out
+        for packaging.  Example:
+
+	BuildRoot: %{_tmppath}/%{name}-%{version}-build
+
+  SUNW_Copyright: OpenSolaris-compliant packages require a license file
+        that describes the license of the component.  This file is
+	usually called %{name}.copyright:
+
+	SUNW_Copyright: %{name}.copyright
+
+  SUNW_BaseDir: the BASEDIR of the SVr4 package, if it's not "/".
+
+  	SUNW_BaseDir: %{_prefix}
+
+  SUNW_Pkg: the SVr4 package abbreviation, if different from Name
+
+  IPS_package_name: the IPS package name, if different from Name
+
+  URL: a pointer to a web site with more information about the component
+
+        Name: gtk2
+	URL: http://www.gtk.org/
+
+  Source, Source1, Source2, ...: list of sources, with full upstream
+        URLs.  Use the %{version} macro in the URLs instead of repeating
+	it.
+
+  Patch, Patch1, Patch2, ...: list of source patches (diffs) that will
+        be applied to the sources.  The naming convention used by
+	the Desktop Consolidation and Source Juicer is:
+
+	%{name}-<nn>-<description>.diff
+
+	<nn> is a 2-digit number that specifies the order in which
+	patches should be applied and <description> is a short
+	description of what the patch does.  Example:
+
+	Patch5:       gtk+-05-sun-pgdn-pgup-keybindings.diff
+
+	The Desktop Consolidation uses -p1 unified diffs (See the -p
+	option in patch(1) and -u in diff(1))
+
+  BuildRequires: This tag declares one or more build-time dependencies of
+        the component.  Multiple dependencies can by separated by commas,
+	but it is generally more readable to use multiple BuildRequires
+	declarations instead.  It is syntactically correct to specify
+	required versions of dependencies, but pkgbuild does not
+	currently enforce the version constraints.  Example:
+
+	BuildRequires: SUNWgtk2 > 2.10.0, SUNWglib2 >= 2.5.0
+
+	this is equivalent with:
+
+	BuildRequires: SUNWgtk2 > 2.10.0
+	BuildRequires: SUNWglib2 >= 2.5.0
+
+	and in pkgbuild's current implementation the version is ignored:
+
+	BuildRequires: SUNWgtk2
+	BuildRequires: SUNWglib2
+
+	The dependency can be a SVr4 package name, an IPS package name
+	or a file name (full path):
+
+	BuildRequires: SUNWbash
+	BuildRequires: shell/bash
+	BuildRequires: /usr/bin/bash
+
+  Requires: similar to BuildRequires, but defines the runtime dependencies
+        of the package.  pkgbuild attempts to translate dependency
+	specifications to package names native to the format of	the package
+        being created.  File name dependencies are also translated to
+	package names based on which package contains the file.
+
+  BuildConflicts: opposite of BuildRequires.  Declares that the presence
+        of the given package(s) or file(s) is incompatible with the build
+	process of this component.
+
+  Conflicts: declares a conflicting binary package.  Not currently
+        implemented.
+
+  A multi-line package description can be added at the end of the
+  preamble, preceeded by the %description directive:
+
+  %description
+  Lorem ipsum dolor sit amet, consectetur adipisicing elit,
+  sed do eiusmod tempor incididunt ut labore et dolore magna
+  aliqua. Ut enim ad minim veniam, quis nostrud exercitation
+  ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+  Duis aute irure dolor in reprehenderit in voluptate velit
+  esse cillum dolore eu fugiat nulla pariatur.
+
+  The text of the description ends when it reaches a line that starts
+  with a keyword (e.g. %package, %build, %define).
+
+  It is a common mistake to add more tags after the %description.
+  They will not be recognized as tags and will become part of the
+  description text.
+
+  The current version of pkgbuild does not use the description, but
+  it is still a good practice to add it.
+
+
+6 Packages
+
+  A spec file can define one or more SVr4 and one or more IPS packages.
+  While the files in these packages are the same, the package boundaries
+  need not be.  The %package directive defines a group of files for
+  the purpose of packaging and assigns a name that may or may not match
+  either the IPS package name or the SVr4 package name of the given
+  group of files.  The %packages tag is followed by a number of tag
+  definitions that apply to the package.  By default, all tags inherit
+  the value assigned in the main package.  Dependencies, however, are
+  not inherited, the package must declare its own dependencies using
+  Requires tags.
+
+  The %package directive has 2 forms:
+
+  %package -n <package_name>
+
+  In the this form, the default behavior is that a separate SVr4 package
+  called <package_name> is created and also a separate IPS package
+  with the same name.
+
+  %package <suffix>
+
+  In this form, by default a separate SVr4 package called %{name}-<suffix>
+  is created but for the purpose of IPS packaging, the files are merged
+  in the main package.
+
+  In both cases the SUNW_Pkg and IPS_Package_Name tags can be used to
+  change the default behavior.  Setting SUNW_Pkg or IPS_Package_Name
+  to a package name previously assigned to another package or the
+  main package causes the files to be merged into that package.
+  Otherwise a new package by that name will be created.
+
+  Example 1:
+
+  Name: foo
+  ...
+  %package devel
+
+  Result:
+    - SVr4: foo and foo-devel
+    - IPS:  foo (devel files merged into foo)
+
+  Example 2:
+
+  Name: foo
+  ...
+  %package -n foo-devel
+
+  Result:
+    - SVr4: foo and foo-devel
+    - IPS: foo and foo-devel
+
+  Example 3:
+
+  Name: foo
+  ...
+  %package -n bar
+  IPS_Package_Name: foo
+
+  Result:
+    - SVr4: foo and bar
+    - IPS: foo
+
+  Example 4:
+
+  Name: foo
+  ...
+  %package bar
+  IPS_Package_Name: bar
+  SUNW_Pkg: foo
+
+  Result:
+    - SVr4: foo (bar merged into foo)
+    - IPS: foo and bar
+
+  After the last tag, a %description specific to the package can be
+  added.  The %description directive should use the same arguments
+  as the corresponding %package directive:
+
+  %package devel
+  Requires: %name
+
+  %description devel
+  Development files for %{name}
+
+
+7 Scriptlets
+
+  Scriptlets are shell script fragments that interact with the component's
+  native build system, for example GNU make and GNU autotools or ant or
+  Python setuptools.  They are responsible for performing all the steps
+  necessary to produce the binaries that make up the packages and lay
+  them out in the proto area.  Each scriptlet is executed as a separate
+  shell script.
+
+  The interpreter used by the shell scripts is defined by the _buildshell
+  macro, the default is /bin/bash.  When using bash, pkgbuild sets the
+  following environment variables before the scriptlet itself:
+
+  RPM_SOURCE_DIR=%{_sourcedir}
+  RPM_BUILD_DIR=%{_builddir}
+  RPM_OPT_FLAGS=%{optflags}
+  RPM_ARCH=<the current architecture>
+  RPM_OS=<the current OS>
+  RPM_OS_REL=<the current OS release>
+  RPM_DOC_DIR=/usr/share/doc/packages/%{name}
+  RPM_PACKAGE_NAME=%{name}
+  RPM_PACKAGE_VERSION=%version
+  RPM_PACKAGE_RELEASE=%release
+  RPM_BUILD_ROOT=%buildroot
+
+  It also sets the "-x" (print commands as they are executed) and
+  "-e" (exit when a command fails) flags.  See "set" in the
+  "SHELL BUILTIN COMMANDS" section of bash(1) for more details.
+  In the case of other interpreters the scriptlets are expected to
+  return and exit status of 0 for success and non-0 in case of an
+  error.
+
+  pkgbuild executes the scriptlets in the following order:
+   1 prep
+   2 build
+   3 install
+   4 check
+   5 clean
+
+  None of the scriptlets are required parts of a spec file.  When missing,
+  the build simply advances to the next stage.
+
+  The -b<s> option can be used to stop the build after a certain stage:
+    p  =  %prep
+    c  =  %prep and %build (c for compile)
+    i  =  %prep, %build, %install and %check
+    b  =  all of the above and build binary package(s) and run %clean
+    a  =  all of the above and build a source package as well
+
+  To execute only 1 stage, use the --short-circuit option, e.g.
+
+  pkgbuild --short-circuit -bi foo.spec
+
+
+7.1  %prep
+
+  This section is responsible for preparing the source code.  This
+  includes unpacking tarballs, applying source patches, making
+  other changes to the source files.  In most cases unpacking the
+  sources and applying patches is all that is needed, so pkgbuild
+  (like rpmbuild) has high level macros for performing these steps:
+
+  %setup
+
+  Without any arguments %setup simply unpacks Source0, using whatever
+  compression and unpacking methods necessary, based on the file name
+  suffix.  %setup has several flags that change its behavior (among
+  others, they allow unpacking multiple tarballs).  These are documented
+  in detail in max-rpm:
+  http://www.rpm.org/max-rpm-snapshot/s1-rpm-inside-macros.html
+
+  The most commonly used options are:
+
+  -q      = quiet unpacking
+  -n foo  = declares that unpacking the source bundle creates a
+            directory called foo.  Use this macro, if foo is
+	    different from the default %name-%version
+  -c      = create a directory before unpacking the source bundle.
+            Useful when the bundle does not create a top-level directory.
+	    The default is %name-%version.  Use the -n option to change it.
+
+  %patch<N>
+
+  The %patch<N> macro is used to apply the Nth source patch to the source
+  tree (using the GNU patch command).  Use the -p<n> option is passed to
+  gpatch to remove <n> levels of directories from the beginning of each
+  file path.  See gpatch(1).  Other options are described in
+  http://www.rpm.org/max-rpm-snapshot/s1-rpm-inside-macros.html
+
+  Example:
+
+  %prep
+  %setup -q -n glib-%{version}
+  %patch1 -p1
+  %patch2 -p1
+  %patch3 -p1
+
+
+7.2  %build
+
+  The build section creates the binaries.  What exactly it does depends
+  on the native build system of the component.  In the case of a component
+  that uses GNU autotools, it typically sets some environment variables
+  (for example compiler flags), runs configure with some options (like
+  --prefix and options the select/unselect features) and the runs make:
+
+  %build
+  export CFLAGS="%optflags"
+  export PYTHON=/usr/bin/python2.6
+  ./configure --prefix=%{_prefix} \
+            --mandir=%{_mandir} \
+            --datadir=%{_datadir} \
+	    --disable-fam
+  make
+
+
+7.3  %install
+
+  The install scriptlet copies the files that will become part of the
+  binary package(s) to a prototype area.  The location of this directory
+  is identified by the %{buildroot} macro and the $RPM_BUILD_ROOT
+  environment variable (in the case of bash scripts).
+  Components that use GNU autotools for their native build system
+  typically use "make install DESTDIR=$RPM_BUILD_ROOT".  Since pkgbuild
+  requires that all files under $RPM_BUILD_ROOT are included in a package,
+  files that the package developer does not want to include in packages
+  (for example libtool's .la or Python's .pyo files) must be deleted.
+
+  It is a good idea to clear $RPM_BUILD_ROOT at the beginning of the
+  %install section to make sure that no files are left behind from a
+  previous (possibly failed) build.
+
+  Example:
+
+  %install
+  rm -rf $RPM_BUILD_ROOT
+  make install DESTDIR=$RPM_BUILD_ROOT
+  # delete libtool .la files
+  rm $RPM_BUILD_ROOT%{_libdir}/lib*.la
+
+
+7.4  %check
+
+  This section is executed immediately after %install and the purpose
+  is to verify the integrity of the build by performing tests on the
+  newly built binaries.  Many components provide a "make check" target
+  for this purpose.
+
+  You can also use this section to verify that all required parts of
+  the package were built (missing dependencies can cause features to
+  be disabled at build-time):
+
+  %check
+  # sanity check: verify that some tricky modules were successfully built:
+  for f in _ctypes.so _curses.so _curses_panel.so _elementtree.so \
+    _multiprocessing.so _sqlite3.so _ssl.so _tkinter.so crypt.so \
+    pyexpat.so sunaudiodev.so zlib.so dlpi.so ucred.so bz2.so; do
+    test -f $RPM_BUILD_ROOT%{_libdir}/python%{majmin}/lib-dynload/$f || {
+        echo ERROR: required module $f missing
+        exit 1
+    }
+  done
+
+
+7.5  %clean
+
+  This section (if present in the spec file) is run after the binary
+  packages are created and it is used to clean up after the build.
+  The most common command in this section is
+
+  rm -rf $RPM_BUILD_ROOT
+
+  which deletes the prototype area.
+
+
+8 Installation scripts
+
+  SVr4 package developers can "enhance" the functionality of their
+  packages using installation scripts.  Installation scripts are generally
+  used to change the state of the system during installation or
+  uninstallation.  Given the number of different installation
+  scenarios, it is difficult to get these scripts right and therefore
+  the use of such scripts is discouraged.  Although SVr4 packaging
+  allows other kinds of packages as well, pkgbuild only implements
+  scripts that are acceptable for integration into the Solaris OS.
+  These scripts are described below in more detail.
+
+
+8.1  Procedure scripts (pre-/post-install/uninstall)
+
+  Below is the list of procedure scripts and the corresponding spec
+  file sections:
+    - preinstall           = %pre
+    - postinstall          = %post
+    - preremove            = %preun
+    - postremove           = %postun
+
+  Be default, the scripts are added to the main package.  To add a
+  procedure script to another package, use the same arguments as
+  the corresponding %package directive:
+
+  %package -n foo-devel
+  ...
+  %post -n foo-devel
+
+  Short scripts can be inlined in the spec file:
+
+  %pre
+  echo Hello world
+
+  The inline script can use spec file macros.  They end at a line
+  that starts with a spec file keyword (e.g. %post, %files, %changelog).
+
+  Longer scripts are best kept in separate files and referenced
+  using the -f option:
+
+  %post devel -f %{name}-devel.postinstall
+
+
+8.2  Class Action Scripts
+
+  Class Action Scripts (CAS) are responsible to performing installation
+  or removal actions on a set of files, typically by editing an existing
+  (editable) file that is shared by multiple packages.
+
+  Files that belong to a specific class must be flagged in the %files
+  list using the %class(class_name) modifier (see Section 9.1 for more
+  detail).
+
+  To define a new class, you need to provide either an installation script
+  (%iclass directive) or a removal script (%rclass directive) or both.
+  Just like in the case of procedure scripts, CASs can also be inlined or
+  referenced using the -f file_name option:
+
+  %iclass myclass -f i.myclass
+
+  System default CASs (those located in /usr/sadm/install/scripts) do not
+  need to be defined in the spec file, they can be used in the %files
+  lists with the %class modifier.
+
+
+8.3  Installation scripts in IPS (or the lack of)
+
+  The Image Packaging System does not allow any kind of scripting.
+  The reasons are detailed here: 
+  http://blogs.sun.com/sch/entry/pkg_1_a_no_scripting
+
+  In the real world, however, some configuration is often necessary.
+  The recommended solution is using transient SMF services to perform the
+  configuration steps.  Transient services are executed at system boot
+  and IPS can also restart the services at the end of installation when
+  any affected actions are tagged with "restart_fmri=svc://some/service".
+
+
+9 Files and actions
+
+  The contents of the package prototype area created in the %install
+  section need to be sorted into binary packages.  Most item are
+  directories, files or symlinks.  In the case of SVr4 packages, some
+  of them may have special attributes like being volatile or having
+  a class action script associated with them.  In the case of IPS,
+  there are all kinds of other actions as well, for example adding
+  a new group or user.  IPS actions that are not files, directories
+  or symlinks can be defined in the %actions section.  %actions
+  sections are ignored when building SVr4 packages.
+
+
+9.1  %files
+
+  The %files section lists that files included in the main package
+  and in the packages defined using %package directives.  As explained
+  in Section 6, these groups of files make up the SVr4 package and the
+  IPS packages, but they do not necessarily include the same groups
+  of files and the number of SVr4 packages created in the spec file
+  may be different from the number of IPS packages.
+
+  Without arguments, %files belongs to the main package.  %files
+  lists for other packages must use the same arguments as the
+  corresponding %package directive:
+
+  %package devel
+  ...
+  %files devel
+
+  The %files list usually starts with the definition of the default
+  file attributes:
+
+  %defattr (file_mode, user, group[, dirmode])
+
+  file_mode is the default mode (permissions) of files in the package,
+  specified as an octal number. 
+  user and group are the default owners of the files and directories.
+  dirmode is the default mode of the directories.  If omitted, it
+  matches file_mode.  Either of these parameters can be replaced
+  with a dash, which means pkgbuild should use the attribute of the
+  file/directory, as found in the prototype area.  Since pkgbuild
+  requires building as a non-privileged user, it is not a good idea
+  to leave the user and group unspecified because pkgbuild will
+  then use the build user's user name and group name in the package.
+  A typical %files list start with:
+
+  %defattr(-, root, root)
+
+  A files list can contain multiple %defattr definitions, in which
+  case they apply to the files listed after them.  Automatically
+  added parent directories use the attributes of the last %defattr
+  statement in the %files list.
+
+  All other lines in %files consist of a path name or path name
+  pattern (shell-style glob) optionally prefixed by some modifiers.
+  If path name is a directory, all contents of the directory are
+  added recursively (unless the %doc modifier is used, see below).
+
+  For portability, path names are usually written using macros:
+
+  %{_bindir}/foo
+
+  Patterns should be used with care: using too restrictive patterns
+  require more work to maintain (more lines need to be updated when
+  upgrading the component to a newer version), while too inclusive
+  patterns may hide build errors that cause some files not to be
+  present.  Examples:
+
+  Too restrictive:
+
+  %{_datadir}/foo-doc/file1.html
+  %{_datadir}/foo-doc/file1_a.html
+  %{_datadir}/foo-doc/file1_b.html
+  %{_datadir}/foo-doc/file2.html
+  %{_datadir}/foo-doc/images/foo1.png
+  ...
+
+  Too inclusive:
+
+  %{_libdir}/foo-plugins/*
+
+  The following modifiers are implemented in pkgbuild:
+
+  %attr - same as %defattr, but applies to the given line only
+
+  %dir - when applied to a directory name, specifies that only the
+         directory itself should be added, not the contents recursively.
+	 Useful when the permissions of the directory are different from
+	 its contents:
+
+	 %attr(0755, root, other) %{_datadir}/applications
+	 %{_datadir}/applications/foo.desktop
+
+  %config - SVr4: when used in conjunction with %class(foo), it
+         marks the file editable (type 'e')
+         - IPS: it tags the file with preserve=\"renamenew\"
+
+  %ghost - SVr4: marks the file volatile (type 'v')
+
+  %class(class_name) - SVr4: declares that that file is part of
+         class class_name.
+
+  %ips_tag(foo=bar) - IPS: adds "foo=bar" as a tag on the given file
+         example:
+
+	 %ips_tag(restart_fmri="svc:/foo/bar") %{_libdir}/fred
+
+  %hard - when applied to a symlink, it becomes a hard link in the
+         prototype / manifest.
+
+  %doc - flags documentation files, see Section 9.1.2
+  
+  %verify - ignored
+
+  %docdir - ignored
+
+
+9.1.1  Dynamically generated %files lists
+
+  Sometimes sorting files into packages is inconvenient to do manually,
+  for example if you need to separate a large number of files based on
+  some pattern.  pkgbuild (like rpmbuild) allows package developers to
+  create a list of files during the build and use that in %files.
+  Use the -f file_name flag to associate file_name with the %files list.
+  pkgbuild will look for file_name in the top level build directory of
+  the component (e.g. ~/packages/BUILD/foo-1.0/).
+  The %files file (metafile) can list some or all files in the package:
+
+  %files devel -f api_docs.lst
+  %defattr (-, root, bin)
+  %{_includedir}/foo.h
+
+  The metafile is usually generated in the %install section:
+
+  %install
+  rm -rf $RPM_BUILD_ROOT
+  make install DESTDIR=$RPM_BUILD_ROOT
+  find $RPM_BUILD_ROOT%{_datadir}/foo -name 'foo_API_*.html' -print \
+     | sed -e 's,$RPM_BUILD_ROOT,,' > api_docs.lst
+
+
+9.1.2  %doc files
+
+  pkgbuild (like rpmbuild) can help create "package documentation files".
+  These files are part of the source tree and they are saved in a
+  package-specific directory in the binary package for users to review.
+  It can include README files, instructions, licensing information,
+  examples, etc.
+
+  Package documentation files are prefixed with the %doc modifier and
+  are specified with a relative path.  A whitespace-separated list of
+  files can be specified in a single line.  pkgbuild will look for the
+  relative path under the top level source directory of the component.  
+
+  pkgbuild's implementation of the %doc modifier is slightly differs
+  from rpmbuild's:
+
+   - pkgbuild supports %doc(compress|gzip|bzip2) tag, this
+     causes the files to be compressed with the chosen compression
+     utility
+   - the %{_pkg_docdir} macro can be used to refer to or to change the
+     doc directory of a package
+   - files in subdirectories of the top level source directory can be
+     tagged with %doc:
+
+     %doc po/ChangeLog
+
+     The file will be placed in a subdirectory of the same
+     name under %{_pkg_docdir}
+
+   - %doc -d <subdir> changes the directory to <subdir> before
+     looking for a documentation file.  As a result, "subdir"
+     will not be created in %{_pkg_docdir}.  This is useful
+     for example in the this source directory structure:
+
+     ~/packages/BUILD/foo-1.0/
+	   i386/foo-1.0/README, etc...
+	   amd64/foo-1.0/README, etc...
+
+     in the package, we want the README file to be under
+     /usr/share/doc/foo/README, and not under
+     /usr/share/doc/foo/i386/foo-1.0/README, 
+
+     So in %files, use this:
+
+     %doc -d %{base_arch}/foo-%{version} README
+
+
+9.2  %actions
+
+  The actions section is used to add arbitrary actions to the IPS
+  manifest.  Macros are expanded the in items of the %actions sections
+  but no other processing or verification is performed.  Like %files,
+  %actions must also be linked to the corresponding %package:
+
+  %actions
+  group groupname="testpkg"
+  user username="testuser" group="testpkg"
+
+  %actions -n foo-driver
+  driver name=foo perms="dump 0660 root sys"
+
+
+9.3  autotag
+
+  As mentioned in section 8.3, some files need additional processing
+  after installation/update.  This is usually done in SMF services and 
+  the restart_fmri IPS tag can be used to tell IPS to restart the
+  services.
+
+  "autotag" is a feature that automatically adds restart_fmri tags for
+  some known types of files, for example SMF manifests, .desktop files,
+  GConf schemas.  Autotag also adds dependencies on the packages that
+  include the SMF services to be restarted.  Package developers can
+  add their own tags using the IPS_tag modifier.
+
+  To disable autotag, the spec file can set _use_ips_autotag to 0:
+
+  %define _use_ips_autotag 0
+
+  or the user can set it on the pkgbuild or pkgtool command line:
+
+  pkgbuild --define '_use_ips_autotag 0' -ba foo.spec
+
+  and finally, it can also be disabled in ~/.pkgbuildmacros:
+
+  %_use_ips_autotag 0
+
+  The current version of pkgbuild includes the following autotag rules:
+
+  Path name regexp
+       	    SMF service to restart
+	    		Additional dependencies
+  /etc/gconf/schemas/.*\.(schemas|entries)$/
+            svc:/applications/desktop-cache/gconf-cache:default
+                        SUNWdesktop-cache
+  usr/share/icons/.*
+            svc:/applications/desktop-cache/icon-cache:default
+                        SUNWdesktop-cache
+  usr/lib/.*gtk-2.0/.*/immodule/.*\.so
+            svc:/application/desktop-cache/input-method-cache:default
+                        SUNWdesktop-cache
+  usr/share/mime/packages/.*
+            svc:/application/desktop-cache/mime-types-cache:default
+                        SUNWdesktop-cache
+  usr/lib/.*gtk-2.0/.*loaders/.*\.so
+            svc:/application/desktop-cache/pixbuf-loaders-installer:default
+                        SUNWdesktop-cache
+  usr/share/applications/.*
+            svc:/application/desktop-cache/desktop-mime-cache:default
+                        SUNWdesktop-cache
+  usr/X11/lib/X11/fonts/.*\.(ttf|pcf|pcf\.gz)
+            svc:/application/font/fc-cache:default
+                        SUNWfontconfig
+  var/svc/manifest/.*\.xml
+            svc:/system/manifest-import:default
+
+
+10 Multi-level spec file structures
+
+  This section discusses some features intended to make it easier to
+  create a consistent set of packages from a spec file repository.
+  These features are incompatible with rpmbuild.
+
+10.1  %include
+
+  The %include directive works just like #include in the C preprocessor:
+  it reads the contents of the include file as if it was included in
+  the parent file where the %include line occurs.
+
+  %include exists in rpmbuild as well, but the usage is slightly
+  different.  In rpmbuild, files to be included must listed with
+  an absolute path and they do not get included in the source package
+  unless they are also declared using a Source tag:
+
+  Source5: foo.inc
+  ...
+  %include %SOURCE5
+
+  This above example works with both pkgbuild and rpmbuild.  The
+  include file (since it's a source) is expected to be in %_sourcedir,
+  just like the rest of the sources.
+
+  In pkgbuild's implementation, a relative path after %include is
+  considered a part of the spec file therefore it is expected to
+  be in %_specdir and is automatically included in the source package:
+
+  %include Solaris.inc
+
+
+10.2  %use                               
+
+  The %use directive is more sophisticated.  It allows referencing
+  parts of another spec file through macro expansion.  First, we
+  need to assign a name or label to a spec file:
+
+  %use glib2 = glib2.spec
+
+  After this line, the parent spec file can refer to tags, macros
+  and scriptlets of glib2.spec, for example:
+
+  Version: %{glib2.version}
+
+  and even:
+
+  %setup
+  %glib2.prep
+
+  Macros in the referenced spec file (glib2.spec in the above example)
+  are evaluated where the %use directive appears.  For example, if
+  glib2.spec define CFLAGS like this:
+
+  CFLAGS="%{?optflags}"
+
+  then defining (or redefining) %optflags before the %use statement
+  affects what the above line is expanded into:
+
+  %define optflags -xO2
+  %use glib2 = glib2.spec           --->       CFLAGS="-xO2"
+
+  Leveraging this behavior, it's easy to build the same component
+  multiple times, with different parameters, and include them in
+  the same package, for example 32-bit and 64-bit variants:
+
+  %define optflags -fast -m64
+  %define _libdir %{_prefix}/lib/64
+  %use glib2_64 = glib2.spec
+  %define optflags -fast
+  %define _libdir %{_prefix}/lib
+  %use glib2 = glib2.spec
+
+  We now have 2 labels assigned to the same spec file.  One has its
+  macros expanded for a 64-bit build, the other for a 32-bit build.
+
+  We can now write a %prep section that calls the %prep sections
+  of each spec file, running them in separate subdirectories to
+  avoid conflicts:
+
+  %prep
+  rm -rf %name-%version
+  mkdir -p %name-%version/32
+  %glib2.prep -d %name-%version/32
+  mkdir -p %name-%version/64
+  %glib2_64.prep -d %name-%version/64
+
+  As we can see in the above example, when calling scriptlets of
+  a %use'd spec file, the -d dir argument causes the scriptlet to
+  be executed in dir.  The working directory of the calling scriptlet
+  does not change as a result of using the -d dir argument.
+
+  Similarly, the %build and %install scriptlets can also call glib2's
+  and glib2_64's corresponding scriptlets, using the -d dir argument:
+
+  %build
+  %{glib2.build} %name-%version/32
+  %{glib2_64.build} %name-%version/64
+
+  Rarely used, but it is also possible to reference tags in subpackages
+  (defined with %package) in the child spec.  For example, if
+  glib2.spec has a devel subpackage:
+
+  %package devel
+  Summary: glib2 development files
+
+  We can reference the Summary tag in glib2.spec's devel subpackage
+  using %{glib2.devel.summary}.
+
+  The %use directive is also useful when building the same spec file
+  on Linux and Solaris/OpenSolaris is a goal.  The Linux spec file
+  can be left as it is and a Solaris spec file written that wraps
+  the Linux spec file through a %use directive and macro expansions,
+  adding the necessary Solaris-specific information like tags and
+  packaging.
+
+
+11 Conditionals
+
+
+  While, ideally, spec files should be written as generic and
+  architecture-agnostic as possible, sometimes different commands,
+  options or settings are needed on different platforms.
+
+  To process spec file lines on specific architectures only use
+  the %ifarch conditional:
+
+  %ifarch amd64
+  %define _libdir %{_prefix}/lib/amd64
+  %endif
+  %ifarch sparcv9
+  %define _libdir %{_prefix}/lib/sparcv9
+  %endif
+
+  It is also possible to list multiple acceptable architectures:
+
+  %ifarch amd64 sparcv9
+  ...
+  %endif
+
+  The architectures that pkgbuild well accept as matches are those
+  printed by the isainfo command.  The %ifnarch conditional is the
+  logical complement to %ifarch, it matches whose architectures that
+  are not printed by isainfo:
+
+  %ifnarch amd64
+  <lines to process on non-amd64 systems only>
+  %endif
+
+  The %ifos / %ifnos conditionals can be used to separate
+  Solaris-specific parts of a spec file that may be built on
+  other OSs as well:
+
+  %ifos SunOS
+  
+  %endif
+
+  The logical complement is %ifnos:
+
+  %ifnos Linux
+  ...
+  %endif
+
+  A generic %if statement is also available.  In the current version
+  of pkgbuild, it only accepts 1 for logical true 0 for logical false
+  as its argument.  Expression evaluation can be done in a subshell
+  macro:
+
+  %if %(test %foo = "fred" && echo 1 || echo 0)
+  ...
+  %endif
+
+  The %else conditional can be used with any of the conditionals described
+  above.
+
+12 Changelog
+
+   Spec files usually end with a %changelog section.
+   While it's not required in pkgbuild, it is recommended to document
+   all non-trivial changes in the spec file's %changelog section.
+   The format of the %changelog is as follows:
+
+   %changelog
+   * <date> - <user>
+   - <change1>
+   - <change2>
+   * <date> - <user>
+   - <change3>
+
+   where <date> is in date(1) +"%a %b %e %Y" format, <user> is a person's
+   email address and/or name and <changeN> is a short description of the
+   change.  Example:
+
+   %changelog
+   * Tue Jan 26 2010 - fred@example.com
+   - bump version to 2.24.0
+   * Tue Mar 31 2009 - joe@example.com
+   - initial version
+
+   rpmbuild also requires that changelog entries are in descending
+   chronological order.
+
+13 Further reading
+
+   SVr4 packaging: Solaris Application Packaging Developer's Guide:
+   http://docs.sun.com/app/docs/doc/806-7008
+
+   IPS packaging:
+   http://hub.opensolaris.org/bin/view/Project+pkg/documents
+  
+   RPM documentation:
+   http://www.rpm.org/max-rpm-snapshot/
+   http://docs.fedoraproject.org/drafts/rpm-guide-en/
+
+   rpmbuild tutorial:
+   Part 1: http://www-106.ibm.com/developerworks/library/l-rpm1/
+   Part 2: http://www-106.ibm.com/developerworks/library/l-rpm2/
+   Part 3: http://www-128.ibm.com/developerworks/linux/library/l-rpm3.html?dwzone=linux
+
+   pkgbuild mailing list:
+   http://lists.sourceforge.net/mailman/listinfo/pkgbuild-sfe-devel
+
+   OpenSolaris software porters:
+   http://hub.opensolaris.org/bin/view/Community+Group+sw-porters/
+   http://mail.opensolaris.org/mailman/listinfo/sw-porters-discuss
+
+   IRC: irc://freenode:net/#pkgbuild

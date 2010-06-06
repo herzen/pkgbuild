@@ -250,7 +250,7 @@ sub process_args {
     }
 
     if (not defined ($spec_command)) {
-	if (not $arg =~ /^(eval|get_meta|get_packages|get_sources|get_public_sources|get_block|get_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_publish_scripts|get_used_spec_files|get_error|verify|get_requires|get_buildrequires|get_prereq|get_ips_pkgname)$/) {
+	if (not $arg =~ /^(eval|get_meta|get_packages|get_sources|get_public_sources|get_block|get_package_names|match_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_publish_scripts|get_used_spec_files|get_files|get_error|verify|get_requires|get_buildrequires|get_prereq|get_ips_pkgname)$/) {
 	    usage (1);
 	}
 	$spec_command = $arg;
@@ -370,24 +370,30 @@ Options:
 
   General:
 	
-    -v|--verbose:    
-	          Increase verbosity: the more -v's the more diag messages.
+    -v|--verbose  Increase verbosity.  Use -v to prefix the output lines
+		  with the name of the spec file they belong to.
 
-    -q|--quiet:
-                  Silent operation.
+    -q|--quiet:   Silent operation.
 
-    --rcfile=file
-                  Read default configuration from file.
+    --rcfile=file Read default configuration from file.
                   Default: ./.pkgtoolrc, ~/.pkgtoolrc
 
-    --norc
-                  Ignore the default rc files.
+    --norc        Ignore the default rc files.
+
+    --ips	  Print IPS package names, even on SVr4 systems, if \fBpkg(5)\fR
+                  is installed.
+
+    --svr4	  Print SVr4 package names, even on IPS systems.
 
   Directories and search paths:
 
     --specdirs=path, --spec=path:
                   Specify a colon separated list of directories to search
                   for spec files in
+
+    --topdir=dir  Use dir as the rpm base directory (aka %topdir, where the
+                  SPECS, SOURCES, RPMS, SRPMS, BUILD directories are found).
+                  Default: $topdir
 
   Options controlling the build:
                   
@@ -401,47 +407,74 @@ Options:
 
 Commands:
 	
-    eval <expr>   evaluate <expr> in the context of each spec file
-                  specified on the command line
+    eval <expr>   Evaluate <expr> in the context of each given spec file
 
-    get_packages  list the packages defined in the spec files specified
-                  on the command line
+    get_packages  List the packages defined in the given spec files
 
-    get_sources
+    get_sources   List the sources (defined by Source tags) used by
+                  each given spec file.  Sources in %use'd spec files
+                  are also included.
 
-    get_public_sources
+    get_public_sources   Same as get_sources but list only the public
+                  sources (omit those listed in a NoSource tag)
 
-    get_block <block_name>
+    get_block <block_name>   Print the expanded block (sctiptlet) called
+                  <block_name> from each given spec file.
 
-    get_meta
+    get_files     Print the files sections of each given spec file
 
-    get_package_names
+    get_meta      Print the Meta tags defined in each spec file
 
-    get_patches
+    get_package_names   Print the package names defined in each given
+                  spec file.  Use --ips or --svr4 to select the package
+		  format, otherwise package names of the native format
+                  are printed
 
-    get_public_patches
+    match_package_names   Display how %package labels map to SVr4 package
+                  names and IPS package names in each given spec file spec
 
-    get_requires <package name>
+    get_patches   Print the patches (defined by Patch tags) used by
+                  each given spec files.  The patches in %use'd spec file
+		  are also included.
 
-    get_prereq <package name>
+    get_public_patches   Same as get_patches but only prints the public
+                  patches (omits those listed in NoPatch tags)
 
-    get_buildrequires
+    get_requires <package name>   Prints the runtime dependencies (Requires
+		  tags) belonging to package label <package name> and defined
+                  in each given spec file.
 
-    get_classes
+    get_prereq <package name>   Same as get_requires but for PreReq tags.
 
-    get_class_script_names
+    get_buildrequires   Prints the build-time dependencies of the given
+                  spec files.
 
-    get_included_files
+    get_classes   Print any SVr4 classes (other than "none") in each of the
+                  given spec files.
 
-    get_used_spec_files [-l]
+    get_class_script_names  Print any SVr4 class action script names defined
+                  in each of the given spec files.
 
-    get_publish_scripts
+    get_included_files   Print all files included (using the %include
+                  directive) in each given spec file, recursively.
 
-    get_ips_pkgname file|package_name
+    get_used_spec_files [-l]   Print all files referenced using the %use
+                  tag in each given spec file.  With the -l option,
+                  print the labels assigned to the %use'd spec files as well.
 
-    get_error
+    get_publish_scripts   Print the path to the IPS publishing scripts
+                  used for publishing each IPS package defined by the
+                  given spec files.
 
-    verify
+    get_ips_pkgname <file>|<package_name>   Print the IPS package name and
+                  version that corresponds to the given <package_name>
+                  (IPS or SVr4) or <file>.
+
+    get_error     Print any syntax errors in the given spec files.
+
+    verify        Parse the given spec files and return 0 if they can
+                  be parsed without errors, or non-0 if any of them
+                  have errors.
 	
 specs...
 	
@@ -498,6 +531,48 @@ sub do_get_block () {
 	    $exit_val++;
 	} else {
 	    print_result ($spec, $spec->get_block ($spec_cmd_arg));
+	}
+    }
+}
+
+sub do_get_files () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
+	} else {
+	    my @files;
+	    if ($ips) {
+		my @ps = $spec->get_packages ();
+		foreach my $p (@ps) {
+		    # subpackages are merged in the main package
+		    next if $p->is_subpkg();
+		    my @ps2 = $spec->get_packages ();
+		    foreach my $p2 (@ps2) {
+			next if not $p2->has_files();
+			next if $p2->get_ips_name() ne 
+			    $p->get_ips_name();
+			my @f = $p2->get_files();
+			my $pkgname = $p2->get_ips_name();
+			map $_="$pkgname:$_", @f;
+			push (@files, @f);
+		    }
+		}
+	    } elsif ($svr4) {
+		my @ps = $spec->get_packages ();
+		foreach my $p (@ps) {
+		    if ($p->has_files() and not $p->has_svr4_match()) {
+			my @f = $p->get_files();
+			my $pkgname = $p->get_svr4_name();
+			map $_="$pkgname:$_", @f;
+			push (@files, @f);
+		    }
+		}
+	    } else {
+		msg_error ("internal error: either svr4 or ips must be selected");
+	    }
+	    print_result ($spec, @files);
 	}
     }
 }
@@ -616,6 +691,40 @@ sub do_get_package_names () {
     }
 }
 
+sub do_match_package_names () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	my $prefix;
+	if ($long_output) {
+	    $prefix = $spec->get_base_file_name () . ":";
+	} else {
+	    $prefix = "";
+	}
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
+	} else {
+	    my @pkgs = ();
+	    my @ps = $spec->get_packages ();
+	    my $label;
+	    my $svr4_name;
+	    my $ips_name;
+	    foreach my $p (@ps) {
+		# in IPS mode subpackages are merged in the main package
+		if ($p->is_subpkg ()) {
+		    $ips_name = $spec->get_ips_name ();
+		} else {
+		    $ips_name = $p->get_ips_name ();
+		}
+		$svr4_name = $p->get_svr4_name ();
+		$label = $p->get_name ();
+		push (@pkgs, "${prefix}${label}:${svr4_name}:${ips_name}");
+	    }
+	}
+	    print_result ($spec, @pkgs);
+    }
+}
+
 sub do_get_classes () {
     for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
 	my $spec = $specs[$spec_id];
@@ -694,7 +803,10 @@ sub do_get_publish_scripts () {
 	    my @scripts = ();
 	    foreach my $pkg (@pkgs) {
 		next if $pkg->is_subpkg ();
-		my $script = $spec->eval ("%_pkgmapdir") . "/scripts/${pkg}_ips.sh";
+		my $esc_name = $pkg->get_ips_name();
+		$esc_name =~ s/\//%2F/g;
+		my $script = $spec->eval ("%_pkgmapdir") . 
+		    "/scripts/${esc_name}_ips.sh";
 		push (@scripts, $script);
 	    }
 	    print_result ($spec, @scripts);
@@ -862,8 +974,12 @@ sub main {
 	do_get_public_patches ();
     } elsif ($spec_command eq "get_block") {
 	do_get_block ();
+    } elsif ($spec_command eq "get_files") {
+	do_get_files ();
     } elsif ($spec_command eq "get_package_names") {
 	do_get_package_names ();
+    } elsif ($spec_command eq "match_package_names") {
+	do_match_package_names ();
     } elsif ($spec_command eq "get_classes") {
 	do_get_classes ();
     } elsif ($spec_command eq "get_meta") {

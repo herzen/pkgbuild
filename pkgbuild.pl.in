@@ -61,6 +61,12 @@ if (not defined($ips_server)) {
 	$ips_server = $ips_utils->get_local_ips_server();
     }
 }
+my $server_error = ips_utils::verify_server ($ips_server);
+if (defined $server_error) {
+    print STDERR "ERROR: invalid PKGBUILD_IPS_SERVER setting: $server_error\n";
+    exit (1);
+}
+
 my $src_ips_server = $ENV{PKGBUILD_SRC_IPS_SERVER};
 if (not defined($src_ips_server)) {
     $src_ips_server = $ips_server;
@@ -540,7 +546,11 @@ sub check_dep ($$) {
 	    if (-x "/usr/bin/pkg") {
 		my $search_out = `pkg info -l '$pkg' 2>&1`;
 		chomp ($search_out);
-		if ($search_out =~ /^\s+Name:\s*${pkg}\s*\n/s) {
+		# escape some regexp chars
+		my $safepkg = $pkg;
+		$safepkg =~ s/\+/\\+/g;
+		$safepkg =~ s/\./\\./g;
+		if ($search_out =~ /^\s+Name:\s*${safepkg}\s*\n/s) {
 		    return 1;
 		}
 	    }
@@ -645,26 +655,31 @@ sub get_script_header ($) {
     } else {
 	$error_handler = "set -e\n\n";
     }
-    my $script = "#!/bin/bash\n\n" .
-	$error_handler .
-	$spec->eval ("RPM_SOURCE_DIR=\"%{_sourcedir}\"") . "\n" .
-	$spec->eval ("RPM_BUILD_DIR=\"%{_builddir}\"") . "\n" .
-	$spec->eval ("RPM_OPT_FLAGS=\"%{optflags}\"") . "\n" .
-	"RPM_ARCH=\"$arch\"\n" .
-	"RPM_OS=\"$os\"\n" .
-	"RPM_OS_REL=\"$os_rel\"\n" .
-	"export RPM_SOURCE_DIR RPM_BUILD_DIR RPM_OPT_FLAGS RPM_ARCH RPM_OS\n" .
-	"RPM_DOC_DIR=\"/usr/share/doc/packages/" . $spec . "\"\n" .
-        "export RPM_DOC_DIR\n" .
-	"RPM_PACKAGE_NAME=\"" . $spec . "\"\n" .
-	"RPM_PACKAGE_VERSION=\"" . $spec->eval ('%version') . "\"\n" .
-	"RPM_PACKAGE_RELEASE=\"" . $spec->eval ('%release') . "\"\n" .
-	"export RPM_PACKAGE_NAME RPM_PACKAGE_VERSION RPM_PACKAGE_RELEASE\n" .
-	$spec->eval ("RPM_BUILD_ROOT=\"%buildroot\"") . "\n" .
-	"export RPM_BUILD_ROOT\n\n" .
-	"set -x\n" .
-	"umask 022\n" .
-	"uname -a\n\n";
+    my $buildshell = $spec->eval ('%_buildshell');
+    $buildshell = "/bin/bash" unless defined ($buildshell);
+    my $script = "#!${buildshell}\n\n";
+    if ($buildshell eq "/bin/bash" or $buildshell eq "/usr/bin/bash") {
+	$script = "#!${buildshell}\n\n" .
+	    $error_handler .
+	    $spec->eval ("RPM_SOURCE_DIR=\"%{_sourcedir}\"") . "\n" .
+	    $spec->eval ("RPM_BUILD_DIR=\"%{_builddir}\"") . "\n" .
+	    $spec->eval ("RPM_OPT_FLAGS=\"%{optflags}\"") . "\n" .
+	    "RPM_ARCH=\"$arch\"\n" .
+	    "RPM_OS=\"$os\"\n" .
+	    "RPM_OS_REL=\"$os_rel\"\n" .
+	    "export RPM_SOURCE_DIR RPM_BUILD_DIR RPM_OPT_FLAGS RPM_ARCH RPM_OS\n" .
+	    "RPM_DOC_DIR=\"/usr/share/doc/packages/" . $spec . "\"\n" .
+	    "export RPM_DOC_DIR\n" .
+	    "RPM_PACKAGE_NAME=\"" . $spec . "\"\n" .
+	    "RPM_PACKAGE_VERSION=\"" . $spec->eval ('%version') . "\"\n" .
+	    "RPM_PACKAGE_RELEASE=\"" . $spec->eval ('%release') . "\"\n" .
+	    "export RPM_PACKAGE_NAME RPM_PACKAGE_VERSION RPM_PACKAGE_RELEASE\n" .
+	    $spec->eval ("RPM_BUILD_ROOT=\"%buildroot\"") . "\n" .
+	    "export RPM_BUILD_ROOT\n\n" .
+	    "set -x\n" .
+	    "umask 022\n" .
+	    "uname -a\n\n";
+    }
 
     return $script;
 }
@@ -1404,10 +1419,8 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
 	if ( not defined $file ) {
 	    $file1 = $fname;
 	    $file1 =~ s/^$buildroot//;
-	    if ( $file1 !~ /^\// ) {
-		$file1 = "/$file1";
-	    }
 	}
+	$file1 =~ s/^\/*//;
 	$line = "dir mode=$mode owner=$user group=$group path=\"$file1\"";	
     } elsif ( $type eq 's' ) {
 	# read the link target of the file in the proto area
@@ -1823,17 +1836,22 @@ sub open_ips_transaction($$;$) {
 
     my $src_name = "";
     my $name = $package->get_ips_name();
-    # is it a source package?
-    if (defined ($src)) {
-	$src_name = "_src";
-	$name = $package->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:${name}/src}");
-    }
     
     my $ips_vendor_version = $package->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
     my $version = $package->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
-	
+
+    my $esc_name = $package->get_ips_name();
+    $esc_name =~ s/\//%2F/g;
     my $manifest = $package->eval ("%_pkgmapdir") . "/manifests/" .
-	$package->get_svr4_name() . "${src_name}.manifest";
+	$esc_name . ".manifest";
+    # is it a source package?
+    if (defined ($src)) {
+	$esc_name = $package->get_name();
+	$esc_name =~ s/\//%2F/g;
+	$manifest = $package->eval ("%_pkgmapdir") . "/manifests/" .
+	    $esc_name . "_src.manifest";
+	$name = $package->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:${name}/src}");
+    }
 
     if (scalar @lines > 0) {
 	print "Warning: Open transaction isn't first line of pkgsend script!\n";
@@ -2103,7 +2121,11 @@ sub make_ips_package ($$$$$) {
     my $tag = shift;
     
     if (defined $tag) {
-	$tag = " $tag=true";
+	if ($tag =~ /(devel|doc|l10n)/) {
+	    $tag = " $tag=true";
+	} else {
+	    $tag = "";
+	}
     } else {
 	$tag = "";
     }
@@ -2142,13 +2164,7 @@ sub make_ips_files ($$$) {
     my %all_files_in_manifest = ();
     foreach $pkg (@packages) {
 	$tag = $pkg->get_pkg_tag ();
-	if ($pkg->is_subpkg()) {
-	    # is this a subpkg of $package?
-	    next if ("${package}-$tag"  ne "$pkg");
-	} else {
-	    # is this $package?
-	    next if ("${package}" ne "${pkg}");
-	}
+	next if $package->get_ips_name() ne $pkg->get_ips_name();
 	debug_print "making package $pkg";
 	make_ips_package($spec, $pkg, $ref_lines, \%all_files_in_manifest, $tag);
     }
@@ -2203,10 +2219,12 @@ sub create_ips_package ($$$) {
     debug_print "Calling close_ips_transaction";
     close_ips_transaction(\@pkg_lines);
     
+    my $esc_name = $package->get_ips_name();
+    $esc_name =~ s/\//%2F/g;
     my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
-	$package->get_svr4_name() . "_ips.sh";
+	$esc_name . "_ips.sh";
     my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" .
-	$package->get_svr4_name() . ".manifest";
+	$esc_name . ".manifest";
 
     debug_print "Prepare script - $script";
     prepare_ips_script($spec, $script, \@pkg_lines);
@@ -2237,10 +2255,12 @@ sub create_ips_src_package ($) {
     debug_print "Calling close_ips_transaction";
     close_ips_transaction(\@pkg_lines);
     
+    my $esc_name = $package->get_name ();
+    $esc_name =~ s/\//%2F/g;
     my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
-	$package->get_svr4_name() . "_src_ips.sh";
+	$esc_name . "_src_ips.sh";
     my $manifest = $spec->eval ("%_pkgmapdir") . "/manifests/" .
-	$package->get_svr4_name() . "_src.manifest";
+	$esc_name . "_src.manifest";
 
     debug_print "Prepare script - $script";
     prepare_ips_script($spec, $script, \@pkg_lines);
@@ -2255,7 +2275,7 @@ sub publish_src_ips_package ($) {
 
     my $retval;
     my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
-	$spec->get_svr4_name() . "_src_ips.sh";
+	$spec->get_name() . "_src_ips.sh";
     print "Calling script $script\n";
     `chmod +x $script`;
     my $msg = `$script`;
@@ -2278,8 +2298,10 @@ sub publish_ips_packages ($) {
     my @pkgs = $spec->get_packages ();
     foreach my $pkg (@pkgs) {
 	next if $pkg->is_subpkg ();
+	my $esc_name = ${pkg}->get_ips_name();
+	$esc_name =~ s/\//%2F/g;
 	my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
-	    ${pkg}->get_svr4_name() . "_ips.sh";
+	     ${esc_name} . "_ips.sh";
 	print "Calling script $script\n";
 	`chmod +x $script`;
 	my $msg = `$script`;
@@ -2336,7 +2358,7 @@ sub create_svr4_packages ($) {
     my @packages = $spec->get_packages ();
 
     foreach my $pkg (@packages) {
-	if ($pkg->has_files()) {
+	if ($pkg->has_files() and not $pkg->has_svr4_match()) {
 	    $has_files_at_all = 1;
 	    make_solaris_pkg ($spec, $pkg) or return 0;
 	}

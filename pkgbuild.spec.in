@@ -6,7 +6,7 @@
 %define _prefix %{pkgbuild_prefix}
 
 Name:         pkgbuild
-IPS_Package_Name: command/build/pkgbuild
+IPS_Package_Name: package/pkgbuild
 License:      GPL
 Group:        Development/Tools/Other
 URL:	      http://pkgbuild.sourceforge.net/

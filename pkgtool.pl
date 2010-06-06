@@ -38,6 +38,12 @@ use ips_package;
 my $ips_utils = new ips_utils ();
 
 my $ips_server = $ENV{PKGBUILD_IPS_SERVER};
+my $server_error = ips_utils::verify_server ($ips_server);
+if (defined $server_error) {
+    print STDERR "ERROR: invalid PKGBUILD_IPS_SERVER setting: $server_error\n";
+    exit (1);
+}
+
 if (not defined($ips_server)) {
     if (defined ($ips_utils)) {
 	$ips_server = $ips_utils->get_local_ips_server();

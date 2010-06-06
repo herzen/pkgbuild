@@ -1,0 +1,178 @@
+'\" t
+.TH PKGBUILD 1 "May 17, 2010"
+.SH NAME
+
+pkgbuild \- Package Build Engine
+
+.SH SYNOPSIS
+
+.B pkgbuild
+[\-\-help] [\-\-version] [\-\-interactive] [\-v] [\-vv] [\-b\fIstage\fR] [\-\-short\-circuit] [\-\-define "\fIname\fR \fIvalue\fR"] [\-\-with\-\fIoption\fR] [\-\-without\-\fIoption\fR] [\-\-rebuild] [\-\-pkgformat \fIfmt\fR] \fIspec...\fR
+
+.SH DESCRIPTION
+
+pkgbuild is a build engine that uses build recipes similar to rpmbuild's
+spec file to build software components and create SVr4 or IPS binary
+packages.
+
+.SH OPTIONS
+
+.SS Miscellaneous Options
+
+.TP
+\-\-help
+displays a short help text
+.TP
+\-\-version
+prints the version of pkgbuild
+.TP
+\-v
+verbose mode
+.TP
+\-vv
+very verbose mode
+.PP
+.SS Build Options
+
+.TP
+\-\-interactive
+starts a subshell if a build fails allowing the user to alter the state of the build tree and then abort or continue the build
+.TP
+\-b\fIstage\fR
+build a component, exit after stage \fIstage\fR where \fIstage\fR is one of:
+
+.RS 9
+.TP
+p
+source tree setup (%prep only)
+.TP
+c
+compile (%prep and %build)
+.TP
+i
+install (%prep, %build and %install)
+.TP
+b
+binary package (%prep, %build, %install and package)
+.TP
+s
+source package (%prep, %build, %install and package)
+.TP
+a
+binary and source package  (%prep, %build, %install and package)
+.RE
+.PP
+.TP
+\-\-short\-circuit
+start the build straight from the stage specified with the \-b option, bypassing the stages leading up to it.  For example \fI\-\-short\-circuit\fR \fI\-bi\fR will run the %install section only, bypassing %prep and %build and exiting after %install.
+.TP
+\-\-rebuild
+rebuild a source package
+.TP
+\-\-pkgformat \fIfmt\fR
+create the binary and source packages using the \fIfmt\fR package format, where \fIfmt\fR is one of:
+.RS 9
+.TP
+filesystem, fs
+SVr4 filesystem format
+.TP
+datastream, ds
+SVr4 datastream format
+.TP
+ips
+Image Packaging System package
+.RE
+.PP
+.SS Build Features
+.TP
+\-\-define "\fIname\fR \fIvalue\fR"
+defines a macro called \fIname\fR and assigns \fIvalue\fR as the macro value before reading the spec file(s).
+.TP
+\-\-with\-\fIoption\fR
+same as
+.br
+\fB\-\-define\fR "\_with\_\fIoption\fR \-\-with\-\fIoption\fR"
+.TP
+\-\-without\-\fIoption\fR
+same as
+.br
+\fB\-\-define\fR "\_without\_\fIoption\fR \-\-without\-\fIoption\fR"
+
+
+.SH EXAMPLES
+
+Example 1: set up the source tree for foo.spec:
+
+pkgbuild -bp foo.spec
+
+Example 2: build bar.spec with debug options:
+
+pkgbuild --with-debug -ba bar.spec
+
+
+.SH ENVIRONMENT VARIABLES
+
+The following environment variables affect the execution of pkgbuild:
+
+.TP
+\fBPKGBUILD\_IPS\_SERVER\fR
+the server to post IPS binary packages to, defaults to the local repository
+.TP
+\fBPKGBUILD\_SRC\_IPS\_SERVER\fR
+the server to post IPS source packages to, defaults to \fBPKGBUILD\_IPS\_SERVER\fR
+
+
+.SH EXIT STATUS
+
+The following exit values are returned:
+
+.TP
+1
+ERROR
+.TP
+2
+ERROR sending package to IPS server
+.TP
+3
+ERROR closing transaction with IPS server
+.TP
+0
+OK
+
+.SH FILES
+
+.TP
+/usr/bin/pkgbuild
+executable for pkgbuild
+.TP
+~/.pkgbuildmacros
+user defined macros. The format of this file is on definition per line in the following format:
+.br
+%\fImacro\_name\fR \fIvalue\fR
+
+.SH ATTRIBUTES
+
+See \fBattributes\fR(5) for descriptions of the following attributes:
+
+.TS
+box;
+cbp-1 | cbp-1
+l | l .
+ATTRIBUTE TYPE	ATTRIBUTE VALUE
+=
+Availability	package/pkgbuild
+=
+Interface Stability	Volatile
+.TE 
+
+.SH SEE ALSO
+
+Spec file description in /usr/share/doc/pkgbuild/spec-files.txt
+
+\fBattributes\fR(5), \fBpkgtool\fR(1), \fBspectool\fR(1), \fBpkg\fR(5), \fBpkgmk\fR(1)
+
+.SH NOTES
+
+Written by Laszlo (Laca) Peter, Oracle Corporation, 2010
+
+.\" end of man page

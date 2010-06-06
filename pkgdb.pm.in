@@ -174,12 +174,15 @@ sub _select_package($@) {
                                system/locale/.* system/.* library/.*
                                runtime/.* desktop/.* gnome/.*);
     if (defined($pkg)) {
-	unshift @favoured_packages, "${pkg}.*";
-	unshift @favoured_packages, "${pkg}-devel";
-	unshift @favoured_packages, "${pkg}-root";
-	unshift @favoured_packages, "${pkg}r";
-	unshift @favoured_packages, "${pkg}u";
-	unshift @favoured_packages, "${pkg}";
+	my $safepkg = $pkg;
+	$safepkg =~ s/\+/\\+/g;
+	$safepkg =~ s/\./\\./g;
+	unshift @favoured_packages, "${safepkg}.*";
+	unshift @favoured_packages, "${safepkg}-devel";
+	unshift @favoured_packages, "${safepkg}-root";
+	unshift @favoured_packages, "${safepkg}r";
+	unshift @favoured_packages, "${safepkg}u";
+	unshift @favoured_packages, "${safepkg}";
     }
 
     foreach my $p (@favoured_packages) {
@@ -334,7 +337,7 @@ sub get_ips_pkgname($$$) {
 	    }
 	    next;
 	}
-	if ($s_o_line =~ /\s*Renamed to:\s*([^@]+)/) {
+	if ($s_o_line =~ /\s*Renamed to:\s*(\S[^@]*)/) {
 	    if ($pkg_selected) {
 		# there may be multiple packages, get a list of them
 		$self->msg_info (0, "Package $pkg_only was renamed to $1");

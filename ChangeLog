@@ -1,3 +1,29 @@
+2010-06-06  Laszlo Peter  <laca@sun.com>
+
+	* Makefile.am: add doc subdir
+	* NEWS: update
+	* configure.in: add doc subdir
+	* doc/Makefile.am:
+	* doc/pkgbuild.1: (new) manual page for pkgbuild
+	* doc/pkgtool.1: (new) manual page for pkgtool
+	* doc/spec-files.txt: (new) spec file format documentation
+	* doc/spectool.1: (new) manual page for spectool
+	* ips_utils.pm: verify the PKGBUILD_IPS_SERVER end with a "/"
+	* pkgbuild.pl.in: exit with an error if PKGBUILD_IPS_SERVER is not
+	  valid; escape "+" chars in package names for regexp processing;
+	  use %_buildshell for scriptlets; remove extra "/" from paths
+	  in manifests; use the IPS package name ("/" chars escaped) in
+	  the manifest file names; only tag doc, devel and l10n subpkgs;
+	* pkgbuild.spec.in: use package/pkgbuild as the IPS package name
+	* pkgdb.pm.in: escape "+" in package names for regexp processing
+	* pkgtool.pl: exit with an error if PKGBUILD_IPS_SERVER is not valid
+	* rpm_package.pm: subpkgs do not inherit IPS_Package_Name; generate
+	  a single SVr4 package for all subpackages with the same SVr4
+	  package name (SUNW_Pkg)
+	* rpm_spec.pm.in: link together all SVr4 subpackages with the same name
+	* spectool.pl: add usage info; implement get_files and
+	  match_package_names
+
 2010-04-09  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update

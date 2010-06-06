@@ -85,6 +85,7 @@ use .pkgtoolrc to change it.])], : )
 #tests/do-test.pl
 AC_OUTPUT([
 Makefile
+doc/Makefile
 m4/Makefile
 pkgbuild
 pkgbuild.pl

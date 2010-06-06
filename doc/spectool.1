@@ -1,0 +1,230 @@
+'\" t
+.TH PKGTOOL 1 "Jun 2, 2010"
+.SH NAME
+
+spectool \- A tool for extracting information from \fBpkgbuild\fR(1) spec files
+
+.SH SYNOPSIS
+
+.B spectool [OPTIONS] \fIcommand\fI \fIspec...\fR
+
+.SH DESCRIPTION
+
+spectool is a tool that parses a given list of \fBpkgbuild\fR(1) spec files
+and can be used for extracting information from them.  Its primary purpose
+is to facilitate scripting and interfacing with \fBpkgbuild\fR(1).
+
+.SH OPTIONS
+
+.SS General
+
+.TP
+\-v or \-\-verbose
+Increase verbosity.  Use -v to prefix the output lines
+with the name of the spec file they belong to.
+.TP
+\-q or \-\-quiet
+Silent operation (no diagnostic messages).
+.TP
+\-\-rcfile=\fIfile\fR
+Read default configuration from file.  Default: \fB./.pkgtoolrc\fR, \fB~/.pkgtoolrc\fR
+.TP
+\-\-norc
+Ignore the default rc files.
+.TP
+\-\-ips
+Print IPS package names, even on SVr4 systems, if \fBpkg(5)\fR is installed.
+.TP
+\-\-svr4
+Print SVr4 package names, even on IPS systems.
+
+.SS Directories and search paths:
+
+.TP
+\-\-specdirs=\fIpath\fR or \-\-spec=\fIpath\fR
+Specify a colon separated list of directories to search for spec files in
+\-\-topdir=\fIdir\fR
+Use dir as the rpm base directory (aka \fB%topdir\fR, where the \fBSPECS\fR, \fBSOURCES\fR, \fBRPMS\fR, \fBSRPMS\fR, \fBBUILD\fR directories are found).  Default: \fB~/packages\fR
+.TP
+\-\-logdir=\fIdir\fR or \-\-log=\fIdir\fR
+Write build logs to dir.
+
+.SS Options controlling the build:
+
+.TP
+\-\-nodeps / \-\-deps
+Ignore/verify dependencies before building a component.  Default: \fB\-\-deps\fR
+.TP
+\-\-with \fIfoo\fR or \-\-with\-\fIfoo\fR / \-\-without \fIfoo\fR or \-\-without\-\fIfoo\fR
+These options are passed on to \fBpkgbuild\fR(1) as is.  They are used for enabling/disabling conditional build options.
+
+.SS Commands:
+
+.TP
+eval \fIexpr\fR
+Evaluate \fIexpr\fR in the context of each given spec file
+.TP
+get\_packages
+List the packages defined in the given spec files
+.TP
+get\_sources
+List the sources (defined by Source tags) used by
+each given spec file.  Sources in \fI%use\fR'd spec files are also included.
+.TP
+get\_public\_sources
+Same as \fIget\_sources\fR but list only the public
+sources (omit those listed in a \fINoSource\fR tag)
+.TP
+get_block \fIblock\_name\fR
+Print the expanded block (sctiptlet) called
+\fIblock\_name\fR from each given spec file.  Example:
+.sp
+spectool get\_block prep foo.spec
+.TP
+get\_files
+Print the files sections of each given spec file
+.TP
+get\_meta
+Print the Meta tags defined in each spec file
+.TP
+get\_package\_names
+Print the package names defined in each given
+spec file.  Use \fI\-\-ips\fR or \fI\-\-svr4\fR to select the package
+format, otherwise package names of the native format are printed
+.TP
+match\_package\_names
+Display how \fI%package\fR labels map to SVr4 package
+names and IPS package names in each given spec file spec
+.TP
+get\_patches
+Print the patches (defined by \fIPatch\fR tags) used by
+each given spec files.  The patches in \fI%use\fR'd spec file
+are also included.
+.TP
+get\_public\_patches
+Same as \fIget\_patches\fR but only prints the public
+patches (omits those listed in \fINoPatch\fR tags)
+.TP
+get\_requires \fIpackage name\fR
+Prints the runtime dependencies (\fIRequires\fR
+tags) belonging to package label \fIpackage name\fR and defined
+in each given spec file.  Example:
+.sp
+spectool get\_requires SUNWgtk2\-devel SUNWgtk2.spec
+.TP
+get\_prereq \fIpackage\_name\fR
+Same as \fIget\_requires\fR but for \fIPreReq\fR tags.
+.TP
+get\_buildrequires
+Prints the build-time dependencies of the given spec files.
+.TP
+get\_classes
+Print any SVr4 classes (other than \fI"none"\fR) in each of the
+given spec files.
+.TP
+get\_class\_script\_names
+Print any SVr4 class action script names defined
+in each of the given spec files.
+.TP
+get\_included\_files
+Print all files included (using the \fI%include\fR
+directive) in each given spec file, recursively.
+.TP
+get\_used\_spec\_files [\fI-l\fR]
+Print all files referenced using the \fI%use\fR
+tag in each given spec file.  With the \fI\-l\fR option,
+print the labels assigned to the \fI%use\fR'd spec files as well.
+.TP
+get\_publish\_scripts
+Print the path to the IPS publishing scripts
+used for publishing each IPS package defined by the
+given spec files.
+.TP
+get\_ips\_pkgname \fIfile\fR|\fIpackage_name\fR
+Print the IPS package name and version that corresponds to the given
+\fIpackage\_name\fR (IPS or SVr4) or \fIfile\fR.  No spec files arguments
+are needed for this command.
+.TP
+get\_error
+Print any syntax errors in the given spec files.
+.TP
+verify
+Parse the given spec files and return 0 if they can
+be parsed without errors, or non-0 if any of them have errors.
+
+
+.SS Spec Files	
+
+.TP
+\fIspecs\fR...
+List of spec files to process. Either full path names or names of spec
+files in the spec directory search path.
+
+Spec files are build recipes, similar to rpmbuild's spec files on
+Linux systems.  You can find detailed information about spec files
+in /usr/share/doc/pkgbuild/spec-files.txt
+
+.SH EXAMPLES
+
+Example 1: Print the value of the Version tag from each spec file in the
+current directory, prefixing with the name of the spec file (\fI\-v\fR option):
+
+spectool -v eval '%version' *.spec
+
+Example 2: Print the \fIbuild\fR scriptlet of the given spec file, using
+debug options:
+
+spectool \-\-with\-debug get\_block build foo.spec
+
+Example 3: Print the IPS package name of the package that contains
+\/usr\/bin\/bash:
+
+spectool get\_ips\_pkgname \/usr\/bin\/bash
+
+.SH EXIT STATUS
+
+The following exit values are returned:
+
+.TP
+0
+SUCCESS (command passed for all spec files)
+.TP
+>0
+FAILURE (the number of spec files that failed)
+
+.SH FILES
+
+.TP
+/usr/bin/spectool
+executable for pkgtool
+.TP
+.pkgtoolrc
+configuration file for pkgtool, see the CONFIGURATION section in
+\fBpkgtool(1)\fR for details.
+
+.SH ATTRIBUTES
+
+See \fBattributes\fR(5) for descriptions of the following attributes:
+
+.TS
+box;
+cbp-1 | cbp-1
+l | l .
+ATTRIBUTE TYPE	ATTRIBUTE VALUE
+=
+Availability	package/pkgbuild
+=
+Interface Stability	Volatile
+.TE 
+
+.SH SEE ALSO
+
+Spec file description in /usr/share/doc/pkgbuild/spec-files.txt
+
+\fBattributes\fR(5), \fBpkgbuild\fR(1), \fBpkgtool\fR(1), \fBpkg\fR(5), \fBpkgmk\fR(1)
+
+.SH NOTES
+
+Written by Laszlo (Laca) Peter, Oracle Corporation, 2010
+
+.\" end of man page

@@ -99,6 +99,7 @@ sub new_subpackage ($$$;$$) {
     $self->{_parent_spec_ref} = $parent_spec_ref;
     $self->{_tags}->{name} = $name;
     $self->{_tags}->{sunw_pkg} = undef;
+    $self->{_tags}->{ips_package_name} = undef;
     for my $tag_name ("buildrequires", "requires", "obsoletes",
 		      "prereq", "provides") {
 	$self->{_tags}->{$tag_name} = ();
@@ -142,13 +143,17 @@ sub get_svr4_name ($) {
 
 sub get_ips_name ($) {
     my $self = shift;
+    # the %package has its own IPS package name
+    if (defined $self->{_tags}->{ips_package_name}) {
+	return $self->{_tags}->{ips_package_name};
+    }
+    # it doesn't have its own IPS name, if it's a subpackage,
+    # the IPS name is the name of the main package otherwise
+    # it's the value of Name
     if ($self->{_is_subpkg}) {
 	my $parent_ref = $self->{_parent_spec_ref};
 	return $$parent_ref->get_ips_name();
     } else {
-	if (defined $self->{_tags}->{ips_package_name}) {
-	    return $self->{_tags}->{ips_package_name};
-	}
 	return $self->{_tags}->{name};
     }
 }
@@ -204,6 +209,25 @@ sub set_subpkg ($$) {
     my $self = shift;
     my $val = shift;
     $self->{_is_subpkg} = $val;
+}
+
+sub set_svr4_match ($$) {
+    my $self = shift;
+    my $pkgref = shift;
+
+    $self->{_svr4_match} = $pkgref;
+    if (defined ($pkgref->{_svr4_rev_match})) {
+	my $rev_matches = $pkgref->{_svr4_rev_match};
+	push (@$rev_matches, $self);
+    } else {
+	my @rev_matches = ($self);
+	$pkgref->{_svr4_rev_match} = \@rev_matches;
+    }
+}
+
+sub has_svr4_match ($) {
+    my $self = shift;
+    return defined ($self->{_svr4_match});
 }
 
 sub eval ($$) {
@@ -365,9 +389,20 @@ sub get_files ($) {
 	}
 	$self->{_metafiles_loaded} = 1;
     }
+    return undef if defined ($self->{_svr4_match});
     my $files = $self->{_files};
-    return undef if not defined $files;
-    return @$files if $files;
+    my @all_match_files = ();
+    if (defined ($self->{_svr4_rev_match})) {
+	my $matches = $self->{_svr4_rev_match};
+	foreach my $match (@$matches) {
+	    my $match_files = $match->{_files};
+	    if (@$match_files) {
+		push (@all_match_files, @$match_files);
+	    }
+	}
+    }
+    my @all_files = (@$files, @all_match_files);
+    return @all_files if @all_files;
     return undef;
 }
 
@@ -378,6 +413,16 @@ sub has_files ($) {
     return 1 if defined $self->{_actions};
     my $metafiles = $self->{_metafiles};
     return 1 if @$metafiles;
+    if (defined ($self->{_svr4_match})) {
+	my $match_ref = $self->{_svr4_match};
+	return 1 if $$match_ref->has_files();
+    }
+    if (defined ($self->{_svr4_rev_match})) {
+	foreach my $match_rev (@$self->{_svr4_rev_match}) {
+	    return 1 if defined $$match_rev->{_files};
+	    return 1 if defined $$match_rev->{_actions};
+	}
+    }
     return 0;
 }
 

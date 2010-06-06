@@ -1,0 +1,284 @@
+'\" t
+.TH PKGTOOL 1 "May 18, 2010"
+.SH NAME
+
+pkgtool \- Helper Script for \fBpkgbuild\fR(1)
+
+.SH SYNOPSIS
+
+.B pkgtool [OPTIONS] \fIcommand\fI \fIspec...\fR
+
+.SH DESCRIPTION
+
+pkgtool is a helper script for performing builds from \fBpkgbuild\fR(1) spec files
+(build recipes).
+
+.SH OPTIONS
+
+.SS General
+
+.TP
+\-v or \-\-verbose
+Increase verbosity: the more \fB-v\fR's the more diag messages.
+.TP
+\-q or \-\-quiet
+Silent operation.
+.TP
+\-\-halt\-on\-errors
+Halt on the first build error, do not attempt to continue.
+.TP
+\-\-rcfile=\fIfile\fR
+Read default configuration from file.  Default: \fB./.pkgtoolrc\fR, \fB~/.pkgtoolrc\fR
+.TP
+\-\-norc
+Ignore the default rc files.
+.TP
+\-\-dumprc
+Print the current configuration in a format suitable for an rc file, then exit.
+.TP
+\-\-download
+Automatically download sources if not found in the local
+search paths (requires wget)  Specify your proxy servers
+using the http_proxy and ftp_proxy environment variables.
+.TP
+\-\-download-to=\fIdir\fR
+Save downloaded files in dir.  By default, files are
+downloaded to \fB/storage/pkgs/SOURCES\fR.  Implies \fB\-\-download\fR.
+.TP
+\-\-interactive     [EXPERIMENTAL]
+Interactive mode: \fBpkgbuild\fR(1) output is displayed on
+the standard output; \fBpkgbuild\fR(1) is executed in interactive
+mode which makes it start a subshell if the build fails
+.TP
+\-\-ips
+Install IPS packages by default to local repository
+\fBhttp://localhost:80/\fR
+.TP
+\-\-svr4
+Install SVr4 packages by default.
+.TP
+\-\-rmlog
+Automatically remove the log file with each build
+
+.SS Directories and search paths:
+
+.TP
+\-\-specdirs=\fIpath\fR or \-\-spec=\fIpath\fR
+Specify a colon separated list of directories to search for spec files in
+.TP
+\-\-tarballdirs=\fIpath\fR or \-\-tarballs=\fIpath\fR or \-\-tar=\fIpath\fR
+Specify a colon separated list of directories to search for tarballs in
+.TP
+\-\-sourcedirs=\fIpath\fR or \-\-src=\fIpath\fR
+Specify a colon separated list of directories to search for additional source files in
+\-\-patchdirs=\fIpath\fR or \-\-patches=\fIpath\fR or \-\-patch=\fIpath\fR
+Specify a colon separated list of directories to search for patches (source diffs) in
+\-\-topdir=\fIdir\fR
+Use dir as the rpm base directory (aka \fB%topdir\fR, where the \fBSPECS\fR, \fBSOURCES\fR, \fBRPMS\fR, \fBSRPMS\fR, \fBBUILD\fR directories are found).  Default: \fB~/packages\fR
+.TP
+\-\-logdir=\fIdir\fR or \-\-log=\fIdir\fR
+Write build logs to dir.
+
+.SS Options controlling the build:
+
+.TP
+\-\-update
+Update packages that are already installed.  The default bevavior is to skip
+them.
+.TP
+\-\-update\-if\-newer
+Update packages that are already installed only if the version in
+the spec file (\fBVersion\fR tag) is newer than the version of the package.
+The default bevavior is to skip packages that are already installed.
+.TP 
+\-\-nodeps / \-\-deps
+Ignore/verify dependencies before building a component.  Default: \fB\-\-deps\fR
+.TP
+\-\-autodeps
+Attempt to find spec files for missing dependencies in spec file search path (see \-\-\fBspecdirs\fR) and add them to the build as needed.
+.TP
+\-\-with \fIfoo\fR or \-\-with\-\fIfoo\fR / \-\-without \fIfoo\fR or \-\-without\-\fIfoo\fR
+These options are passed on to \fBpkgbuild\fR(1) as is.  They are used for enabling/disabling conditional build options.
+.TP
+\-\-target=\fIarch\fR
+This option is passed on to \fBpkgbuild\fR(1) as is.
+.TP
+\-\-pkgformat=\fIformat\fR
+Create packages in the specified format, where \fIformat\fR is one of:
+.RS9
+.TP
+\fBips\fR
+Image Packaging System package format (default on IPS-based systems)
+.TP
+\fBfilesystem\fR or \fBfs\fR
+SVr4 filesystem package format (default on SVr4-based systems)
+.TP
+\fBdatastream\fR or \fBds\fR
+SVr4 datastream package format
+.RE
+
+.SS Reporting:
+
+.TP
+\-\-notify / \-\-nonotify
+Send desktop notifications when the build of a spec file passes or fails.
+Default: \-\-\fBnotify\fR
+.TP
+\-\-mail\-errors\-to=\fIaddress\fR
+Send the last few lines of the build log to address if the build fails
+.TP
+\-\-report=\fIfile\fR
+Write a build report to \fIfile\fR (in HTML format)
+\-\-prodname=\fIstring\fR
+The name of the product as appears in the build report
+.TP
+\-\-full\-path
+Print the full path to the package when running install-order
+
+.SS Commands:
+
+.TP
+build\-install
+Build and install the specs listed on the command line. The build order is determined by the dependencies defined in the spec files.
+.TP
+build
+Same as build-install
+.TP
+build\-only
+Build the specs listed on the command line, don't install them.
+.TP
+prep
+run the \fB%prep\fR section of the spec files listed on the command line
+.TP
+spkg
+create source package(s) only (no build done)
+.TP
+publish\-pkgs
+publish the previously build packages to an IPS repository
+.TP
+build\-order
+Print the build order of the specs listed on the command line.
+.TP
+install\-order
+Print the rpms in the order they should be installed
+.TP
+install\-pkgs
+install the packages defined by the spec files listed
+on the command line from the \fBPKGS\fR directory.  No build
+is done.  Useful to install packages previously built
+using the build-only command, or built manually using
+pkgbuild.
+.TP
+uninstall\-pkgs
+Uninstall all packages defined in the spec files listed
+on the command line.
+.TP
+download
+Download the source files from the URLs specified in
+the spec files listed on the command line.  Source
+files found in the local search paths will not be
+downloaded.  (See \-\-\fBtarballdirs\fR, \-\-\fBsourcedirs\fR,
+\-\-\fBdownload\-to\fR)
+
+.SS Spec Files	
+
+.TP
+\fIspecs\fR...
+List of spec files to build. Either full path names or names of spec
+files in the spec directory search path.
+
+Spec files are build recipes, similar to rpmbuild's spec files on
+Linux systems.  You can find detailed information about spec files
+in /usr/share/doc/pkgbuild/spec-files.txt
+
+.SS ENVIRONMENT VARIABLES
+
+.TP
+PKGBUILD\_IPS\_SERVER
+Set this variable to specify the URL for the IPS server to publish 
+binary packages to.  Example:
+.br
+PKGBUILD\_IPS\_SERVER=http://myserver:9000/; export PKGBUILD\_IPS\_SERVER
+.TP
+PKGBUILD\_SRC\_IPS\_SERVER
+URL for the IPS server to publish source packages to.  Defaults to
+\fBPKGBUILD\_IPS\_SERVER\fR.
+
+.SH CONFIGURATION
+
+All command line options can be configured in the \fB.pkgtoolrc\fR configuration
+file.  pkgtool looks for \fB.pkgtoolrc\fR in the current directory first, then in the user's home directory.  A well documented configuration file template can be generated using the \fB\-\-dumprc\fR option:
+.sp
+pkgtool \-\-dumprc > ~/.pkgtoolrc
+.sp
+Lines starting with # are comments.  Configuration settings are colon-separated key-value pairs, for example:
+.sp
+tarballdirs: /export/tarballs:/net/otherhost/export/tarballs
+.sp
+Use the \fB\-\-dumprc\fR option to obtain a list of configuration options and their documentation.
+
+Values can use the \fB${MYDIR}\fR variable to reference the directory the .pkgtoolrc file is located in.
+
+.SH EXAMPLES
+
+Example 1: given a directory full of spec files, download all source URLs
+defined in the spec files:
+
+pkgtool download *.spec
+
+Example 2: build and install all spec files in the current directory:
+
+pkgtool -v build *.spec
+
+Example 3: download a sources and build foo.spec with debug options (note: assumes that foo.spec supports \-\-with\-debug).  The resulting package(s) will not be installed.
+
+pkgtool build-only \-\-download \-\-with\-debug foo.spec
+
+.SH EXIT STATUS
+
+The following exit values are returned:
+
+.TP
+0
+SUCCESS (command passed for all spec files)
+.TP
+>0
+FAILURE (the number of spec files that failed)
+
+.SH FILES
+
+.TP
+/usr/bin/pkgtool
+executable for pkgtool
+.TP
+.pkgtoolrc
+configuration file for pkgtool, see the CONFIGURATION section for details
+.br
+%\fImacro\_name\fR \fIvalue\fR
+
+.SH ATTRIBUTES
+
+See \fBattributes\fR(5) for descriptions of the following attributes:
+
+.TS
+box;
+cbp-1 | cbp-1
+l | l .
+ATTRIBUTE TYPE	ATTRIBUTE VALUE
+=
+Availability	package/pkgbuild
+=
+Interface Stability	Volatile
+.TE 
+
+.SH SEE ALSO
+
+Spec file description in /usr/share/doc/pkgbuild/spec-files.txt
+
+\fBattributes\fR(5), \fBpkgbuild\fR(1), \fBspectool\fR(1), \fBpkg\fR(5), \fBpkgmk\fR(1)
+
+.SH NOTES
+
+Written by Laszlo (Laca) Peter, Oracle Corporation, 2010
+
+.\" end of man page

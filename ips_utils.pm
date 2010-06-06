@@ -70,7 +70,7 @@ sub read_cfg ($) {
     my $pkgbuild_ips_port;
     my $pkgbuild_ips_server = $ENV{PKGBUILD_IPS_SERVER};
     if (defined ($pkgbuild_ips_server)) {
-	if ($pkgbuild_ips_server =~ /^http:\/\/([^:]+):([0-9]+)\//) {
+	if ($pkgbuild_ips_server =~ /^http:\/\/([^:]+):([0-9]+)/) {
 	    $pkgbuild_ips_host = $1;
 	    $pkgbuild_ips_port = $2;
 	}
@@ -91,7 +91,7 @@ sub read_cfg ($) {
 		    if (not defined($my_local_ip)) {
 			my $sock = IO::Socket::INET->new(
 			    PeerAddr=> "${host}",
-			    PeerPort=> 80,
+			    PeerPort=> ${port},
 			    Proto   => "tcp");
 			if (defined ($sock)) {
 			    $my_local_ip = $sock->sockhost;
@@ -147,6 +147,18 @@ sub is_installed($$) {
     $self->{_pkginfo}->{$pkgname} = $pkg_out;
     $self->{_installed}->{$pkgname} = $result;
     return $result;
+}
+
+sub verify_server ($) {
+    my $ips_server = shift;
+
+    return undef if not defined ($ips_server);
+
+    if ($ips_server =~ /([^\/])$/) {
+	return "server URI must end with a \"/\"";
+    }
+
+    return undef;
 }
 
 sub get_publisher_setting ($$$) {

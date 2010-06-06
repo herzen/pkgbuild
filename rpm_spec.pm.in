@@ -1257,12 +1257,33 @@ sub _process_tag ($$$) {
 	    $value = $1;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
-	    $package_ref->set_tag ($tagname, $value);
+	    if ($tagname eq "sunw_pkg" and not $self->{_main_package}) {
+		# if there is an SVr4 package with the same name defined, then link them
+		my @all_packages = $self->get_packages();
+		foreach my $p (@all_packages) {
+		    if ($p->get_svr4_name() eq $value) {
+			# a pkg with the same SVr4 name exists already
+			$package_ref->set_svr4_match($p);
+			last;
+		    }
+		}
+	    }
 	    if ($tagname eq "ips_package_name") {
 		# if there is an IPS_package_name defined for this %package
-		# then it's not a subpkg
-		$package_ref->set_subpkg(0);
+		# then it's not a subpkg, unless there's a %package with
+		# the same IPS name already
+		my @all_packages = $self->get_packages();
+		my $is_subpkg = 0;
+		foreach my $pkg (@all_packages) {
+		    if ($pkg->get_ips_name() eq $value) {
+			# a pkg with the same IPS name exists already
+			$is_subpkg = 1;
+			last;
+		    }
+		}
+		$package_ref->set_subpkg($is_subpkg);
 	    }
+	    $package_ref->set_tag ($tagname, $value);
 	    return 1;
 	}
     }
@@ -1296,11 +1317,11 @@ sub _process_tag ($$$) {
     foreach my $tag (@localised_tags) {
 	if ($lcline =~ /^$tag\(([^)]*)\)\s*:\s*/) {
 	    my $locale = $1;
-	    $line =~ /^\s*[a-zA-Z0-9()@_-]*\s*:\s*(.*\S)\s*$/;
+	    $line =~ /^\s*[a-zA-Z0-9().@_-]*\s*:\s*(.*\S)\s*$/;
 	    $value = $1;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
-	    $package_ref->set_tag ("$tagname::$locale", $value);
+	    $package_ref->set_tag ("${tagname}::${locale}", $value);
 	    return 1;
 	}
     }
@@ -1385,12 +1406,25 @@ sub _process_package ($$$) {
     }
 
     my $new_package = rpm_package->new_subpackage (\$self, $package_name, $pkg_tag, $is_subpkg);
+    $self->{_current_package} = $new_package;
+    $self->{_main_package} = undef;
+
+    # if there is an SVr4 package with the same name defined, then link them
+    my @all_packages = $self->get_packages();
+    my $pname = $svr4_pkg_name;
+    $pname = $package_name unless defined $pname;
+    foreach my $p (@all_packages) {
+	if ($p->get_svr4_name() eq $pname) {
+	    # a pkg with the same SVr4 name exists already
+	    $new_package->set_svr4_match($p);
+	    last;
+	}
+    }
+    $new_package->set_tag('sunw_pkg', $svr4_pkg_name);
     my $ref = $self->{_packages};
     push (@$ref, $new_package);
     my $packagebase = new packagebase;
     $packagebase->add_package ($new_package);
-    $self->{_current_package} = $new_package;
-    $new_package->set_tag('sunw_pkg', $svr4_pkg_name);
 
     $line = $self->_get_next_line ($fhandle);
     if (defined ($line)) {
@@ -2579,6 +2613,7 @@ sub _read_spec ($) {
 
     $self->{_being_loaded} = 1;
     $self->{_current_package} = $self->{_packages}[0];
+    $self->{_main_package} = 1;
 
     while (1) {
 	$line = $self->_get_next_line ($fhandle);
@@ -2595,6 +2630,7 @@ sub _read_spec ($) {
     close $fhandle;
 
     $self->{_current_package} = $self->{_packages}[0];
+    $self->{_main_package} = 1;
     $self->{_being_loaded} = 0;
     $self->{_loaded} = 1;
 
@@ -2818,6 +2854,7 @@ sub get_pkgs ($) {
     my @pkgs = ();
     foreach my $pkg (@packages) {
 	next if not $pkg->has_files ();
+	next if $pkg->has_svr4_match ();
 	my $sunw_pkg = $pkg->get_tag ('sunw_pkg');
 	if (defined ($sunw_pkg)) {
 	    push (@pkgs, $sunw_pkg);

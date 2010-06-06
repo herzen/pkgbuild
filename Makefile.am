@@ -2,7 +2,7 @@ AUTOMAKE_OPTIONS = dist-bzip2
 
 topdir = @TOPDIR@
 
-SUBDIRS = m4
+SUBDIRS = m4 doc
 
 gen_modules = \
 	rpm_spec.pm \
