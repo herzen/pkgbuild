@@ -1,3 +1,9 @@
+2010-06-07  Laszlo Peter  <laca@sun.com>
+
+	* ips_utils.pm: print a warning when pkg/readonly is true
+	* pkgbuild.pl.in: automatically enable IPS mode when PKGBUILD_IPS_SERVER
+	  is set or a local depotd is running
+
 2010-06-06  Laszlo Peter  <laca@sun.com>
 
 	* Makefile.am: add doc subdir

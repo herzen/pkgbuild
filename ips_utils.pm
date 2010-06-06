@@ -207,7 +207,17 @@ sub is_depotd_enabled ($) {
 
     if (not defined ($self->{_depotd_enabled})) {
 	my $server_state = `svcs -H -o STATE svc:/application/pkg/server:default`;
-	if ($server_state eq "online\n") {
+	my $read_only = `svcprop -c -p pkg/readonly svc:/application/pkg/server:default`;
+	chomp($server_state);
+	chomp($read_only);
+	if ($server_state eq "online" and $read_only eq "true") {
+	    print "WARNING: the local IPS server is running in read-only mode\n";
+	    print "HINT: use svccfg -s svc:/application/pkg/server setprop pkg/readonly = false\n";
+	    print "HINT: followed by svcadm refresh svc:/application/pkg/server\n";
+	    print "HINT: to switch to read-write mode, or set PKGBUILD_IPS_SERVER\n";
+	    print "HINT: to a different publisher URL\n";
+	}
+	if ($server_state eq "online" and $read_only eq "false") {
 	    $self->{_depotd_enabled} = 1;
 	} else {
 	    $self->{_depotd_enabled} = 0;

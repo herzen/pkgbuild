@@ -4,7 +4,7 @@ Version 1.3.102:
 
 	- Manual pages for pkgbuild(1), pkgtool(1) and spectool(1)
 	- Detail description of spec files in doc/spec-files.txt
-	  (also installed undef $(datadir)/pkgbuild/.
+	  (also installed undef $(datadir)/pkgbuild/)
 
 	Bugs fixed:
 
@@ -92,6 +92,8 @@ Version 1.3.102:
           <svr4_name> is the SVr4 package name of the package and
 	  <ips_name> is the IPS package name.  The output lines are prefixed
           with the spec file names if the -l option is used.
+
+	- print a warning and some hints when the local IPS server is read-only
 
 Version 1.3.101:
 

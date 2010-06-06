@@ -225,6 +225,10 @@ sub process_with ($$) {
 }
 
 my $pkgformat = "filesystem";
+if (defined ($ENV{PKGBUILD_IPS_SERVER}) or
+    (defined ($ips_utils) and $ips_utils->is_depotd_enabled())) {
+    $pkgformat = "ips";
+}
 sub set_pkgformat ($) {
     shift;
     my $format = shift;
@@ -2671,6 +2675,8 @@ sub set_arch($) {
 
 sub main () {
     process_options ();
+
+    print "Package format is $pkgformat\n";
 
     if ($pkgformat eq 'ips') {
 	$pkgdb = new pkgdb(1);
