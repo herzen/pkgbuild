@@ -1,3 +1,16 @@
+Version 1.3.103:
+
+	Bugs fixed:
+
+	- fix a typo in spectool that breaks get_ips_pkgname
+	- update %files in pkgbuild.spec.in for the new docs
+
+	New features:
+
+	- download testing: use pkgtool download --dry-run foo.spec
+	  to verify the Source URLs in foo.spec without actually
+ 	  downloading the sources.  (Rich Lowe's idea)
+
 Version 1.3.102:
 
 	Documentation (finally!):

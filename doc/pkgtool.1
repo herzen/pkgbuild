@@ -59,6 +59,10 @@ Install SVr4 packages by default.
 .TP
 \-\-rmlog
 Automatically remove the log file with each build
+.TP
+\-\-dry\-run
+(Download mode) test if the Source urls in the spec
+file(s) point to existing files, but do not download them.
 
 .SS Directories and search paths:
 
@@ -178,7 +182,9 @@ Download the source files from the URLs specified in
 the spec files listed on the command line.  Source
 files found in the local search paths will not be
 downloaded.  (See \-\-\fBtarballdirs\fR, \-\-\fBsourcedirs\fR,
-\-\-\fBdownload\-to\fR)
+\-\-\fBdownload\-to\fR)  Use the \-\-dry\-run option to
+test if the URLs point to existing files but without
+downloading them.
 
 .SS Spec Files	
 

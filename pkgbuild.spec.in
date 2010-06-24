@@ -63,8 +63,12 @@ rm -rf $RPM_BUILD_ROOT
 %dir %attr (0755, root, other) %{_datadir}/doc
 %attr (0755, root, bin) %{_bindir}
 %attr (0755, root, bin) %{_libdir}
+%{_datadir}/%{name}
+%{_mandir}
 
 %changelog
+* Tue Jun 22 2010 - laca@sun.com
+- updated %files for new doc and man pages
 * Fri Apr 17 2009 - laca@sun.com
 - add IPS Meta tags
 * Fri Aug 11 2006 - <laca@sun.com>

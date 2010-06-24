@@ -720,8 +720,8 @@ sub do_match_package_names () {
 		$label = $p->get_name ();
 		push (@pkgs, "${prefix}${label}:${svr4_name}:${ips_name}");
 	    }
-	}
 	    print_result ($spec, @pkgs);
+	}
     }
 }
 

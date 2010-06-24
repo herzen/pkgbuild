@@ -93,6 +93,7 @@ my $pkgbuild_path = "pkgbuild";
 my $build_engine = "pkgbuild";
 my $topdir = "$_homedir/packages";
 my $can_notify = 0;
+my $download_test = 0;
 
 # Which package mechanism are we going to install by default?
 my $ips;
@@ -860,6 +861,7 @@ sub process_options {
 		    $defaults->set ('download_to', shift);
 		    $defaults->set ('download', 1);
 		},
+		'dry-run' => sub { $download_test = 1; },
 		'source_mirrors=s' => sub {
 		    shift;
 		    $defaults->set ('source_mirrors', shift);
@@ -946,6 +948,11 @@ Options:
     --rmlog
 
                   Automatically remove the log file with each build
+
+    --dry-run
+
+                  (Download mode) test if the Source urls in the spec
+                  file(s) point to existing files, but do not download them.
 
   Directories and search paths:
 
@@ -2103,9 +2110,58 @@ sub wget_source ($$$) {
 	return 0
     }
 
+    my $wget_opts = " -nd -nH --tries=1 -T 60 ";
+    my $mirrors = $defaults->get('source_mirrors');
+    my $base_src = basename ($src);
+    my @mirror_list;
+    if (defined $mirrors) {
+	@mirror_list = split /,\s*/, $mirrors;
+    }
+
+    my $retval;
+
+    if ($download_test) {
+	my $wget_command = "$wget $wget_opts -S --spider -O- $src 2>&1";
+	msg_info (0, "Verifying url $src");
+	msg_info (2, "Running $wget_command");
+	my $wget_output = `$wget_command`;
+	$retval = $?;
+	chomp ($wget_output);
+
+	if ($retval != 0) {
+	    # download test unsuccessful, try mirrors
+	    if (defined ($mirrors)) {
+		$wget_output =~ s/\n/\nWARNING: wget: /g;
+		msg_log ("WARNING: wget: $wget_output");
+		msg_warning (0, "Download test from primary site failed");
+		foreach my $mirror (@mirror_list) {
+		    msg_info (0, "Testing download from source mirror $mirror");
+		    $wget_command = "$wget $wget_opts -S --spider $mirror/$base_src 2>&1";
+		    msg_info (2, "Running $wget_command");
+		    $wget_output = `$wget_command`;
+		    chomp ($wget_output);
+		    $retval = $?;
+		    if ($retval == 0) {
+			$wget_output =~ s/\n/\nINFO: wget: /g;
+			msg_info (0, "Download test from mirror $mirror successful");
+			msg_log ("INFO: wget: $wget_output");
+			last;
+		    } else {
+			$wget_output =~ s/\n/\nWARNING: wget: /g;
+			msg_warning (0, "Download test from mirror $mirror failed");
+			msg_log ("WARNING: wget: $wget_output");
+		    }
+		}
+	    } else {
+		$wget_output =~ s/\n/\nERROR: wget: /g;
+		msg_error ("wget: $wget_output");
+	    }
+	}
+	return !$retval;
+    }
+
     my $download_dir = $defaults->get ("download_to");
     $download_dir = "$target" unless defined ($download_dir);
-    my $base_src = basename ($src);
 
     msg_info (0, "Downloading source $src");
 
@@ -2119,16 +2175,11 @@ sub wget_source ($$$) {
 
     # download to temporary file .$base_src
     unlink "$download_dir/.$base_src";
-    my $wget_command = "$wget -nd -nH --tries=1 -T 60 -O $download_dir/.$base_src $src 2>&1";
+    my $wget_command = "$wget $wget_opts -O $download_dir/.$base_src $src 2>&1";
     msg_info (2, "Running $wget_command");
     my $wget_output = `$wget_command`;
     chomp ($wget_output);
-    my $retval = $?;
-    my $mirrors = $defaults->get('source_mirrors');
-    my @mirror_list;
-    if (defined $mirrors) {
-	@mirror_list = split /,\s*/, $mirrors;
-    }
+    $retval = $?;
 
     if ($retval != 0) {
 	# download unsuccessful, delete temporary file if exists
@@ -2139,7 +2190,7 @@ sub wget_source ($$$) {
 	    msg_warning (0, "Download failed from primary site");
 	    foreach my $mirror (@mirror_list) {
 		msg_info (0, "Trying source mirror $mirror");
-		$wget_command = "$wget -nd -nH --tries=1 -T 60 -O $download_dir/.$base_src $mirror/$base_src 2>&1";
+		$wget_command = "$wget $wget_opts -O $download_dir/.$base_src $mirror/$base_src 2>&1";
 		msg_info (2, "Running $wget_command");
 		$wget_output = `$wget_command`;
 		chomp ($wget_output);
