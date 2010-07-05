@@ -2066,10 +2066,10 @@ sub close_ips_transaction($) {
 }
 
 my @autotag_data = (["/etc/gconf/schemas/.*\.(schemas|entries)$/",
-		     "svc:/applications/desktop-cache/gconf-cache:default",
+		     "svc:/application/desktop-cache/gconf-cache:default",
 		     "SUNWdesktop-cache"],
 		    ["usr/share/icons/.*",
-		     "svc:/applications/desktop-cache/icon-cache:default",
+		     "svc:/application/desktop-cache/icon-cache:default",
 		     "SUNWdesktop-cache"],
 		    ["usr/lib/.*gtk-2.0/.*/immodule/.*\.so",
 		     "svc:/application/desktop-cache/input-method-cache:default",

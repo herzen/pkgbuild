@@ -1,3 +1,15 @@
+2010-07-06  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: update
+	* pkgdb.pm.in: fix regexp to allow pkg:/ prefix in package names
+	  (patch by Rich Lowe)
+	* rpm_package.pm: fix problem with undefined files list reference
+	  (reported by Michal Pryc)
+
+2010-06-28  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: fix typo in the smf fmri for gconf-cache
+
 2010-06-24  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update

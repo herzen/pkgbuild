@@ -401,7 +401,12 @@ sub get_files ($) {
 	    }
 	}
     }
-    my @all_files = (@$files, @all_match_files);
+    my @all_files;
+    if (defined ($files)) {
+	@all_files = (@$files, @all_match_files);
+    } else {
+	@all_files = @all_match_files;
+    }
     return @all_files if @all_files;
     return undef;
 }

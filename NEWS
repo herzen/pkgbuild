@@ -4,6 +4,8 @@ Version 1.3.103:
 
 	- fix a typo in spectool that breaks get_ips_pkgname
 	- update %files in pkgbuild.spec.in for the new docs
+        - fix typo in SMF service FMRI for gconf-cache  (reported
+	  by Rich Lowe)
 
 	New features:
 
