@@ -1274,14 +1274,16 @@ sub _process_tag ($$$) {
 		# the same IPS name already
 		my @all_packages = $self->get_packages();
 		my $is_subpkg = 0;
-		foreach my $pkg (@all_packages) {
-		    if ($pkg->get_ips_name() eq $value) {
-			# a pkg with the same IPS name exists already
-			$is_subpkg = 1;
-			last;
+		if ($#all_packages > 0) {
+		    foreach my $pkg (@all_packages) {
+			if ($pkg->get_ips_name() eq $value) {
+			    # a pkg with the same IPS name exists already
+			    $is_subpkg = 1;
+			    last;
+			}
 		    }
+		    $package_ref->set_subpkg($is_subpkg);
 		}
-		$package_ref->set_subpkg($is_subpkg);
 	    }
 	    $package_ref->set_tag ($tagname, $value);
 	    return 1;

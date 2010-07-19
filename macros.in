@@ -2,8 +2,33 @@
 %_is_pkgbuild 		1
 %_pkgbuild_version 	@PKGBUILD_VERSION@
 %buildroot 		%{_tmppath}/%{name}-%{version}-build
-%_target 		@ARCH@
+%_arch                  @ARCH@
+%_build_arch            @ARCH@
+%_vendor                sun
+%_os                    solaris%(uname -r | sed -e's/^5/2/')
+#%_gnu                  -gnu
+%_target_platform       %{_target_cpu}-%{_vendor}-%{_target_os}%{?_gnu}
 %_initrddir		%{_sysconfdir}/init.d
+
+#==============================================================================
+# ---- config.guess platform macros.
+#       Macro(s) similar to the tokens used by configure.
+#
+%_build                 %{_host}
+%_build_alias           %{_host_alias}
+%_build_cpu             %{_host_cpu}
+%_build_vendor          %{_host_vendor}
+%_build_os              %{_host_os}
+%_host                  %{_target_platform}
+%_host_alias            %{nil}
+%_host_cpu              i686
+%_host_vendor           %{_vendor}
+%_host_os               %{_os}
+%_target                %{_host}
+%_target_alias          %{_host_alias}
+%_target_cpu            %{_host_cpu}
+%_target_vendor         %{_host_vendor}
+%_target_os             %{_host_os}
 
 #==============================================================================
 # ---- A macro that expands to nothing.
@@ -125,6 +150,44 @@
 %_global_cflags		-O2 -g -pipe
 %optflags		%{_global_cflags}
 
+#==============================================================================
+# ---- specfile macros.
+#       Macro(s) here can be used reliably for reproducible builds.
+#       (Note: Above is the goal, below are the macros under development)
+#
+# The configure macro does the following:
+#       optionally change to a subdirectory (not implemented).
+#       attempt to update config.guess and config.sub.
+#       run configure with correct prefix, platform, and CFLAGS.
+#       optionally restore current directory (not implemented).
+# The configure macro should be invoked as %configure (rather than %{configure})
+# because the rest of the arguments will be expanded using %*.
+#
+#------------------------------------------------------------------------------
+# This is an improved version of %configure (from PLD team).
+%configure \
+  CFLAGS="${CFLAGS:-%optflags}" ; export CFLAGS ; \
+  CXXFLAGS="${CXXFLAGS:-%optflags}" ; export CXXFLAGS ; \
+  FFLAGS="${FFLAGS:-%optflags}" ; export FFLAGS ; \
+  ./configure --host=%{_host} --build=%{_build} \\\
+        --target=%{_target_platform} \\\
+        --program-prefix=%{?_program_prefix} \\\
+        --prefix=%{_prefix} \\\
+        --exec-prefix=%{_exec_prefix} \\\
+        --bindir=%{_bindir} \\\
+        --sbindir=%{_sbindir} \\\
+        --sysconfdir=%{_sysconfdir} \\\
+        --datadir=%{_datadir} \\\
+        --includedir=%{_includedir} \\\
+        --libdir=%{_libdir} \\\
+        --libexecdir=%{_libexecdir} \\\
+        --localstatedir=%{_localstatedir} \\\
+        --sharedstatedir=%{_sharedstatedir} \\\
+        --mandir=%{_mandir} \\\
+        --infodir=%{_infodir}
+
+#------------------------------------------------------------------------------
+# The make install analogue of %configure:
 %makeinstall \
   make \\\
         prefix=%{?buildroot:%{buildroot}}%{_prefix} \\\

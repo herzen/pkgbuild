@@ -2397,7 +2397,7 @@ sub do_build (;$$) {
 	    print_live_status;
 	}
 	my $notify = $defaults->get ('notify');
-	if ($build_status[$i] ne "PASSED") {
+	if ($build_status[$i] ne "PASSED" and $build_status[$i] ne "SKIPPED") {
 	    $exit_val++;
 	    if ($notify) {
 		my $notify_msg = "pkgbuild:\n$specs_to_build[$i] failed:\n$status_details[$i]";

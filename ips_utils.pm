@@ -77,12 +77,12 @@ sub read_cfg ($) {
     }
     while (my $line = <IPS_AUTH>) {
 	chomp ($line);
-	if ($line =~ /^(\S+)\s+.*\s*(https?:\/\/\S+).*$/) {
+	if ($line =~ /^(\S+)\s+.*\s*((file|https?):\/\/\S+).*$/) {
 	    my $publisher = $1;
 	    my $origin = $2;
 	    $self->{_publishers}->{$publisher} = {};
 	    $self->{_publishers}->{$publisher}->{origin} = $origin;
-	    if ($origin =~ /^http:\/\/(.+):(.+)\/$/) {
+	    if ($origin =~ /^https?:\/\/(.+):(.+)\/$/) {
 		my $host = $1;
 		my $port = $2;
 		my $local_port = $self->get_local_ips_port ();
@@ -123,6 +123,14 @@ sub read_cfg ($) {
 			    }
 			}
 		    }
+		}
+	    } elsif ($origin =~ /^file:\/\//) {
+		if (not defined ($self->{_local_publisher})) {
+		    $self->{_local_publisher} = $publisher;
+		}
+		if (defined ($pkgbuild_ips_server) and
+		    $pkgbuild_ips_server eq $origin) {
+		    $self->{_pkgbuild_publisher} = $publisher;
 		}
 	    }
 	} else {

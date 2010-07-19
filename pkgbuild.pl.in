@@ -1896,6 +1896,9 @@ sub add_ips_summary($$;$) {
     my $package = shift;
     my $src_fmri = shift;
 
+    my $summary = $package->get_tag("summary");
+    $summary = "$package" unless defined ($summary);
+
     my $meta_hash = $package->get_meta_hash();
     if (not defined ($$meta_hash{'pkg.name'})) {
 	my $name = $package->get_ips_name();
@@ -1905,11 +1908,9 @@ sub add_ips_summary($$;$) {
 	$$meta_hash{'pkg.name'} = $name;
     }
     if (not defined ($$meta_hash{'description'})) {
-	my $summary = $package->get_tag("summary");
 	$$meta_hash{'description'} = $summary;
     }
     if (not defined ($$meta_hash{'pkg.summary'})) {
-	my $summary = $package->get_tag("summary");
 	$$meta_hash{'pkg.summary'} = $summary;
     }
     if (not defined ($$meta_hash{'info.upstream_url'})) {
@@ -1925,7 +1926,9 @@ sub add_ips_summary($$;$) {
 	# handle info.classification separately, as there may be more than one
 	# and they need to be in the same action
 	next if $meta eq "info.classification";
-	push (@$ref_lines, "set name=$meta value=\"$$meta_hash{$meta}\"");
+	my $val = $$meta_hash{$meta};
+	$val =~ s/"/\\"/g;
+	push (@$ref_lines, "set name=$meta value=\"$val\"");
     }
 
     # FIXME: this allows up to 2 classifications:
@@ -2044,6 +2047,8 @@ sub add_ips_legacy($$$;$) {
 	}
 	chomp ($rev);
 
+	$desc =~ s/"/\\"/g;
+	$hotline =~ s/"/\\"/g;
 	push (@$ref_lines, "legacy arch=$arch category=$category desc=\"$desc\" hotline=\"$hotline\" name=\"$desc\" pkg=$pkgname $vendor version=$version,REV=$rev");
 
 	# as seen in Bart's blog:

@@ -1,3 +1,14 @@
+2010-07-19  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: update
+	* autogen.sh: call aclocal and automake with explicit version
+	* ips_utils.pm: implement file:// repos
+	* macros.in: add definition of %configure to the default macros
+	* pkgbuild.pl.in: make IPS pkg.summary and description default to
+	  the package name rather than an empty action.
+	* pkgtool.pl: don't count SKIPPED packages as failed
+	* rpm_spec.pm.in: fix an undefined variable warning
+
 2010-07-06  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update
