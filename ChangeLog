@@ -1,3 +1,11 @@
+2010-07-23  Laszlo Peter  <laca@sun.com>
+
+	* configure.in: bump version
+	* pkgtool.pl: fix installation when 'entire' is not installed
+	* NEWS: update
+
+	======= pkgbuild 1.3.103 =======
+
 2010-07-19  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update

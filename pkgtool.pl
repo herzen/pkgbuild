@@ -1538,7 +1538,11 @@ sub update_incorporations ($) {
 	    if (not defined($all_incorporations{$incorp})) {
 		msg_info (1, "Loading incorporation $incorp");
 		$all_incorporations{$incorp} = 
-		    ips_package->new_from_fmri ($incorp) or return 1;
+		    ips_package->new_from_fmri ($incorp);
+		if (not defined($all_incorporations{$incorp})) {
+		    delete ($all_incorporations{$incorp});
+		    next;
+		}
 	    }
 	    msg_info (1, "Updating incorporation $incorp");
 	    $all_incorporations{$incorp}->update_depend ($pn, $version);
