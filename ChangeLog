@@ -1,3 +1,10 @@
+2010-09-20  Laszlo Peter  <laca@sun.com>
+
+	* NEWS: update
+	* pkgbuild.pl.in: set pkg.description and variant.arch attributes
+	  in manifests; treat comma-separated values in Meta tag as multiple
+	  values, unless quoted: "foo, bar" or the comma is escaped: foo\, bar
+
 2010-07-23  Laszlo Peter  <laca@sun.com>
 
 	* configure.in: bump version

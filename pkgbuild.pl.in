@@ -1910,6 +1910,9 @@ sub add_ips_summary($$;$) {
     if (not defined ($$meta_hash{'description'})) {
 	$$meta_hash{'description'} = $summary;
     }
+    if (not defined ($$meta_hash{'pkg.description'})) {
+	$$meta_hash{'pkg.description'} = $summary;
+    }
     if (not defined ($$meta_hash{'pkg.summary'})) {
 	$$meta_hash{'pkg.summary'} = $summary;
     }
@@ -1927,8 +1930,34 @@ sub add_ips_summary($$;$) {
 	# and they need to be in the same action
 	next if $meta eq "info.classification";
 	my $val = $$meta_hash{$meta};
-	$val =~ s/"/\\"/g;
-	push (@$ref_lines, "set name=$meta value=\"$val\"");
+	my @values;
+	if ($val =~ /^"(.*)"$/) {
+	    # the value is quoted
+	    @values = ($1);
+	} else {
+	    # split values at commas, unless comma is escaped
+	    while ($val =~ /^(.*[^\\]),\s*(.*)/) {
+		$val = $1;
+		my $v0 = $2;
+		if ($v0 =~ /^"(.*)"$/) {
+		    $v0 = $1;
+		}
+		if ($v0 ne "") {
+		    unshift (@values, $v0);
+		}
+	    }
+	    if ($val =~ /^"(.*)"$/) {
+		$val = $1;
+	    }
+	    if ($val ne "") {
+		unshift (@values, $val);
+	    }
+	}
+        map s/([^\\]|^)"/$1\\"/g, @values;
+	map s/\\,/,/g, @values;
+	my $val_str = "";
+	map $val_str .= " value=\"$_\"", @values;
+	push (@$ref_lines, "set name=$meta$val_str");
     }
 
     # FIXME: this allows up to 2 classifications:
@@ -2051,15 +2080,15 @@ sub add_ips_legacy($$$;$) {
 	$hotline =~ s/"/\\"/g;
 	push (@$ref_lines, "legacy arch=$arch category=$category desc=\"$desc\" hotline=\"$hotline\" name=\"$desc\" pkg=$pkgname $vendor version=$version,REV=$rev");
 
-	# as seen in Bart's blog:
-        # http://blogs.sun.com/barts/?cat=packaging+and+patching&date=20090204
 	if (defined ($src)) {
-	    push (@$ref_lines, "set name=variant.arch value=$arch");
 	    # only add 1 legacy action in a source package,
 	    # not one for each subpackage.
 	    last;
 	}
     }
+    # as seen in Bart's blog:
+    # http://blogs.sun.com/barts/?cat=packaging+and+patching&date=20090204
+    push (@$ref_lines, "set name=variant.arch value=$arch");
 }
 
 # Add close transaction
