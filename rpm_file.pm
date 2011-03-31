@@ -105,6 +105,7 @@ sub new ($$$;$$$$$$$$$) {
     $self->{_is_recursive} = $is_recursive;
     $self->{_compression} = undef;
     $self->{_doc_subdir} = undef;
+    $self->{_exclude} = 0;
     if (defined ($class_name)) {
 	$self->{_class} = $class_name;
     } else {
@@ -143,6 +144,24 @@ sub _process_verify ($) {
 
 sub get_all_verify () {
     return (@_all_verify);
+}
+
+sub exclude ($) {
+    my $self = shift;
+    $self->{_exclude} = 1;
+}
+
+sub set_preserve($$) {
+    my $self = shift;
+    my $preserve_option = shift;
+
+    $self->{_preserve} = $preserve_option;
+}
+
+sub get_preserve ($) {
+    my $self = shift;
+
+    return $self->{_preserve};
 }
 
 sub set_compression ($$) {
@@ -210,6 +229,12 @@ sub has_verify ($$) {
     }
 
     return 0;
+}
+
+sub is_excluded ($) {
+    my $self = shift;
+
+    return $self->{_exclude};
 }
 
 sub is_doc ($) {

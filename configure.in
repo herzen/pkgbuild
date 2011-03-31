@@ -15,6 +15,9 @@ fi
 
 AC_PROG_PERL(5.004)
 
+PATH=/usr/gnu/bin:/usr/sfw/bin:$PATH
+export PATH
+
 AC_PATH_PROGS([PATCH],[gpatch patch])
 AC_MSG_CHECKING([if $PATCH is GNU patch])
 PATCH_IS_GNU=no
@@ -28,8 +31,33 @@ if test $PATCH_IS_GNU = no; then
 fi
 AC_SUBST(PATCH)
 
-PATH=/usr/sfw/bin:$PATH
-export PATH
+AC_PATH_PROGS([GNU_SED],[gsed sed])
+AC_MSG_CHECKING([if $GNU_SED is GNU sed])
+SED_IS_GNU=no
+$GNU_SED --version 2>/dev/null | grep 'Free Software Foundation' > /dev/null \
+       && SED_IS_GNU=yes
+$GNU_SED --version 2>/dev/null | head -1 | grep '^GNU sed ' > /dev/null \
+       || SED_IS_GNU=no
+AC_MSG_RESULT([$SED_IS_GNU])
+if test $SED_IS_GNU = no; then
+  AC_MSG_ERROR([pkgbuild requires GNU sed, set the GNU_SED environment variable])
+fi
+AC_SUBST(GNU_SED)
+
+AC_PATH_PROGS([GNU_ID],[id])
+AC_MSG_CHECKING([if $GNU_ID is GNU id])
+ID_IS_GNU=no
+$GNU_ID --version 2>/dev/null | grep 'Free Software Foundation' > /dev/null \
+       && ID_IS_GNU=yes
+$GNU_ID --version 2>/dev/null | head -1 | grep '^id (GNU coreutils) ' > /dev/null \
+       || ID_IS_GNU=no
+AC_MSG_RESULT([$ID_IS_GNU])
+if test $ID_IS_GNU = no; then
+  AC_MSG_ERROR([pkgbuild requires GNU id, set the GNU_ID environment variable])
+fi
+AC_SUBST(GNU_ID)
+
+
 AC_PATH_PROGS([TAR],[gtar tar])
 AC_MSG_CHECKING([if $TAR is GNU tar])
 TAR_IS_GNU=no
@@ -43,9 +71,13 @@ AC_MSG_RESULT([$TAR_IS_GNU])
 if test $TAR_IS_GNU = no; then
   AC_MSG_ERROR([pkgbuild requires GNU tar for correct operation])
 fi
-AC_SUBST(PATCH)
-
 AC_SUBST(TAR)
+
+AC_PATH_PROGS([CMAKE],[cmake])
+if test -z "$CMAKE"; then
+   CMAKE=/usr/bin/cmake
+fi
+AC_SUBST(CMAKE)
 
 # Anyone knows a better way to do this with autoconf? let me know...
 WARNING_MESSAGE_L1="#########################################################"

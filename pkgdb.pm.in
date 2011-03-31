@@ -172,7 +172,7 @@ sub _select_package($@) {
                                SUNWcar SUNWcarx SUNWcsd
                                SUNWcsl SUNWcslx
                                system/locale/.* system/.* library/.*
-                               runtime/.* desktop/.* gnome/.*);
+                               runtime/.* desktop/.* gnome/.* text/.*);
     if (defined($pkg)) {
 	my $safepkg = $pkg;
 	$safepkg =~ s/\+/\\+/g;
@@ -371,14 +371,15 @@ sub get_ips_pkgname($$$) {
 	    }
 	}
 	# parse the FMRI: line
-	if ($pkg_selected and $s_o_line =~ /^\s*FMRI:\s[^@]+@([^:]+):/) {
+	if ($pkg_selected and $s_o_line =~ /^\s*FMRI:\s[^@]+\@([^:]+):/) {
 	    $self->{ips_pkgname_cache}->{$pkg} = "$pkg_only\@$1";
 	    $self->{ips_pkgname_cache}->{$pkg_only} = "$pkg_only\@$1";
+	    $self->msg_info(2, "Resolved to " . $self->{ips_pkgname_cache}->{$pkg});
 	    return $self->{ips_pkgname_cache}->{$pkg};
 	}
-	if ($partial_selected and $s_o_line =~ /^\s*FMRI:\s[^@]+@([^:]+):/) {
+	if ($partial_selected and $s_o_line =~ /^\s*FMRI:\s[^@]+\@([^:]+):/) {
 	    $partial_selected = 0;
-	    push (@partial_matches, "$partial_name@$1");
+	    push (@partial_matches, "$partial_name\@$1");
 	}
     }
     # No exact match found, but pkg info did return a match, let's use it
@@ -484,8 +485,13 @@ sub file2pkgs($$;$) {
 	    if ($pname =~ /.*@.*-0.([0-9]+)/) {
 		if ($branch eq $1) {
 		    push (@pkglist, $pname);
-		} elsif ($branch > $1) {
-		    if (defined ($highest_branch) and $highest_branch < $1) {
+		} else {
+		    if (defined ($highest_branch)) {
+			if ($highest_branch < $1) {
+			    $pname_h_b = $pname;
+			    $highest_branch = $1;
+			}
+		    } else {
 			$pname_h_b = $pname;
 			$highest_branch = $1;
 		    }

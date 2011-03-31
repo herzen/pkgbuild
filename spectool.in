@@ -25,9 +25,21 @@
 #  Authors:  Laszlo Peter  <laca@sun.com>
 #
 
-origwd=`pwd`;
-mydir=$(cd $(dirname $0); pwd);
-pkgbuild_dir="$mydir/../lib/pkgbuild-@PKGBUILD_VERSION@"
 pkgbuild_prefix="@PKGBUILD_PREFIX@"
+pkgbuild_libdir="@PKGBUILD_LIBDIR@"
+pkgbuild_bindir="${pkgbuild_prefix}/bin"
+pkgbuild_wrapper="${pkgbuild_bindir}/pkgbuild"
+spectool_implementation="${pkgbuild_libdir}/spectool.pl"
 
-exec @PERL@ -I $pkgbuild_dir $pkgbuild_dir/spectool.pl "$pkgbuild_prefix/bin/pkgbuild" "${@}"
+if [ ! -d "${pkgbuild_prefix}" -o \
+     ! -d "${pkgbuild_libdir}" -o \
+     ! -d "${pkgbuild_bindir}" -o \
+     ! -x "${pkgbuild_wrapper}" -o \
+     ! -f "${spectool_implementation}" ]
+then
+    echo "${0}: FATAL ERROR - pkgbuild implementation not found." 1>&2
+    exit 1
+fi
+
+# Pass in the full path to the pkgbuild wrapper as the first command line argument
+exec "@PERL@" -I "${pkgbuild_libdir}" "${spectool_implementation}" "${pkgbuild_wrapper}" "${@}"

@@ -70,10 +70,14 @@ sub read_cfg ($) {
     my $pkgbuild_ips_port;
     my $pkgbuild_ips_server = $ENV{PKGBUILD_IPS_SERVER};
     if (defined ($pkgbuild_ips_server)) {
-	if ($pkgbuild_ips_server =~ /^http:\/\/([^:]+):([0-9]+)/) {
+	if ($pkgbuild_ips_server =~ /^https?:\/\/([^:\/]+)(:([0-9]+))?/) {
 	    $pkgbuild_ips_host = $1;
-	    $pkgbuild_ips_port = $2;
-	}
+	    $pkgbuild_ips_port = $3;
+	    if (!defined ($3)) {
+		$pkgbuild_ips_port = 80 if $pkgbuild_ips_server =~ m{^http:};
+		$pkgbuild_ips_port = 443 if $pkgbuild_ips_server =~ m{^https:};
+	    }
+	} 
     }
     while (my $line = <IPS_AUTH>) {
 	chomp ($line);
@@ -82,9 +86,13 @@ sub read_cfg ($) {
 	    my $origin = $2;
 	    $self->{_publishers}->{$publisher} = {};
 	    $self->{_publishers}->{$publisher}->{origin} = $origin;
-	    if ($origin =~ /^https?:\/\/(.+):(.+)\/$/) {
+	    if ($origin =~ /^https?:\/\/([^:\/]+)(:([0-9]+))?\//) {
 		my $host = $1;
-		my $port = $2;
+		my $port = $3;
+		if (!defined ($3)) {
+		    $port = 80 if $origin =~ m{^http:};
+		    $port = 443 if $origin =~ m{^https:};
+		}
 		my $local_port = $self->get_local_ips_port ();
 		if ($port == $local_port) {
 		    my $packed_ip = gethostbyname ($host);
@@ -147,13 +155,8 @@ sub is_installed($$) {
     my $self = shift;
     my $pkgname = shift;
 
-    if (defined ($self->{_installed}->{$pkgname})) {
-	return $self->{_installed}->{$pkgname};
-    }
-    my $pkg_out = `pkg info -l $pkgname 2>&1`;
+    `pkg info -l $pkgname 2>&1`;
     my $result = (! $?);
-    $self->{_pkginfo}->{$pkgname} = $pkg_out;
-    $self->{_installed}->{$pkgname} = $result;
     return $result;
 }
 

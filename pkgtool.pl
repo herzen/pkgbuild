@@ -191,8 +191,11 @@ sub process_defaults () {
     $defaults->add ('source_mirrors', 's',
 		    'comma-separated list of mirror sites for source downloads');
     $defaults->add ('rmlog', '!',
-                   'whether to remove the log file with each build',
-                   0);
+		    'whether to remove the log file with each build',
+		    0);
+    $defaults->add ('sourcepkg', '!',
+		    'whether pkgbuild should create a source package',
+		    1);
 }
 
 # --------- utility functions ----------------------------------------------
@@ -728,7 +731,7 @@ sub process_pkgformat ($$) {
     shift;
     my $pkgformat = shift;
 
-    if ($pkgformat =~ /(ds|datastream|fs|filesystem)/) {
+    if ($pkgformat =~ /(ds|datastream|fs|filesystem|ips)/) {
 	$defaults->set ('pkgformat', $pkgformat);
     } else {
 	msg_error ("invalid value for --pkgformat");
@@ -869,6 +872,7 @@ sub process_options {
 		'ips' => sub { set_ips(1); },
 		'svr4' => sub { set_svr4(1); },
                 'rmlog' => sub { shift; $defaults->set ('rmlog', shift); },
+                'sourcepkg!' => sub { shift; $defaults->set ('sourcepkg', shift); },
 		'<>' => \&process_args);
 
     if ($topdir ne $default_topdir) {
@@ -953,6 +957,11 @@ Options:
 
                   (Download mode) test if the Source urls in the spec
                   file(s) point to existing files, but do not download them.
+
+
+    --sourcepkg / --nosourcepkg
+
+                  Create / do not create a source package.
 
   Directories and search paths:
 
@@ -1263,7 +1272,7 @@ sub is_provided ($) {
 
     # FIXME: this deletes the version requirements, but we really should
     # implement that
-    $capability =~ s/\s.*//;
+    $capability =~ s/[\s><=].*//;
 
     if ($capability =~ /^\//) {
 	# Requires: /path/to/file or BuildRequires: /path/to/file
@@ -1523,8 +1532,10 @@ sub update_incorporations ($) {
 	# subpackages are merged in the main package
 	next if ($p->is_subpkg());
 	my $pn = $p->get_ips_name();
-	my $ips_vendor_version = $p->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
-	my $version = $p->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
+	my $ips_vendor_version = $p->get_value_of ("ips_vendor_version");
+	my $ips_component_version = $p->get_value_of ("ips_component_version");
+	my $ips_build_version = $p->get_value_of ("ips_build_version");
+	my $version = $p->eval("${ips_component_version},${ips_build_version}-${ips_vendor_version}");
 	# get all the incorporations the packages are included in
 	my @pkg_inc = 
 	    `pkg search -o pkg.shortfmri -Hl :depend:incorporate:$pn 2>/dev/null`;
@@ -1586,8 +1597,6 @@ sub install_pkgs_ips ($) {
     msg_info (0, "Installing package(s) from publisher $auth\n");
     
     my $all_pkgs = "";
-    my $ips_vendor_version = $spec->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
-    my $version = $spec->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
     my $prefix = $ips_utils->get_publisher_setting ($auth, 'prefix');
     # FIXME: hack?
     $prefix = $auth unless defined ($prefix);
@@ -1595,7 +1604,23 @@ sub install_pkgs_ips ($) {
     foreach my $pkg (@pkgs) {
 	# subpackages are merged in the main package
 	next if ($pkg->is_subpkg());
+	# do not install renamed or obsolete packages
+	my $is_renamed = $pkg->get_meta("pkg.renamed");
+	next if (defined ($is_renamed) and 
+		 ($is_renamed eq "true" or $is_renamed eq "1"));
+	my $is_obsolete = $pkg->get_meta("pkg.obsolete");
+	next if (defined ($is_obsolete) and 
+		 ($is_obsolete eq "true" or $is_obsolete eq "1"));
+	if (not $pkg->has_files()) {
+	    my $make_empty = $pkg->get_value_of("pkgbuild_make_empty_package");
+	    next if not defined ($make_empty);
+	    next if ($make_empty ne "1" and $make_empty ne "true");
+	}
 	my $pn = $pkg->get_ips_name();
+	my $ips_vendor_version = $pkg->get_value_of ("ips_vendor_version");
+	my $ips_component_version = $pkg->get_value_of ("ips_component_version");
+	my $ips_build_version = $pkg->get_value_of ("ips_build_version");
+	my $version = $pkg->eval("${ips_component_version},${ips_build_version}-${ips_vendor_version}");
 	# on older than snv_129 versions of pkg,
 	# if the package is in an incorporation that we updated,
 	# only try to install the updated incorporation, it will
@@ -1607,11 +1632,11 @@ sub install_pkgs_ips ($) {
 		# don't add the same incorporation name to the args again
 		$incorps{$incorporated{$pn}} = 1;
 	    }
-	}
-	# on newer version of pkg, we also need to specify the package names
-	if ($os_build >= 129) {
-	    msg_info (2, "New IPS, add package name to command line");
-	    $all_pkgs = "$all_pkgs pkg://$auth/$pn\@$version";
+	    # on newer version of pkg, we also need to specify the package names
+	    if ($os_build >= 129) {
+		msg_info (2, "New IPS, add package name to command line");
+		$all_pkgs = "$all_pkgs pkg://$auth/$pn\@$version";
+	    }
 	}
     }
 
@@ -1656,6 +1681,10 @@ sub install_pkgs_ips ($) {
 	if ($ips_utils->is_installed($pn)) {
 	    next;
 	}
+	my $ips_vendor_version = $pkg->get_value_of ("ips_vendor_version");
+	my $ips_component_version = $pkg->get_value_of ("ips_component_version");
+	my $ips_build_version = $pkg->get_value_of ("ips_build_version");
+	my $version = $pkg->eval("${ips_component_version},${ips_build_version}-${ips_vendor_version}");
 	my $prefix = $ips_utils->get_publisher_setting ($auth, 'prefix');
 	# FIXME: hack?
 	$prefix = $auth unless defined ($prefix);
@@ -2234,15 +2263,16 @@ sub wget_source ($$$) {
     }
 
     if ($download_dir ne $target) {
-	my $src_path = $src;
-	$src_path =~ s/^.*\/([^\/]+)/$1/;
-	msg_info (1, "Source $src_path saved in $download_dir");
-	$src_path = "$download_dir/$src_path";
-	if (not copy ($src_path, $target)) {
-	    msg_warning (0, "failed to copy $src_path to $target");
-	} else {
-	    # FIXME
-	    `chmod a+r $target`;
+	msg_info (1, "Source $base_src saved in $download_dir");
+	if (not mkdir_p ($target)) {
+	    msg_error ("Failed to create source directory $target");
+	    $build_status[$spec_id] = 'ERROR';
+	    $status_details[$spec_id] = "cannot create source directory";
+	    return 0;
+	}
+
+	if (not copy ("$download_dir/$base_src", "$target/$base_src")) {
+	    msg_warning (0, "failed to copy $base_src to $target");
 	}
     }
 
@@ -2654,6 +2684,10 @@ sub run_build ($;$) {
     my $check_deps = $defaults->get ('deps');
     if (not $check_deps) {
 	$the_command = "$build_engine --nodeps";
+    }
+    my $sourcepkg = $defaults->get ('sourcepkg');
+    if (not $sourcepkg) {
+	$the_command = "$the_command --nosourcepkg";
     }
     my $interactive_mode = $defaults->get ('interactive');
     if ($interactive_mode and ($build_engine_name eq "pkgbuild")) {
@@ -3068,7 +3102,7 @@ sub process_spec ($) {
 	next if not defined $pkg;
 	my $pkgname = $pkg->get_tag ('SUNW_Pkg');
 	$pkgname = "$pkg" unless $pkgname;
-	if (defined ($provider{$pkgname})) {
+	if (defined ($provider{$pkgname}) and $provider{$pkgname} != $spec_id) {
 	    my $prev_spec = $specs_to_build[$provider{$pkgname}];
 	    msg_warning (0, "skipping spec file " . 
 			 $spec->get_base_file_name() . 

@@ -1,0 +1,173 @@
+#!/bin/bash
+
+# CDDL HEADER START
+#
+# The contents of this file are subject to the terms of the
+# Common Development and Distribution License, Version 1.0 only
+# (the "License").  You may not use this file except in compliance
+# with the License.
+#
+# You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+# or http://www.opensolaris.org/os/licensing.
+# See the License for the specific language governing permissions
+# and limitations under the License.
+#
+# When distributing Covered Code, include this CDDL HEADER in each
+# file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+# If applicable, add the following below this CDDL HEADER, with the
+# fields enclosed by brackets "[]" replaced with your own identifying
+# information: Portions Copyright [yyyy] [name of copyright owner]
+#
+# CDDL HEADER END
+#
+# Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
+#
+
+#
+# This script prints IPS dependencies based on the filelist provided as
+# an argument.
+
+
+# NAME
+# 	print_help_and_exit
+#
+# ARGUMENTS
+# 	arg1: exit status, default 0
+#
+# DESCRIPTION
+# 	Print help and exit
+#
+function print_help_and_exit {
+        print "\nUsage:\n $0 arguments" \
+            "\n\nArgument list:" \
+            "\n\t-f <path to the file with list of files" \
+            "\n\t-h <print this help and exit>"
+        [[ -z "$1" ]] && exit 0
+        exit "$1"
+}
+
+# NAME
+# 	cleanup
+#
+# ARGUMENTS
+# 	None
+#
+# DESCRIPTION
+# 	Clean up the files created by this script.
+#
+function cleanup {
+        [[ -f "$filelist_tmp0" ]] && rm -f "$filelist_tmp0"
+        [[ -f "$filelist_tmp" ]] && rm -f "$filelist_tmp"
+        [[ -f "$generate_tmp" ]] && rm -f "$generate_tmp"
+        [[ -f "${generate_tmp}.res" ]] && rm -f "${generate_tmp}.res"
+}
+
+# NAME
+# 	ctrl_c
+#
+# ARGUMENTS
+# 	None
+#
+# DESCRIPTION
+# 	Runs the cleanup and exits with status 0.
+#
+function ctrl_c {
+        print "Ctrl^c pressed. Exitting..."
+        cleanup
+        exit 0
+}
+
+# NAME
+# 	main
+#
+# ARGUMENTS
+# 	None
+#
+# DESCRIPTION
+# 	Main function, which calculates the dependencies.
+#
+#
+# 	Return 0 on success, 1 otherwise.
+#
+function main {
+        # filter out any directories and non-existent files
+        while read line; do
+	    test -d "$line" && continue
+	    test ! -f "$line" && continue
+	    if [[ -x "$line" ]]; then
+                # dummy mode to enable pkgdepend's check for scripts
+		echo "$line mode=0755" >> "$filelist_tmp0"
+            else
+		echo "$line" >> "$filelist_tmp0"
+            fi
+	done < "$pkg_filelist"
+        /usr/bin/awk '{print "file " $1 " path=" $1 " " $2}' "$filelist_tmp0" > "$filelist_tmp" || return 1
+        echo "pkgdepend generate $search_path -m \"$filelist_tmp\" |grep '^depend' > \"$generate_tmp\"" | sh|| return 1
+        pkgdepend -R / resolve -m "$generate_tmp" || return 1
+        cat "${generate_tmp}.res" | sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | sed -e 's/^pkg:\///' || return 1
+}
+
+while getopts f:h o; do
+        case "$o" in
+                f)  pkg_filelist="$OPTARG";;
+                
+                h)  print_help_and_exit;;
+                \?) print_help_and_exit;;
+        esac
+done
+
+shift $((OPTIND - 1))
+
+# Trap ctrl^c
+trap ctrl_c SIGINT
+
+# NAME
+# 	check_if_command_exists
+#
+# ARGUMENTS
+# 	arg1: command name
+#
+# DESCRIPTION
+# 	Function, which checks if the command exists on the system.
+# 	The function exists with the status 1 if the command doesn't exists.
+#
+function check_if_command_exists {
+        type "$1" > /dev/null 2>&1
+        if (( $? != 0 )); then
+                print "ERROR: command \"${1}\" needed by this script is" \
+                    "missing in the PATH, exiting..." 1>&2
+                exit 1
+        fi
+}
+
+[[ -z "$pkg_filelist" ]] && \
+    print "ERROR: No path to the filelist specified" && print_help_and_exit 1;
+
+if [[ ! -r "$pkg_filelist" ]]; then
+        print "ERROR: Readable filelist not found under specified path."
+        print_help_and_exit 1;
+fi
+
+# IPS command needed for this script to work
+check_if_command_exists pkgdepend
+filelist_tmp0=$(mktemp)
+filelist_tmp=$(mktemp)
+generate_tmp=$(mktemp)
+
+search_path="-d /"
+for arg in "$@"
+do
+        search_path=$search_path" -d \"$arg\" "
+done
+
+# MAIN FUNCTION CALL
+main
+
+if (( $? == 0 )); then
+        cleanup
+        exit 0
+else
+        print "\n\nFailed to calculate dependencies!\n" 1>&2
+        cleanup
+        exit 1
+fi

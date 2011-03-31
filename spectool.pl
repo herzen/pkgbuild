@@ -54,6 +54,7 @@ my $read_rc = 1;
 my $exit_val = 0;
 my $full_path = 0;
 my $long_output = 0;
+my $print_all = 0;
 my $ips;
 my $svr4;
 # --------- messages -------------------------------------------------------
@@ -196,6 +197,12 @@ sub process_defaults () {
 		    "%{topdir}/SOURCES");
     $defaults->add ('source_mirrors', 's',
 		    'comma-separated list of mirror sites for source downloads');
+    $defaults->add ('rmlog', '!',
+		    'whether to remove the log file with each build',
+		    0);
+    $defaults->add ('sourcepkg', '!',
+		    'whether pkgbuild should create a source package',
+		    1);
 }
 
 sub add_spec ($) {
@@ -250,7 +257,7 @@ sub process_args {
     }
 
     if (not defined ($spec_command)) {
-	if (not $arg =~ /^(eval|get_meta|get_packages|get_sources|get_public_sources|get_block|get_package_names|match_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_publish_scripts|get_used_spec_files|get_files|get_error|verify|get_requires|get_buildrequires|get_prereq|get_ips_pkgname)$/) {
+	if (not $arg =~ /^(eval|get_meta|get_packages|get_sources|get_public_sources|get_block|get_package_names|match_package_names|get_patches|get_public_patches|get_classes|get_class_script_names|get_included_files|get_publish_scripts|get_used_spec_files|get_files|get_error|verify|get_requires|get_all_requires|get_buildrequires|get_prereq|get_ips_pkgname)$/) {
 	    usage (1);
 	}
 	$spec_command = $arg;
@@ -302,6 +309,7 @@ sub process_options {
 		'debug=n' => sub { shift; $defaults->set ('debug', shift); },
 		'q|quiet' => sub { $verbose = 0; },
 		'l|long' => sub { $long_output = 1; },
+                'a|all' => sub { $print_all = 1; },
 		'specdirs|specdir|spec|specs|S=s' => sub { shift; $defaults->set ('specdirs', shift); },
 		'sourcedirs|sourcedir|src|srcdirs|srcdir|sources|source|s=s'  => sub { shift; $defaults->set ('sourcedirs', shift); },
 		'rcfile=s' => sub { shift; my $dummy = shift; $read_rc=0; $defaults->readrc ($dummy) or msg_error ("Config file not found: $dummy"); },
@@ -428,7 +436,8 @@ Commands:
     get_package_names   Print the package names defined in each given
                   spec file.  Use --ips or --svr4 to select the package
 		  format, otherwise package names of the native format
-                  are printed
+                  are printed.  Use -a to include obsolete/renamed IPS
+                  packages.
 
     match_package_names   Display how %package labels map to SVr4 package
                   names and IPS package names in each given spec file spec
@@ -443,6 +452,9 @@ Commands:
     get_requires <package name>   Prints the runtime dependencies (Requires
 		  tags) belonging to package label <package name> and defined
                   in each given spec file.
+
+    get_all_requires Prints all runtime dependencies (Requires tags)
+                  belonging to all packages defined in each given spec file.
 
     get_prereq <package name>   Same as get_requires but for PreReq tags.
 
@@ -550,10 +562,10 @@ sub do_get_files () {
 		    next if $p->is_subpkg();
 		    my @ps2 = $spec->get_packages ();
 		    foreach my $p2 (@ps2) {
-			next if not $p2->has_files();
+			next if not $p2->has_files(1);
 			next if $p2->get_ips_name() ne 
 			    $p->get_ips_name();
-			my @f = $p2->get_files();
+			my @f = $p2->get_files(1);
 			my $pkgname = $p2->get_ips_name();
 			map $_="$pkgname:$_", @f;
 			push (@files, @f);
@@ -611,6 +623,39 @@ sub do_get_requires () {
     }
 }
 
+sub _uniq (@) {
+    my @arr = @_;
+
+    my %h;
+
+    foreach my $elem (@arr) {
+	next if not defined $elem;
+	$h{$elem} = 1;
+    }
+    return keys %h;
+}
+
+sub do_get_all_requires () {
+    for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
+	my $spec = $specs[$spec_id];
+	if (defined $spec->{error}) {
+	    msg_error ($spec->get_base_file_name () . ": " . $spec->{error});
+	    $exit_val++;
+	} else {
+	    my @pkgs = $spec->get_packages ();
+	    my @reqs = ();
+	    foreach my $pkg (@pkgs) {
+		my @pkg_breqs = $pkg->get_array ('requires');
+		if (@pkg_breqs) {
+		    push(@reqs, @pkg_breqs);
+		}
+	    }
+	    
+	    print_result ($spec, _uniq(@reqs));
+	}
+    }
+}
+
 sub do_get_prereq () {
     for (my $spec_id = 0; $spec_id <= $#specs; $spec_id++) {
 	my $spec = $specs[$spec_id];
@@ -647,7 +692,7 @@ sub do_get_buildrequires () {
 		    push(@buildreqs, @pkg_breqs);
 		}
 	    }
-	    print_result ($spec, @buildreqs);
+	    print_result ($spec, _uniq(@buildreqs));
 	}
     }
 }
@@ -670,6 +715,23 @@ sub do_get_package_names () {
 		my @ps = $spec->get_packages ();
 		foreach my $p (@ps) {
 		    # subpackages are merged in the main package
+		    if (not $p->has_files(1)) {
+			my $make_empty = $p->get_value_of("pkgbuild_make_empty_package");
+			next if not defined ($make_empty);
+			next if ($make_empty ne "1" and $make_empty ne "true");
+			if (not $print_all) {
+			    my $renamed = $p->get_meta('pkg.renamed');
+			    if (defined ($renamed) and
+				($renamed eq "true" or $renamed eq "1")) {
+				next;
+			    }
+			    my $obs = $p->get_meta('pkg.obsolete');
+			    if (defined ($obs) and
+				($obs eq "true" or $obs eq "1")) {
+				next;
+			    }
+			}
+		    }
 		    next if ($p->is_subpkg());
 		    push (@pkgs, $p->get_ips_name());
 		    if ($full_path) {
@@ -686,7 +748,7 @@ sub do_get_package_names () {
 	    } else {
 		msg_error ("internal error: either svr4 or ips must be selected");
 	    }
-	    print_result ($spec, @pkgs);
+	    print_result ($spec, _uniq(@pkgs));
 	}
     }
 }
@@ -787,7 +849,7 @@ sub do_get_included_files () {
 	    $exit_val++;
 	} else {
 	    my @pkgs = $spec->get_included_files ();
-	    print_result ($spec, @pkgs);
+	    print_result ($spec, _uniq(@pkgs));
 	}
     }
 }
@@ -803,13 +865,18 @@ sub do_get_publish_scripts () {
 	    my @scripts = ();
 	    foreach my $pkg (@pkgs) {
 		next if $pkg->is_subpkg ();
+		if (not $pkg->has_files(1)) {
+		    my $make_empty = $pkg->get_value_of("pkgbuild_make_empty_package");
+		    next if not defined ($make_empty);
+		    next if ($make_empty ne "1" and $make_empty ne "true");
+		}
 		my $esc_name = $pkg->get_ips_name();
 		$esc_name =~ s/\//%2F/g;
 		my $script = $spec->eval ("%_pkgmapdir") . 
 		    "/scripts/${esc_name}_ips.sh";
 		push (@scripts, $script);
 	    }
-	    print_result ($spec, @scripts);
+	    print_result ($spec, _uniq(@scripts));
 	}
     }
 }
@@ -865,7 +932,7 @@ sub do_get_used_spec_files () {
 	    } else {
 		@output = $spec->get_used_spec_files ();
 	    }
-	    print_result ($spec, @output);
+	    print_result ($spec, _uniq(@output));
 	}
     }
 }
@@ -994,6 +1061,8 @@ sub main {
 	do_get_ips_pkgname ();
     } elsif ($spec_command eq "get_requires") {
 	do_get_requires ();
+    } elsif ($spec_command eq "get_all_requires") {
+	do_get_all_requires ();
     } elsif ($spec_command eq "get_buildrequires") {
 	do_get_buildrequires ();
     } elsif ($spec_command eq "get_prereq") {

@@ -1,3 +1,25 @@
+2011-03-31  Laszlo Peter  <laszlo.peter@oracle.com>
+
+	* Makefile.am: add ips-dependency-generator
+	* NEWS: lots of changes detailed
+	* configure.in: locate utilities needed by pkgbuild
+	* ips-dependency-generator: (new) script that generates IPS
+	  dependencies given a list of files to be packaged
+	* ips_utils.pm: allow https IPS repos
+	* macros.in: define additional macros to match RPM
+	* pkgbuild.in: simplify
+	* pkgbuild.pl.in: loads of changes - detailed in NEWS
+	* pkgdb.pm.in: escape @ FMRI regexps
+	* pkgtool.in: simplify
+	* pkgtool.pl: loads of changes - detailed in NEWS
+	* rpm_file.pm: support excluded and preserved files
+	* rpm_package.pm: use a package counter (id) so that packages
+	  can be positively identified and other changes detailed in NEWS
+	* rpm_spec.pm.in: loads of changes - detailed in NEWS
+	* spectool.in: simplify
+	* spectool.pl: implement get_all_requires and -a option of
+	  get_package_names (prints obsolete/renamed packages)
+
 2010-09-20  Laszlo Peter  <laca@sun.com>
 
 	* NEWS: update

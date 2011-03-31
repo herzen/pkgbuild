@@ -25,8 +25,4 @@
 #  Authors:  Laszlo Peter  <laca@sun.com>
 #
 
-origwd=`pwd`;
-mydir=$(cd $(dirname $0); pwd);
-pkgbuild_dir="$mydir/../lib/pkgbuild-@PKGBUILD_VERSION@"
-
-exec @PERL@ -I $pkgbuild_dir $pkgbuild_dir/pkgbuild.pl "${@}"
+exec "@PERL@" -I "@PKGBUILD_LIBDIR@" "@PKGBUILD_LIBDIR@/pkgbuild.pl" "${@}"

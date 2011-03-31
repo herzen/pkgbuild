@@ -21,7 +21,7 @@
 %_build_os              %{_host_os}
 %_host                  %{_target_platform}
 %_host_alias            %{nil}
-%_host_cpu              i686
+%_host_cpu              @ARCH@
 %_host_vendor           %{_vendor}
 %_host_os               %{_os}
 %_target                %{_host}
@@ -58,7 +58,7 @@
 %__gpg                  /usr/bin/gpg
 %__grep                 /bin/grep
 %__gzip                 /bin/gzip
-%__id                   /usr/bin/id
+%__id                   @GNU_ID@
 %__install              @INSTALL@
 %__ln_s                 ln -s
 %__make                 /usr/bin/make
@@ -71,10 +71,12 @@
 %__python               /usr/bin/python
 %__rm                   /bin/rm
 %__rsh                  /usr/bin/rsh
-%__sed                  /bin/sed
+%__sed                  @GNU_SED@
 %__ssh                  /usr/bin/ssh
 %__tar                  /bin/tar
 %__unzip                /usr/bin/unzip
+%__cmake                @CMAKE@
+%cmake                  __cmake
 
 #==============================================================================
 # ---- Build system path macros.
@@ -103,7 +105,7 @@
 %_buildshell            /bin/bash
 %_bzip2bin              %{__bzip2}
 %_uncompressbin         %{__uncompress}
-%_defaultdocdir         %{_usr}/doc
+%_defaultdocdir         %{_datadir}/doc
 %_gzipbin               %{__gzip}
 %_instchangelog         5
 %_pgpbin                %{__pgp}
@@ -146,7 +148,8 @@
 %_mandir                %{_datadir}/man
 %_docdir		%{_datadir}/doc
 %_pkg_docdir            %{_docdir}/%{name}
-
+%_javadir               %{_datadir}/java
+%_fixperms              %__chmod a+rX,u+w,g-w,o-w
 %_global_cflags		-O2 -g -pipe
 %optflags		%{_global_cflags}
 
@@ -167,7 +170,7 @@
 # This is an improved version of %configure (from PLD team).
 %configure \
   CFLAGS="${CFLAGS:-%optflags}" ; export CFLAGS ; \
-  CXXFLAGS="${CXXFLAGS:-%optflags}" ; export CXXFLAGS ; \
+  CXXFLAGS="${CXXFLAGS:-%cxx_optflags}" ; export CXXFLAGS ; \
   FFLAGS="${FFLAGS:-%optflags}" ; export FFLAGS ; \
   ./configure --host=%{_host} --build=%{_build} \\\
         --target=%{_target_platform} \\\

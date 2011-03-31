@@ -25,12 +25,11 @@
 #  Authors:  Laszlo Peter  <laca@sun.com>
 #
 
-origwd=`pwd`;
-mydir=$(cd $(dirname $0); pwd);
-
-if [ `uname -s` = SunOS ]; then
+if [ "`uname -s`" = "SunOS" ]
+then
     /usr/bin/id | /usr/bin/grep '^uid=0(' > /dev/null 2>&1
-    if [ $? = 0 ]; then
+    if [ $? = 0 ]
+    then
 	echo "Building as root is dangerous and is no longer supported."
 	echo "Please use a non-privileged account for running pkgtool."
 	echo "When using pkgtool modes that involve package installation, you need an"
@@ -40,20 +39,21 @@ if [ `uname -s` = SunOS ]; then
     fi
 fi
 
+pkgbuild_prefix="@PKGBUILD_PREFIX@"
 pkgbuild_libdir="@PKGBUILD_LIBDIR@"
+pkgbuild_bindir="${pkgbuild_prefix}/bin"
+pkgbuild_wrapper="${pkgbuild_bindir}/pkgbuild"
+pkgtool_implementation="${pkgbuild_libdir}/pkgtool.pl"
 
-if [ ! -f "$pkgbuild_libdir/pkgbuild.pl" ]; then
-    echo "ERROR: pkgbuild not found." 1>&2
+if [ ! -d "${pkgbuild_prefix}" -o \
+     ! -d "${pkgbuild_libdir}" -o \
+     ! -d "${pkgbuild_bindir}" -o \
+     ! -x "${pkgbuild_wrapper}" -o \
+     ! -f "${pkgtool_implementation}" ]
+then
+    echo "${0}: FATAL ERROR - pkgbuild implementation not found." 1>&2
     exit 1
 fi
 
-pkgbuild_prefix="$pkgbuild_libdir/../.."
-pkgbuild_prefix=$(cd "${mydir}/.."; pwd)
-
-if [ ! -x "$pkgbuild_prefix/bin/pkgbuild" ]; then
-    echo "ERROR: pkgbuild not found." 1>&2
-    exit 1
-fi
-
-# pass in the full path to pkgbuild as the first arg
-exec @PERL@ -I "$pkgbuild_libdir" $pkgbuild_libdir/pkgtool.pl "$pkgbuild_prefix/bin/pkgbuild" "${@}"
+# Pass in the full path to the pkgbuild wrapper as the first command line argument
+exec "@PERL@" -I "${pkgbuild_libdir}" "${pkgtool_implementation}" "${pkgbuild_wrapper}" "${@}"

@@ -257,7 +257,7 @@ sub _read_macros ($) {
 	$default_macros{_is_pkgbuild} = '1';
 	$default_macros{_pkgbuild_version} = '@PKGBUILD_VERSION@';
 	$default_macros{buildroot} = "/";
-	$default_macros{_target} = "i586";
+	$default_macros{_target} = "$arch";
 	$default_macros{_sysconfdir} = "/etc";
 	$default_macros{_initrddir} = "%{_sysconfdir}/rc.d/init.d";
 	$default_macros{_prefix} = "/usr";
@@ -421,6 +421,10 @@ sub _pre_eval ($$) {
     return $self->_do_eval (1, "", @chrs);
 }
 
+# used for recording which macros are being evaluated, to avoid
+# infinite loops in recursive definitions
+my %loop_catcher;
+
 # the result string is built in $str (parts of the original string
 # that have been parsed) and @chrs is the list of chars to be parsed
 sub _do_eval ($$$@) {
@@ -452,6 +456,10 @@ sub _do_eval ($$$@) {
 	    } else {
 		return $self->_do_eval ($preeval, "$str%", @chrs);
 	    }
+	} elsif ($chr eq "@") {  # %@ (files list)
+	    # pass through, needs to be evaluated in pkgbuild
+	    # when the %files list is expanded
+	    return $self->_do_eval ($preeval, "$str%@", @chrs);
 	} elsif ($chr eq "(") {  # %(command)
 	    return $self->_do_eval_command ($preeval, $str, @chrs);
 	} elsif ($chr eq "{") {  # %{....
@@ -478,6 +486,18 @@ sub _do_eval ($$$@) {
 		return $self->_do_eval_cond ($preeval, $str, "{", 0, @chrs);
 	    } elsif ($chr eq "!") {  # %{!
 		return $self->_do_eval_cond ($preeval, $str, "{", 1, @chrs);
+	    } elsif ($chr eq "@") {
+		$chr = shift (@chrs);
+		if (not @chrs) {
+		    if ($chr eq "}") {  # %{@}
+			return "$str%{@}";
+		    }
+		}
+		if ($chr ne "}") {
+		    $self->_set_error ("Unterminated {: $str%{@$chr");
+		    return $str;
+		}
+		return $self->_do_eval ($preeval, "$str%{@}", @chrs);
 	    } elsif ($chr =~ /[a-zA-Z_]/) {
 		return $self->_do_eval_var ($preeval, $str, "{", "$chr", @chrs);
 	    } elsif ($chr eq "}") {
@@ -516,6 +536,15 @@ sub _do_eval_var ($$$$$@) {  # %var or %{var}
 	    $varname = "$varname$chr";
 	    next;
 	}
+	if ($chr eq ":" and defined ($delimiter)) {
+	    # %{macrocmd: args}
+	    return $self->_do_eval_macro_cmd ($preeval, $str, $varname, @chrs);
+	}
+	if ($chr eq " " and defined ($delimiter) and
+	    $varname =~ /^(with|without|defined|undefined)$/) {
+	    # %{with foo} or %{without foo}
+	    return $self->_do_eval_with_foo ($preeval, $str, $varname, @chrs);
+	}
 	if ($chr eq ".") {
 	    if ($varname =~ /(PATCH|SOURCE)[0-9]*/) {
 		# %{SOURCEn.url}
@@ -539,9 +568,20 @@ sub _do_eval_var ($$$$$@) {  # %var or %{var}
 	return $str;
     }
 
-    my $val = $self->get_value_of ($varname);
+    # first look for the macro, to avoid infinite recursion
+    my $val = $self->{_defines}->{$varname};
+    # if there is no such macro then it's safe to look for tags etc
+    if (not defined($val)) {
+	$val = $self->get_value_of($varname);
+    }
+    if (defined ($loop_catcher{$varname})) {
+	print "WARNING: infinite loop detected in the definition of \"$varname\"\n";
+	$val = undef;
+    }
     if (defined ($val) and not $preeval) {
+	$loop_catcher{$varname} = 1;
 	$val = $self->eval ($val);
+	$loop_catcher{$varname} = undef;
 	return $self->_do_eval ($preeval, "$str$val", @chrs);
     } else {
 	if (defined ($delimiter)) {
@@ -549,6 +589,136 @@ sub _do_eval_var ($$$$$@) {  # %var or %{var}
 	} else {
 	    return $self->_do_eval ($preeval, "$str%$varname", @chrs);
 	}
+    }
+}
+
+sub _do_eval_macro_cmd ($$$$@) { # %{macrocmd: args}
+    my $self = shift;
+    my $preeval = shift;
+    my $str = shift;
+    my $macrocmd = shift;
+    my @chrs = @_;
+
+    my $argstr = "";
+    my $chr = "";
+    while (@chrs and $chrs[0] eq " ") {
+	shift (@chrs);
+    }
+    my @delimstack = "}";
+    while (@chrs) {
+	$chr = shift (@chrs);
+	if ($delimstack[0] eq $chr) {
+	    shift (@delimstack);
+	    if (not (@delimstack)) {
+		last;
+	    }
+	    $argstr .= $chr;
+	    next;
+	}
+	if ($chr eq "{") {
+	    unshift (@delimstack, "}");
+	} elsif ($chr eq "\\" and not $delimstack[0] =~ /['"]/) {
+	    $chr = shift (@chrs);
+	} elsif ($chr eq '"' and $delimstack[0] ne "'") {
+	    unshift (@delimstack, '"');
+	} elsif ($chr eq "'" and $delimstack[0] ne '"') {
+	    unshift (@delimstack, "'");
+	}
+	$argstr .= $chr;
+    }
+
+    if (not @chrs and @delimstack) {
+	$self->_set_error ("Unterminated expression ($delimstack[0] expected): $str%{$macrocmd:$argstr");
+	return $str;
+    }
+
+    # the expression to process is %{$macrocmd:$argstr}
+    my $val;
+
+    if ($macrocmd eq "eval" or $macrocmd eq "expand") {
+	$val = $self->eval ($argstr);
+    } elsif ($macrocmd eq "echo") {
+	$val = $self->eval ($argstr);
+	print $val . "\n";
+	return "";
+    } elsif ($macrocmd eq "warn") {
+	$val = $self->eval ($argstr);
+	print STDERR $val . "\n";
+	return "";
+    } elsif ($macrocmd eq "error") {
+	$val = $self->eval ($argstr);
+	print STDERR $val . "\n";
+	$self->_set_error ($val);
+	return "";
+    } elsif ($macrocmd eq "basename") { # usable in %files list only
+	# pass it through, will have to be evaluated after the %files
+	# list is expanded
+	return $self->_do_eval ($preeval, "$str%{basename:$argstr}", @chrs);
+    }
+
+    if (defined ($val) and (not $preeval or $macrocmd =~ /(eval|expand)/)) {
+	$val = $self->eval ($val);
+	return $self->_do_eval ($preeval, "$str$val", @chrs);
+    } else {
+	return $self->_do_eval ($preeval, "$str%{$macrocmd:$argstr}", @chrs);
+    }
+}
+
+sub _do_eval_with_foo ($$$$@) { # %{with[out] foo} or %{[un]defined foo}
+    my $self = shift;
+    my $preeval = shift;
+    my $str = shift;
+    my $cond = shift;
+    my @chrs = @_;
+
+    my $optname = "";
+    my $chr = "";
+    while (@chrs and $chrs[0] eq " ") {
+	shift (@chrs);
+    }
+    my @delimstack = "}";
+    while (@chrs) {
+	$chr = shift (@chrs);
+	if ($delimstack[0] eq $chr) {
+	    shift (@delimstack);
+	    if (not (@delimstack)) {
+		last;
+	    }
+	    $optname .= $chr;
+	    next;
+	}
+	if ($chr eq "{") {
+	    unshift (@delimstack, "}");
+	} elsif ($chr eq "\\" and not $delimstack[0] =~ /['"]/) {
+	    $chr = shift (@chrs);
+	} elsif ($chr eq '"' and $delimstack[0] ne "'") {
+	    unshift (@delimstack, '"');
+	} elsif ($chr eq "'" and $delimstack[0] ne '"') {
+	    unshift (@delimstack, "'");
+	}
+	$optname .= $chr;
+    }
+
+    if (not @chrs and @delimstack) {
+	$self->_set_error ("Unterminated expression ($delimstack[0] expected): $str%{$cond $optname");
+	return $str;
+    }
+
+    # the expression to process is %{$macrocmd:$argstr}
+    my $val = $self->eval ($optname);
+    if (defined ($val) and not $preeval) {
+	if ($cond eq "defined") {
+	    return defined($self->{_defines}->{$val});
+	} elsif ($cond eq "undefined") {
+	    return (!defined($self->{_defines}->{$val}));
+	}
+	if (defined ($self->{_defines}->{"_with_$val"})) {
+	    return (($cond eq "with") or 0);
+	} else {
+	    return (($cond eq "without") or 0);
+	}
+    } else {
+	return $self->_do_eval ($preeval, "$str%{$w_or_wo $optname}", @chrs);	
     }
 }
 
@@ -710,32 +880,34 @@ sub _do_eval_command ($$$@) {  # %(command)
 
     my $command = "";
     my $chr = "";
-    my $depth = 0;
+    my @delimstack = ")";
     while (@chrs) {
 	$chr = shift (@chrs);
-	if ($chr eq "%") {
-	    if (@chrs and ($chrs[0] eq "(")) {
-		++$depth;
-	    }
-	}
-
-	if (($chr eq "\\") and @chrs and ($chrs[0] eq ")")) {
-	    $command="$command\\)";
-	    shift (@chrs);
-	    next;
-	}
-
-	if ($chr eq ")") {
-	    if ($depth > 0) {
-		--$depth;
-	    } else {
+	if ($delimstack[0] eq $chr) {
+	    shift (@delimstack);
+	    if (not (@delimstack)) {
 		last;
 	    }
+	    $command .= $chr;
+	    next;
 	}
-	$command = "$command$chr";
+	if ($chr eq "{") {
+	    unshift (@delimstack, "}");
+	} elsif ($chr eq "(") {
+	    unshift (@delimstack, ")");
+	} elsif ($chr eq "\\" and not $delimstack[0] =~ /['"]/) {
+	    $chr = shift (@chrs);
+	} elsif ($chr eq '"' and $delimstack[0] ne "'") {
+	    unshift (@delimstack, '"');
+	} elsif ($chr eq "'" and $delimstack[0] ne '"') {
+	    unshift (@delimstack, "'");
+	}
+
+	$command .= $chr;
     }
-    if (not @chrs and (($depth > 0) or ($chr ne ")"))) {
-	$self->_set_error ("Unterminated %(: $str%($command");
+
+    if (not @chrs and @delimstack) {
+	$self->_set_error ("Unterminated expression ($delimstack[0] expected): $str%($command");
 	return $str;
     }
 
@@ -845,19 +1017,27 @@ sub _do_eval_cond ($$$$$@) {  # %?foo or %{?foo} or %{?foo:bar} or %{?!.*}
 	return $str;
     }
 
-    my $val = $self->get_value_of ($varname);
-    if (defined ($val) xor $negate) {
-	if (not defined ($val)) {
-	    $val = "";
+    # first look for the macro, to avoid infinite recursion
+    my $val = $self->{_defines}->{$varname};
+    # if there is no such macro then it's safe to look for tags etc
+    if (not defined($val)) {
+	$val = $self->get_value_of($varname);
+    }
+    if (not defined ($val) xor $negate) {
+	return $self->_do_eval ($preeval, "$str", @chrs);
+    } else {
+	if (defined ($loop_catcher{$varname})) {
+	    print "WARNING: infinite loop detected in the definition of \"$varname\"\n";
+	    $val = undef;
 	}
 	if (not $preeval) {
+	    $loop_catcher{$varname} = 1;
 	    $val = $self->eval ($val);
+	    $loop_catcher{$varname} = undef;
 	} else {
 	    $val = $self->_pre_eval ($val);
 	}
 	return $self->_do_eval ($preeval, "$str$val", @chrs);
-    } else {
-	return $self->_do_eval ($preeval, "$str", @chrs);
     }
 }
 
@@ -900,13 +1080,23 @@ sub _do_eval_cond_val ($$$$$@) {  #  %{?foo:bar}  %{?!foo:bar}
 	return $str;
     }
 
-    my $val = $self->get_value_of ($varname);
+    # first look for the macro, to avoid infinite recursion
+    my $val = $self->{_defines}->{$varname};
+    # if there is no such macro then it's safe to look for tags etc
+    if (not defined($val)) {
+	$val = $self->get_value_of ($varname);
+    }
     if (defined ($val) xor $negate) {
 	if ($preeval) {
 	    $val = $self->_pre_eval ($defval);
 	    $str = $self->_do_eval ($preeval, "$str$val", @chrs);
 	} else {
+	    # we are evaluating the default value, which is indepenent
+	    # from the condition in %{?condition:defval}
+	    my %save_loop_catcher = (%loop_catcher);
+	    %loop_catcher = ();
 	    $val = $self->eval ($defval);
+	    %loop_catcher = (%save_loop_catcher);
 	    $str = $self->_do_eval ($preeval, "$str$val", @chrs);
 	}
 	return $str;
@@ -1005,9 +1195,33 @@ sub _match_os ($) {
     return 0;
 }
 
+my %_next_lines;
+
+sub _unget_line ($$$) {
+    my $self = shift;
+    my $fhandle = shift;
+    my $line = shift;
+
+    if (defined ($_next_lines{$fhandle})) {
+	my $ref = $_next_lines{$fhandle};
+	unshift (@$ref, $line);
+    } else {
+	my @lines = ($line);
+	$_next_lines{$fhandle} = \@lines;
+    }
+}
+
 sub _get_next_line ($$) {
     my $self = shift;
     my $fhandle = shift;
+
+    if (defined ($_next_lines{$fhandle})) {
+	my $ref = $_next_lines{$fhandle};
+	if (@$ref) {
+	    my $line = shift (@$ref);
+	    return $line;
+	}
+    }
 
     if (not defined ($_line_numbers{$fhandle})) {
 	$_line_numbers{$fhandle} = 0;
@@ -1033,9 +1247,44 @@ sub _get_next_line ($$) {
 	    $cond = not _match_os ("$1");
 	} elsif ($line =~ /^\s*%if\s+(\S.*)/) {
 	    $cond = $self->eval ($1);
+	    # evaluate string comparison (quoted strings)
+	    while ($cond =~ /"([^"]*)"\s*([=!])=\s*"([^"]*)"/) {
+		my $res = 0;
+		if ($2 eq "=" and $1 eq $3) {
+		    $res = 1;
+		} elsif ($2 eq "!" and $1 ne $3) {
+		    $res = 1;
+		}
+		$cond =~ s/"([^"]*)"\s*([=!])=\s*"([^"]*)"/ $res /;
+	    }
+	    # evaluate string comparison (unquoted strings)
+	    # 1st case: the first string is not a number
+	    while ($cond =~ /(\s|^)(\S*[a-zA-Z_]\S*)\s+([=!])=\s+([a-zA-Z0-9_]+)/) {
+		my $res = 0;
+		if ($3 eq "=" and $2 eq $4) {
+		    $res = 1;
+		} elsif ($3 eq "!" and $2 ne $4) {
+		    $res = 1;
+		}
+		$cond =~ s/(\s|^)(\S*[a-zA-Z_]\S*)\s+([=!])=\s+([a-zA-Z0-9_]+)/ $res /;
+	    }
+	    # 2nd case: the 2nd string is not a number
+	    while ($cond =~ /(\s|^)([a-zA-Z0-9_]+)\s+([=!])=\s+(\S*[a-zA-Z_]\S*)/) {
+		my $res;
+		if ($3 eq "=") {
+		    $res = ($2 eq $4);
+		} else {
+		    $res = ($2 ne $4);
+		}
+		$cond =~ s/(\s|^)([a-zA-Z0-9_]+)\s+([=!])=\s+(\S*[a-zA-Z_]\S*)/ $res /;
+	    }
+	    if ($cond =~ /^[\d\|\(\)!&\s<=>]*\s*$/) {
+		$cond =~ s/(^|\D)0*(\d)/$1$2/g;
+		$cond = eval ($cond);
+	    }
 	    $cond =~ s/-(.*)/$1/;
 	    if (not _is_number ($cond)) {
-		$self->_set_error ("%if: invalid boolean expression", $fhandle);
+		$self->_set_error ("%if: invalid boolean expression: $cond", $fhandle);
 		return undef;
 	    }
 	}
@@ -1209,15 +1458,14 @@ sub _process_tag ($$$) {
 		       "url", "group",
 		       "packager", "autoreqprov",
 		       "serial", "nosource", "nopatch",
-		       "sunw_basedir", "sunw_pkg",
-		       "sunw_prodname", "sunw_prodvers",
-		       "sunw_category", "sunw_hotline", 
+		       "sunw_pkg", "sunw_prodname", "sunw_prodvers",
+		       "sunw_category", "sunw_hotline", "sunw_basedir",
 		       "sunw_maxinst", "vendor", "sunw_rev",
 		       "sunw_copyright", "sourcepackage",
 		       "buildarchitectures", "buildarch",
 		       "excludearch", "exclusivearch",
 		       "excludeos", "exclusiveos", "prefix",
-		       "summary", "version", "sunw_basedir",
+		       "summary", "version",
 		       "sunw_prodname", "sunw_prodvers",
 		       "sunw_category", "sunw_hotline",
 		       "sunw_maxinst", "vendor", "docdir",
@@ -1226,13 +1474,16 @@ sub _process_tag ($$$) {
 		       "sunw_copyright",
 		       "sunw_pkg_allzones", "sunw_pkg_hollow",
 		       "sunw_pkg_thiszone",
+		       "ips_legacy",
+		       "pkgbuild_make_empty_package",
 		       "ips_package_name",
 		       "ips_sourcepackage",
 	               "ips_component_version",
 	               "ips_build_version",
 	               "ips_vendor_version");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
-		      "buildconflicts", "prereq", "provides", "buildprereq");
+		      "buildconflicts", "prereq", "provides", "buildprereq",
+	              "renamed_to");
     my @ord_tags = ( "source", "patch" );
     my @localised_tags = ("summary");
     my $lcline = lc($line);
@@ -1240,6 +1491,7 @@ sub _process_tag ($$$) {
     $lcline =~ s/^\s*//;
     my $tagname;
     my $value;
+    my $tag_opt;
     my $package_ref = $self->{_current_package};
 
     # meta(foo): bar
@@ -1252,9 +1504,10 @@ sub _process_tag ($$$) {
     }
 
     foreach my $tag (@unique_tags) {
-	if ($lcline =~ /^$tag\s*:\s*/) {
-	    $line =~ /^\s*[a-zA-Z0-9_-]*\s*:\s*(.*\S)\s*$/;
-	    $value = $1;
+	if ($lcline =~ /^$tag(\([^\)]+\)|)\s*:\s*/) {
+	    $line =~ /^\s*[a-zA-Z0-9_-]*(\([^\)]+\)|)\s*:\s*(.*\S)\s*$/;
+	    $tag_opt = $1;
+	    $value = $2;
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
 	    if ($tagname eq "sunw_pkg" and not $self->{_main_package}) {
@@ -1276,6 +1529,8 @@ sub _process_tag ($$$) {
 		my $is_subpkg = 0;
 		if ($#all_packages > 0) {
 		    foreach my $pkg (@all_packages) {
+			# skip the current package
+			next if $pkg->{_id} = $package_ref->{_id};
 			if ($pkg->get_ips_name() eq $value) {
 			    # a pkg with the same IPS name exists already
 			    $is_subpkg = 1;
@@ -1285,20 +1540,31 @@ sub _process_tag ($$$) {
 		    $package_ref->set_subpkg($is_subpkg);
 		}
 	    }
-	    $package_ref->set_tag ($tagname, $value);
+	    $package_ref->set_tag ($tagname, $value, $tag_opt);
 	    return 1;
 	}
     }
 
     foreach my $tag (@multi_tags) {
-	if ($lcline =~ /^$tag\s*:\s*/) {
-	    $line =~ /^\s*[a-zA-Z0-9_-]*\s*:\s*(.*\S)\s*$/;
-	    $value = $1;
+	if ($lcline =~ /^$tag(\([^\)]+\)|)\s*:\s*/) {
+	    $line =~ /^\s*[a-zA-Z0-9_-]*(\([^\)]+\)|)\s*:\s*(.*\S)\s*$/;
+	    $value = $2;
+	    # ignoring the tag options for now
+	    # things like Requires(pre) can be treated as Requires in
+	    # SVr4 anyway, although maybe it should be ignored in IPS,
+	    # since there is no scripting FIXME?
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
 	    my @values = split /\s*,\s*/, $value;
 	    foreach my $v (@values) {
-		$package_ref->push_tag ($tagname, $v);
+		# split space-separated dependencies
+		while ($v =~ /([^<>=]+\s*((<=|=<|<|=|>|>=|=>)\s*[^\s<>=]+|))\s+([^\s<>=]+)/) {
+		    $package_ref->push_tag ($tagname, $1);
+		    $v = $4;
+		}
+		if (defined ($v)) {
+		    $package_ref->push_tag ($tagname, $v);
+		}
 	    }
 	    return 1;
 	}
@@ -1427,11 +1693,6 @@ sub _process_package ($$$) {
     push (@$ref, $new_package);
     my $packagebase = new packagebase;
     $packagebase->add_package ($new_package);
-
-    $line = $self->_get_next_line ($fhandle);
-    if (defined ($line)) {
-	return $self->_process_top_level ($fhandle, $line);
-    }
 
     if (defined $self->{error}) {
 	return 0;
@@ -2197,7 +2458,8 @@ sub _process_block ($$$;$$) {
 		$package_ref->append_to_block ($block_name, $eline);
 	    }
 	} else {
-	    return $self->_process_top_level ($fhandle, $line);
+	    $self->_unget_line($fhandle, $line);
+	    last;
 	}
     }
 
@@ -2292,6 +2554,8 @@ sub _process_files ($$$;$) {
     my @this_verify = (@all_verify);
     my $is_dir = 0;
     my $class_name = "none";
+    my $exclude = 0;
+    my $preserve;
 
     $line = $self->_get_next_line ($fhandle);
     if (not defined($line)) {
@@ -2360,7 +2624,7 @@ sub _process_files ($$$;$) {
 		$subdir = $1;
 		$eline =~ s/^-d\s+(\S+)\s*//;
 	    }
-	    # a whitespace-separated list of file name may follow %doc
+	    # a whitespace-separated list of file names may follow %doc
 	    my @doc_names = split /\s+/, $eline;
 	    for my $doc_name (@doc_names) {
 		my $file = rpm_file->new ($package_ref, $doc_name,
@@ -2368,6 +2632,9 @@ sub _process_files ($$$;$) {
 					  not ($is_dir), $is_doc,
 					  $is_config, \@ips_tags, $class_name,
 					  $is_ghost, $is_hardlink);
+		if ($exclude) {
+		    $file->exclude();
+		}
 		$package_ref->add_file ($file);
 		if (defined ($compression)) {
 		    $file->set_compression ($compression);
@@ -2378,9 +2645,23 @@ sub _process_files ($$$;$) {
 	    }
 	} elsif ($eline =~ /^\s*%config/) {
 	    $is_config = 1;
+	    if ($eline =~ /^\s*%config\s*\(([^)]*)\)\s*/) {
+		my $config_opt = $1;
+		if($config_opt =~ /preserve=(renamenew|renameold|true)/) {
+		    $preserve = $1;
+		} elsif ($config_opt eq "noreplace") {
+		    $preserve = "renamenew";
+		} else {
+		    print "WARNING: unknown argument to %config: $config_opt\n";
+		}
+	    }
 	    $eline =~ s/^\s*%config\s*\([^)]*\)\s*// or
 		$eline =~ s/^\s*%config\s*//;
 	    next;	    
+	} elsif ($eline =~ /^\s*%exclude\s+/) {
+	    $exclude = 1;
+	    $eline =~ s/^\s*%exclude\s+//;
+	    next;
 	} elsif ($eline =~ s/^\s*%ips_tag\s*\(([^)]*)\)\s*//) {
 	    push(@ips_tags, $1);
 	    $eline =~ s/^\s*%ips_tag\s*\([^)]*\)\s*//;
@@ -2426,12 +2707,19 @@ sub _process_files ($$$;$) {
 				      not ($is_dir), $is_doc,
 				      $is_config, \@ips_tags, $class_name,
 				      $is_ghost, $is_hardlink);
+	    if ($exclude) {
+		$file->exclude();
+	    }
+	    if (defined ($preserve)) {
+		$file->set_preserve($preserve);
+	    }
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
 	    $self->_set_error ("File must begin with \"/\": $1", $fhandle);
 	    return 0;
 	} else {
-	    return $self->_process_top_level ($fhandle, $line);
+	    $self->_unget_line($fhandle, $line);
+	    last;
 	}
 
 	@this_attr = ();
@@ -2443,6 +2731,8 @@ sub _process_files ($$$;$) {
 	@this_verify = (@all_verify);
 	$is_dir = 0;
         $class_name = "none";
+	$exclude = 0;
+	$preserve = undef;
 
 	$line = $self->_get_next_line ($fhandle);
 	if (not defined($line)) {
@@ -2530,7 +2820,8 @@ sub _process_actions ($$$;$) {
        } elsif ($eline =~ /^\s*([^%].*)$/) {
            $package_ref->add_action($1);
        } else {
-           return $self->_process_top_level ($fhandle, $line);
+	   $self->_unget_line($fhandle, $line);
+	   last;
        }
 
        $line = $self->_get_next_line ($fhandle);
@@ -2553,6 +2844,7 @@ sub _process_top_level ($$$) {
     my $line = shift;
 
     $line = $self->_get_next_line ($fhandle) if not defined ($line);
+    return(1) if not $line;
     
     while (1) {
 	my $eline = $self->eval ($line);
@@ -2889,13 +3181,26 @@ sub get_package_names ($;$) {
     }
 }
 
+sub _concat($) {
+    my $text = shift;
+
+    return undef if not defined ($text);
+
+    $text =~ s/\n/ /g;
+    $text =~ s/ +/ /g;
+    $text =~ s/^ //;
+    $text =~ s/ $//;
+    return $text;
+}
+
 sub get_value_of ($$) {
     my $self = shift;
     my $name = shift;
 
     if ($name =~ /^(${all_keywords}|)$/) {
-	return undef;
+	return;
     }
+
     if (! $self->{_loaded} and ! $self->{_being_loaded}) {
 	if (not $self->_read_spec ()) {
 	    return undef;
@@ -2934,8 +3239,12 @@ sub get_value_of ($$) {
 	return undef unless defined $val;
 	$val =~ s/^.*\/([^\/]*)/$1/;
 	return "%{_sourcedir}/$val";
-    } else {
+    } elsif (defined ($self->{_defines}->{$name})) {
 	return $self->eval ($self->{_defines}->{$name});
+    } elsif ($name eq "DESC") {
+	return $self->eval (_concat ($package_ref->get_block ("description")));
+    } else {
+	return undef;
     }
 }
 

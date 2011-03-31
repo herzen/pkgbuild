@@ -10,7 +10,7 @@
 #
 #  The pkgbuild build engine
 #
-#  Copyright (c) 2004, 2010, Oracle and/or its affiliates. All rights reserved.
+#  Copyright (c) 2004, 2011, Oracle and/or its affiliates. All rights reserved.
 #
 #  pkgbuild is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License 
@@ -54,6 +54,7 @@ my $check_deps = 1;
 my $pkgdb;
 my $target = '';
 my $ips_utils = new ips_utils;
+my $sourcepkg = 1;
 
 my $ips_server = $ENV{PKGBUILD_IPS_SERVER};
 if (not defined($ips_server)) {
@@ -77,6 +78,7 @@ chomp ($mydir);
 my @spec_names = ();
 
 my $arch;
+my $build_arch;
 my $os;
 my $os_rel;
 
@@ -103,6 +105,7 @@ sub init () {
         $arch = $target;
 	rpm_spec::set_target($target);
     }
+    $build_arch = $arch;
 
     $os = `uname -s`;
     chomp ($os);
@@ -253,6 +256,7 @@ sub process_options {
 		'define=s'  => \&add_define,
 		'deps!'     => \$check_deps,
 		'interactive!' => \$interactive_mode,
+		'sourcepkg!' => \$sourcepkg,
 		'bp'        => sub { set_build_command (0, 'p'); },
 		'bl'        => sub { fatal ("-bl not implemented\n") },
 		'bc'        => sub { set_build_command (0, 'c'); },
@@ -321,6 +325,7 @@ This program may be freely redistributed under the terms of the GNU GPLv2
 *         s                - source package (install, package)
 *         a                - bin/src package (prep, compile, install, package)
 *     --short-circuit      - skip straight to specified stage (for c,i,b)
+*     --nosourcepkg        - do not create a source package
       --clean              - remove build tree when done
       --rmsource           - remove sources and spec file when done
       --sign               - generate PGP/GPG signature
@@ -489,7 +494,7 @@ sub check_dep ($$) {
     my $ref_rev;
     my $ref_serial;
     my $rel_op;
-    my $re_quoted_pkg = $pkg;
+    my $re_quoted_pkg = $dep;
     # quote chars with special meaning in regexps
     $re_quoted_pkg =~ s/([\+\*\(\)\[\].\\])/\\$1/g;
     if ($dep =~ /^$re_quoted_pkg\s*(=|<=|=<|>=|=>)\s*(\S*),REV=(\S*)\s*$/) {
@@ -530,7 +535,7 @@ sub check_dep ($$) {
 	return 0;
     }
 
-    my $subpkg = $spec->find_package_by_pkg_name ($pkg);
+    my $subpkg = $spec->find_package_by_pkg_name ($dep);
     if (not defined $subpkg) {
 	if ($os eq "linux") {
 	    `rpm -q $pkg`;
@@ -548,13 +553,19 @@ sub check_dep ($$) {
 	    }
 	    # search for an IPS package
 	    if (-x "/usr/bin/pkg") {
-		my $search_out = `pkg info -l '$pkg' 2>&1`;
+		my $search_out = `pkg info -l '$dep' 2>&1`;
 		chomp ($search_out);
 		# escape some regexp chars
-		my $safepkg = $pkg;
+		my $safepkg = $dep;
 		$safepkg =~ s/\+/\\+/g;
 		$safepkg =~ s/\./\\./g;
+		# exact match
 		if ($search_out =~ /^\s+Name:\s*${safepkg}\s*\n/s) {
+		    return 1;
+		}
+		# suffix match
+		if ($search_out =~ /^\s+Name:\s*(\S+)\/${safepkg}\s*\n/s) {
+		    print "INFO: using '$1/$dep' for dependency '$pkg'\n";
 		    return 1;
 		}
 	    }
@@ -668,7 +679,7 @@ sub get_script_header ($) {
 	    $spec->eval ("RPM_SOURCE_DIR=\"%{_sourcedir}\"") . "\n" .
 	    $spec->eval ("RPM_BUILD_DIR=\"%{_builddir}\"") . "\n" .
 	    $spec->eval ("RPM_OPT_FLAGS=\"%{optflags}\"") . "\n" .
-	    "RPM_ARCH=\"$arch\"\n" .
+	    "RPM_ARCH=\"$build_arch\"\n" .
 	    "RPM_OS=\"$os\"\n" .
 	    "RPM_OS_REL=\"$os_rel\"\n" .
 	    "export RPM_SOURCE_DIR RPM_BUILD_DIR RPM_OPT_FLAGS RPM_ARCH RPM_OS\n" .
@@ -804,7 +815,8 @@ sub make_pkginfo ($$) {
     } else {
         print $fhandle "DESC=$summary\n";
     }
-    print $fhandle "ARCH=$arch\n";
+    my $pkg_arch = get_pkg_arch($package);
+    print $fhandle "ARCH=$pkg_arch\n";
 
     my $prodname = $package->get_tag ('SUNW_ProdName');
     print $fhandle "SUNW_PRODNAME=$prodname\n" if $prodname;
@@ -815,6 +827,15 @@ sub make_pkginfo ($$) {
     my $basedir = $package->get_tag ('SUNW_BaseDir');
     if (not defined ($basedir)) {
 	$basedir = "/";
+    }
+    $basedir =~ s/(.)\/*$/$1/;
+
+    my $orig_basedir = $basedir;
+    my $basedir_opts = $package->get_tag_opts ('SUNW_BaseDir');
+    if (defined ($basedir_opts)) {
+	if ($basedir_opts =~ /\(relocate_from[:=](.+)\)/) {
+	    $basedir = $1;
+	}
     }
 
     my $parent_dir = $basedir;
@@ -886,7 +907,7 @@ sub make_pkginfo ($$) {
     chomp ($rev);
     print $fhandle "VERSION=$version,REV=$rev\n";
     
-    print $fhandle "BASEDIR=$basedir\n";
+    print $fhandle "BASEDIR=$orig_basedir\n";
 
     my @classes = $package->get_classes ();
     print $fhandle "CLASSES=none";
@@ -980,7 +1001,7 @@ sub make_depend ($$) {
 	if (not defined ($dep)) {
 	    next;
 	}
-	# FIXME: we're simple chopping off any version comparisons
+	# FIXME: we're simply chopping off any version comparisons
 	# should really verify them instead
 	$dep =~ s/([^\s><=]+).*/$1/;
 	# look for a package defined in this spec file first
@@ -1139,11 +1160,12 @@ sub get_docdir ($$) {
 }
 
 # process a %doc file and return the proto line for $type: ips or svr4
-sub get_doc_proto_line ($$$$) {
+sub get_doc_proto_line ($$$$;$) {
     my $type = shift;
     my $file = shift;
     my $fname = shift;
     my $basedir = shift;
+    my $new_basedir = shift;
 
     my $package = $file->get_package ();
     my $docdir = get_docdir ($package, $basedir);
@@ -1165,12 +1187,14 @@ sub get_doc_proto_line ($$$$) {
     if (! -f "$blddir/$bsdirname/$doc_subdir$fname") {
 	return undef;
     }
+
     my $mydir = `pwd`;
     chomp ($mydir);
     # get the directory of $fname, in case we have something like
     # %doc foo/bar/COPYING
     my $fname_basedir = dirname ($fname);
     mkdir_p ("./$basedir/$docdir/$fname_basedir") or fatal ("Failed to create directory $mydir/$docdir/$fname_basedir");
+    system ("rm -f './$basedir/$docdir/$fname_basedir/$fname'");
     system ("cp -p '$blddir/$bsdirname/$doc_subdir$fname' './$basedir/$docdir/$fname_basedir'");
     if ($? != 0) {
 	fatal ("ERROR: failed to copy $fname to $mydir/$basedir/$docdir/$fname_basedir");
@@ -1204,13 +1228,24 @@ sub get_doc_proto_line ($$$$) {
     my $pkgbasedir = "$basedir/";
     $pkgbasedir =~ s/\/\/*/\//g;
     $pkgbasedir = substr ($pkgbasedir, 1);
+
+    my $ips_pkgbasedir;
+    if (defined ($new_basedir)) {
+	$ips_pkgbasedir = "$new_basedir/";
+	$ips_pkgbasedir =~ s/\/\/*/\//g;
+	$ips_pkgbasedir = substr ($ips_pkgbasedir, 1);
+    } else {
+	$ips_pkgbasedir = $pkgbasedir;
+    }
+
     $all_files{"$pkgbasedir$docdir/$fname"} = "$package";
     if ($type eq 'svr4') {
 	return "f none $docdir/$fname=$pkgbasedir$docdir/$fname 0444 root bin";
     } elsif ($type eq 'ips') {
 	my $svr_package = $file->get_package->get_svr4_name();
 	my $svrfname = $file->get_package ()->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . "$docdir/$fname";
-	return "file $svrfname mode=0444 owner=root group=bin path=\"$pkgbasedir$docdir/$fname\" doc=true";
+	# FIXME: tag as a doc when facets are introduced
+	return "file $svrfname mode=0444 owner=root group=bin path=\"$ips_pkgbasedir$docdir/$fname\"";
     } else {
 	return undef;
     }
@@ -1350,18 +1385,19 @@ sub list_all_files ($) {
 
 # Start filling up the manifest
 # If the type is not supported write warning and return undef
-sub get_ips_proto_line ($$$$$$$$$$$) {
+sub get_ips_proto_line ($$$$$$$$$$$$) {
     my $file = shift;
     my $class_name = shift;
     my $buildroot = shift;
     my $fname = shift;
     my $basedir = shift;
+    my $new_basedir = shift;
     my $def_mode = shift;
     my $def_user = shift;
     my $def_grp = shift;
     my $hardlink = shift;
     my $svr_package = shift;
-    my $spec = shift;
+    my $package = shift;
 
     my $mode = $def_mode;
     my $user = $def_user;
@@ -1376,7 +1412,7 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
     if (($type eq '-') and defined ($file) and $file->is_doc ()) {
 	# documentation file, goes under /usr/share/doc/<package name>
 	# must be copied to $RPM_BUILD_ROOT from the build dir
-	return get_doc_proto_line ('ips', $file, $fname, $basedir);
+	return get_doc_proto_line ('ips', $file, $fname, $basedir, $new_basedir);
     }
 
     if ( $type eq 'g' ) {
@@ -1400,30 +1436,66 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
     $basedir =~ s/\/\/*/\//g;
     $basedir = substr ("$basedir", 1);
 
-    my $relpath = substr ($fname, length ($basedir));
+    if (defined ($new_basedir)) {
+	$new_basedir = "$new_basedir/";
+	$new_basedir =~ s/\/\/*/\//g;
+	$new_basedir = substr ("$new_basedir", 1);
+    } else {
+	$new_basedir = $basedir;
+    }
 
-    my $svrfname = $spec->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . $relpath;
+    my $relpath;
+    if ("$fname/" ne $basedir) {
+	$relpath = substr ($fname, length ($basedir));
+    } else {
+	$relpath = "";
+    }
+    my $ipsfname = "$new_basedir$relpath";
+
+    my $svrfname = $package->eval ("%_pkgdir") . "/" . $svr_package . "/reloc/" . $relpath;
 
     if ( $type eq 'f' and defined $file) {
-	$line = "file $svrfname mode=$mode owner=$user group=$group path=\"$fname\"";
+	if ($ipsfname =~ /^(var|lib)\/svc\/manifest\/.*\.xml/) {
+	    # an SMF manifest
+	    # get a list of SMF service descriptions defined in the file
+	    my @services = `/usr/sbin/svccfg inventory $svrfname 2>/dev/null`;
+	    my $svc_values;
+	    foreach my $svc (@services) {
+		chomp($svc);
+		print "Package defines SMF service $svc\n";
+		if (defined ($svc_values)) {
+		    $svc_values .= "," . $svc;
+		} else {
+		    $svc_values = $svc;
+		}
+	    }
+	    if (defined ($svc_values)) {
+		# add an opensolaris.smf.fmri attribute with all
+		# smf services defined in the package
+		my $smf_fmri = $package->get_meta("opensolaris.smf.fmri");
+		if (defined ($smf_fmri)) {
+		    $package->set_meta("opensolaris.smf.fmri",
+				       $smf_fmri . "," . $svc_values);
+		} else {
+		    $package->set_meta("opensolaris.smf.fmri", $svc_values);
+		}
+	    }
+	}
+	$line = "file $svrfname mode=$mode owner=$user group=$group path=\"$ipsfname\"";
 	# set preserve tag on config files
 	if ($file->is_config()) {
-	    $line .= " preserve=\"renamenew\"";
-	}
-	# add additional tags specified with %ips_tag(foo)
-	my $ref_tags = $file->ips_tags();
-	foreach my $tag (@$ref_tags) {
-	    # filter out duplicate tags
-	    if (not $line =~ / $tag( |$)/) {
-		$line .= " $tag"
-	    }
+	    my $preserve_option = $file->get_preserve;
+	    $preserve_option = "true" unless defined ($preserve_option);
+	    $line .= " preserve=\"$preserve_option\"";
 	}
     } elsif ( $type eq 'd' ) {
 	my $file1 = $fname;
 	if ( not defined $file ) {
-	    $file1 = $fname;
+	    # a directory that was automatically added (not listed in %files)
+	    $buildroot =~ s/([.\+\*\(\)\\\^\$])/\\$1/g;
 	    $file1 =~ s/^$buildroot//;
 	}
+	$file1 =~ s/^$basedir/$new_basedir/;
 	$file1 =~ s/^\/*//;
 	$line = "dir mode=$mode owner=$user group=$group path=\"$file1\"";	
     } elsif ( $type eq 's' ) {
@@ -1432,15 +1504,36 @@ sub get_ips_proto_line ($$$$$$$$$$$) {
 	# Hardlinks are not tested in $RPM_BUILD_DIR, but they are used
 	# only if spec file creator mark %files as hardlinks ...
 	if ( defined $hardlink ){
-	    $line = "hardlink path=\"$fname\" target=\"$target\"";
+	    $line = "hardlink path=\"$ipsfname\" target=\"$target\"";
 	} else {
-	    $line = "link path=\"$fname\" target=\"$target\"";
+	    $line = "link path=\"$ipsfname\" target=\"$target\"";
 	}
     }
     else {
 	print "Warning: Unsupported object type $type on file $svrfname\n";
     }
 	
+    if ($type =~ /[fs]/) {
+	# add additional tags specified with %ips_tag(foo)
+	my $ref_tags = $file->ips_tags();
+	foreach my $tagref (@$ref_tags) {
+	    # expand macros in the ips_tags:
+	    #   %@ or %{@} expands to the name of the file
+	    #   %{basename:foo} expands to the basename of the foo
+	    my $tag = "$tagref";
+	    $tag =~ s/%{@}/$ipsfname/g;
+	    $tag =~ s/%@/$ipsfname/g;
+	    while ($tag =~ /%{basename:([^}]*)}/) {
+		my $bname = basename($1);
+		$tag =~ s/%{basename:([^}]*)}/$bname/;
+	    }
+	    # filter out duplicate tags
+	    if (index(" $line "," $tag ") == -1) {
+		$line .= " $tag"
+	    }
+	}
+    }
+
     return $line;	
 }
 
@@ -1466,6 +1559,39 @@ sub find_all_matches($$) {
     return \@file_list;
 } 
 
+my %system_proto_ips = 
+    ("usr", "dir group=sys mode=0755 owner=root path=usr",
+     "usr/bin", "dir group=bin mode=0755 owner=root path=usr/bin",
+     "usr/lib", "dir group=bin mode=0755 owner=root path=usr/lib",
+     "usr/share", "dir group=sys mode=0755 owner=root path=usr/share",
+     "usr/share/aclocal", "dir group=other mode=0755 owner=root path=usr/share/aclocal",
+     "usr/share/application-registry", "dir group=other mode=0755 owner=root path=usr/share/application-registry",
+     "usr/share/applications", "dir group=other mode=0755 owner=root path=usr/share/applications",
+     "usr/share/doc", "dir group=other mode=0755 owner=root path=usr/share/doc",
+     "usr/share/gnome", "dir group=other mode=0755 owner=root path=usr/share/gnome",
+     "usr/share/icons", "dir group=other mode=0755 owner=root path=usr/share/icons",
+     "usr/share/lib", "dir group=sys mode=0755 owner=root path=usr/share/lib",
+     "usr/share/locale", "dir group=other mode=0755 owner=root path=usr/share/locale",
+     "usr/share/mime-info", "dir group=other mode=0755 owner=root path=usr/share/mime-info",
+     "usr/share/pixmaps", "dir group=other mode=0755 owner=root path=usr/share/pixmaps",
+     "usr/share/src", "dir group=sys mode=0755 owner=root path=usr/share/src",
+     "etc", "dir group=sys mode=0755 owner=root path=etc",
+     "opt", "dir group=sys mode=0755 owner=root path=opt",
+     "var", "dir group=sys mode=0755 owner=root path=var",
+     "kernel", "dir group=sys mode=0755 owner=root path=kernel",
+     "lib", "dir group=bin mode=0755 owner=root path=lib");
+
+sub get_system_proto_line($$) {
+    my $dir = shift;
+    my $ips = shift;
+
+    if ($ips) {
+	return $system_proto_ips{$dir};
+    }
+
+    return undef;
+}
+
 # Specify if we want a proto hash for SVr4 or IPS
 sub get_proto_hash ($$$) {
     my $spec = shift;
@@ -1480,7 +1606,7 @@ sub get_proto_hash ($$$) {
       
     my $has_errors = 0;
 
-    my @files = $package->get_files ();
+    my @files = $package->get_files ($do_ips);
     my $error = $package->get_error ();
     my @defattr = $package->get_defattr ();
     if (defined ($error)) {
@@ -1502,6 +1628,15 @@ sub get_proto_hash ($$$) {
     if (not defined ($basedir) or ($basedir eq "")) {
 	$basedir = "/";
     }
+    $basedir =~ s/(.)\/*$/$1/;
+
+    my $orig_basedir = $basedir;
+    my $basedir_opts = $package->get_tag_opts ('SUNW_BaseDir');
+    if (defined ($basedir_opts)) {
+	if ($basedir_opts =~ /\(relocate_from[:=](.+)\)/) {
+	    $basedir = $1;
+	}
+    }
 	
     chdir ($buildroot);
 
@@ -1518,7 +1653,26 @@ sub get_proto_hash ($$$) {
 	if (-f $fn) {
 	    @file_list = ($fn);
 	} else {
-	    @file_list = glob ($fn);
+	    if ($file->is_doc () and not "$file" =~ /^\//) {
+		# search for doc files in the build dir
+		my $blddir = $package->eval ("%{_builddir}");
+		my $bsdirname = $package->eval ('%{_build_src_dir_name}');
+		if ($bsdirname eq '%{_build_src_dir_name}') {
+		    $bsdirname = $package->eval ('%name-%version');
+		}
+		my $doc_subdir = $file->get_doc_subdir();
+		if (defined ($doc_subdir)) {
+		    $doc_subdir .= "/";
+		} else {
+		    $doc_subdir = "";
+		}
+
+		chdir ("$blddir/$bsdirname/$doc_subdir");
+		@file_list = glob ($fn);
+		chdir ($buildroot);
+	    } else {
+		@file_list = glob ($fn);
+	    }
 	}
 	if ((not @file_list) and (not $file->is_ghost())) {
 	    message ("File not found by glob: $buildroot$file");
@@ -1530,22 +1684,50 @@ sub get_proto_hash ($$$) {
 	my @rec_list = ();
 	
 	foreach my $fname (@file_list) {
-	    if (-d $fname) {
-		if ($file->is_recursive()) {
-		    my @files_in_dir = list_all_files ($fname);
-		    @rec_list = (@rec_list, @files_in_dir);
+	    if ($file->is_recursive()) {
+		if ($file->is_doc and not "$file" =~ /^\//) {
+		    # a directory in the source tree that contains doc files
+		    my $blddir = $package->eval ("%{_builddir}");
+		    my $bsdirname = $package->eval ('%{_build_src_dir_name}');
+		    if ($bsdirname eq '%{_build_src_dir_name}') {
+			$bsdirname = $package->eval ('%name-%version');
+		    }
+		    my $doc_subdir = $file->get_doc_subdir();
+		    if (defined ($doc_subdir)) {
+			$doc_subdir .= "/";
+		    } else {
+			$doc_subdir = "";
+		    }
+
+		    chdir ("$blddir/$bsdirname/$doc_subdir");
+		    if (-d $fname){
+			my @files_in_dir = list_all_files ($fname);
+			@rec_list = (@rec_list, @files_in_dir);
+			$fname = "";
+		    }
+		    chdir ($buildroot);
+		} else {
+		    if (-d $fname) {
+			my @files_in_dir = list_all_files ($fname);
+			@rec_list = (@rec_list, @files_in_dir);
+		    }
 		}
 	    }
 	}
     
 	my @all_file_list = (@file_list, @rec_list);
 	foreach my $fname (@all_file_list) {
-	    if (defined ($file_info{$fname})) {
+	    next if ($fname eq "");
+	    if ($file->is_excluded ()) {
+		$file_info{$fname} = "!exclude";
+		next;
+	    }
+	    if (defined ($file_info{$fname}) and $file_info{$fname} ne "!exclude") {
 		message ("File listed twice: $fname");
 		$has_errors = 1;
 	    }
 	    
-	    if (not defined ($file_info{$fname})) {
+	    if (not defined ($file_info{$fname}) or $file_info{$fname} eq "!exclude") {
 		# Assume that we are going to use the defattrs;
                 # we'll fixup later
                 my @attribsToUse = @defattribs;
@@ -1586,11 +1768,13 @@ sub get_proto_hash ($$$) {
 						     $buildroot,
 						     $fname, 
 						     $basedir,
+						     $orig_basedir,
 						     $mode,
 						     $attribsToUse[1],
 						     $attribsToUse[2],
 						     $hardlink,
-						     $package->get_svr4_name(), $spec);
+						     $package->get_svr4_name(),
+						     $package);
 			if (not defined ($pline)) {
 			    message ("IPS: File not found by glob: $buildroot/$fname");
 			    $has_errors = 1;
@@ -1617,7 +1801,8 @@ sub get_proto_hash ($$$) {
 		    }
 		    $file_info{$fname} = $pline;
 		    if (defined ($all_files{$fname}) and
-			substr ($pline, 0, 1) ne "d") {
+			substr ($pline, 0, 1) ne "d" and
+			$pline ne "!exclude") {
 			my $err_msg;
 			if ($file->is_doc ()) {
 			    $err_msg = "documentation file $fname is included in both $package and $all_files{$fname}";
@@ -1650,34 +1835,43 @@ sub get_proto_hash ($$$) {
 		}
 		$parent_dir =~ s/\/[^\/]+$//;
 		while ($parent_dir ne "" and
-		       "/$parent_dir" ne "$basedir" and
 		       not defined ($file_info{$parent_dir}) and
 		       not defined ($default_dirs{$parent_dir})) {
+		    # SVr4 packages need to add parent dirs up to $basedir,
+		    # bug IPS packages have to go all the way to /
+		    if (not defined ($do_ips) and "/$parent_dir" eq "$basedir") {
+			last;
+		    }
+
 		    my $dirmode = $defattr[3];
             	    if (not defined $dirmode or $dirmode eq '-') {
 			$dirmode = $defattr[0]; # fall back to old behaviour
 		    }
-		    my $pline;
-		    if (defined $do_ips) {
-			$pline = get_ips_proto_line(undef,
-						    "none",
-						    $buildroot,
-						    $parent_dir,
-						    $basedir,
-						    $dirmode,
-						    $defattr[1],
-						    $defattr[2],
-						    undef,
-						    $package->get_svr4_name(), $spec);
-		    } else {
-			$pline = get_proto_line (undef,
-						 "none",
-						 $buildroot,
-						 $parent_dir,
-						 $basedir,
-						 $dirmode,
-						 $defattr[1],
-						 $defattr[2]);
+		    my $pline = get_system_proto_line ($parent_dir, $do_ips);
+		    if (not defined $pline) {
+			if (defined $do_ips) {
+			    $pline = get_ips_proto_line(undef,
+							"none",
+							$buildroot,
+							$parent_dir,
+							$basedir,
+							$orig_basedir,
+							$dirmode,
+							$defattr[1],
+							$defattr[2],
+							undef,
+							$package->get_svr4_name(),
+							$package);
+			} else {
+			    $pline = get_proto_line (undef,
+						     "none",
+						     $buildroot,
+						     $parent_dir,
+						     $basedir,
+						     $dirmode,
+						     $defattr[1],
+						     $defattr[2]);
+			}
 		    }
 		    if (defined ($pline)) {
 			$default_dirs{$parent_dir} = $pline;
@@ -1723,6 +1917,7 @@ sub make_solaris_pkg ($$) {
     }
     my %files = %$files_ref;
     foreach my $file (keys %files) {
+	next if $file eq "!exclude";
 	$file =~ s/^\/+//;
 	$all_files{$file} = "$package";
     }
@@ -1745,6 +1940,7 @@ sub make_solaris_pkg ($$) {
     }
     foreach my $fname (sort (keys %files)) {
 	next if not $fname;
+	next if $files{$fname} eq "!exclude";
 	print $fhandle $files{$fname};
 	print $fhandle "\n";
     }
@@ -1768,6 +1964,7 @@ sub make_solaris_pkg ($$) {
 	if (not $retval) {
 	    system ("rm -rf $pkgdir/$inst");
 	}
+	debug_print "Wrote: $pkgdir/$dsname\n";
     }
 
     return (not $retval);
@@ -1797,37 +1994,166 @@ sub make_ips_dependency ($$$) {
     
     my @packages = $spec->get_packages();
     my @deps;
-    foreach my $pkg (@packages) {
-	if ($pkg->is_subpkg()) {
-	    # is this a subpkg of $package?
-	    next if ("${package}-" . $pkg->get_pkg_tag() ne "$pkg");
+    my @autodeps = ();
+    my %autodep_hash;
+
+    if ($package->eval ('%_use_internal_dependency_generator') eq "1") {
+	print "Looking for dependencies using the internal dependency generator\n";
+	my $filelist_ref = $package->get_filelist ();
+	if (@$filelist_ref) {
+	    my $tmpfile = `/usr/bin/mktemp /tmp/pkgbuild-filelist-XXXX` or
+		fatal ("mktemp failed");
+	    chomp ($tmpfile);
+	    open FILELIST, ">>$tmpfile" or
+		fatal ("failed to open temporary file $tmpfile");
+	    my $buildroot = $package->eval ("%buildroot");
+	    foreach my $fname (@$filelist_ref) {
+		print FILELIST "$buildroot/$fname\n";
+	    }
+	    close FILELIST;
+	    my @autodeps = `@PKGBUILD_LIBDIR@/ips-dependency-generator -f $tmpfile` or
+		print "No dependencies discovered\n";
+	    `rm -f $tmpfile`;
+	    my $ips_name = $package->get_ips_name ();
+	    foreach my $pkgname (@autodeps) {
+		chomp ($pkgname);
+		my $versionless = $pkgname;
+		$versionless =~ s/@.*//;
+		next if $versionless eq $ips_name;
+		print "  dependency discovered: $pkgname\n";
+		$autodep_hash{$versionless} = $pkgname;
+	    }
 	} else {
-	    # is this $package?
-	    next if ("${package}" ne "${pkg}");
+	    print "No files to analyse\n";
 	}
-	my @pkg_deps = $package->get_array('requires');
-	if (@pkg_deps) {
-	    push (@deps, @pkg_deps);
+    }
+
+    my $ref_ips_name = $package->get_ips_name ();
+    foreach my $pkg (@packages) {
+	my $ips_name = $pkg->get_ips_name ();
+	next if ($ips_name ne $ref_ips_name);
+	my @pkg_deps = $pkg->get_array('requires');
+	foreach my $pkg_dep (@pkg_deps) {
+	    my $dep_pkg = $spec->find_package_by_svr4_name ($pkg_dep);
+	    # the package is defined in the same spec file
+	    if (defined ($dep_pkg)) {
+		my $dep_pkg_ips_name = $dep_pkg->get_ips_name ();
+		# the IPS name is the same as the package
+		# we are contruction the manifest for. so
+		# we don't need to add a dependency
+		if ($dep_pkg_ips_name eq $ref_ips_name) {
+		    message ("omitting dependency $pkg_dep as it is a dependency on the same IPS package");
+		    next;
+		}
+	    }
+	    push (@deps, $pkg_dep);
 	}
     }
     my @dep_lines = ();
     foreach my $dep (@deps) {
-	# FIXME: we're simple chopping off any version comparisons
-	# should really verify them instead
+	my $version_spec = $dep;
+	$version_spec =~ s/[^\s><=]+\s*//;
+	my $any_version = 0;
 	$dep =~ s/([^\s><=]+).*/$1/;
+
+	# FIXME: we're only checking for =*, but we should process all
+	# version specifications
+	if ($version_spec =~ /=\s*\*/) {
+	    $any_version = 1;
+	}
 
 	my $pkg = $spec->find_package_by_pkg_name ($dep);
 	if (defined ($pkg)) {
 	    my $ips_dep = $pkg->get_ips_name();
+	    my $versionless = $ips_dep;
+	    $versionless =~ s/@.*//;
+	    delete ($autodep_hash{$versionless});
+	    my $minversion;
+	    if ($version_spec =~ />=\s*(\S+)/) {
+		# check if the version exists
+		$minversion = $1;
+		print "Verifying dependency $versionless\@$minversion\n";
+		my $cmdout = `pkg info -r "$versionless\@$minversion"`;
+		if ($? != 0) {
+		    # version does not exist
+		    print "WARNING: package $versionless\@$minversion does not exist:\n$cmdout";
+		    print "WARNING: ignoring minimum version specification\n";
+		    $minversion = undef;
+		}
+	    }
+	    if ($any_version) {
+		$ips_dep = $versionless;
+	    } elsif (defined ($minversion)) {
+		$ips_dep = "$versionless\@$minversion";
+	    }
 	    push @dep_lines, "depend fmri=$ips_dep type=require";
 	    next;
 	}
 	my $ips_dep = $pkgdb->get_ips_pkgname ($dep);
 	if (defined ($ips_dep)) {
+	    my $versionless = $ips_dep;
+	    $versionless =~ s/@.*//;
+	    delete ($autodep_hash{$versionless});
+	    my $minversion;
+	    if ($version_spec =~ />=\s*(\S+)/) {
+		# check if the version exists
+		$minversion = $1;
+		print "Verifying dependency $versionless\@$minversion\n";
+		my $cmdout = `pkg info -r "$versionless\@$minversion"`;
+		if ($? != 0) {
+		    # version does not exist
+		    print "WARNING: package $versionless\@$minversion does not exist:\n$cmdout";
+		    print "WARNING: ignoring minimum version specification\n";
+		    $minversion = undef;
+		}
+	    }
+	    if ($any_version) {
+		$ips_dep = $versionless;
+	    } elsif (defined ($minversion)) {
+		$ips_dep = "$versionless\@$minversion";
+	    } else {
+		$ips_dep =~ s/@([^,]+),[^-]+-(\S+)/\@$1-$2/;
+	    }
 	    push @dep_lines, "depend fmri=$ips_dep type=require";
 	} else {
 	    print "WARNING: omitting $dep from the IPS manifest\n";
 	}
+    }
+    # deal with obsolete tags
+    # these must specify a version but that version need not exist
+    # = * can be specified for a versionless depend line
+    foreach my $pkg (@packages) {
+	my $ips_name = $pkg->get_ips_name ();
+	next if ($ips_name ne $ref_ips_name);
+	my @pkg_obss = $pkg->get_array('renamed_to');
+	foreach my $pkg_obs (@pkg_obss) {
+	    my $version_spec = $pkg_obs;
+	    $version_spec =~ s/[^\s><=]+\s*//;
+	    $pkg_obs =~ s/([^\s><=]+).*/$1/;
+
+	    my $any_version = 0;
+	    if ($version_spec =~ /=\s*\*/) {
+		$any_version = 1;
+	    }
+
+	    if (not $any_version) {
+		my $minversion;
+		if ($version_spec =~ /(>=|=)\s*(\S+)/) {
+		    $minversion = $2;
+		}
+		if (not defined ($minversion) or $minversion eq "") {
+		    print "WARNING: invalid version specification in Renamed_To line: $pkg_obs\n";
+		    next;
+		}
+		$ips_dep = "$pkg_obs\@$minversion";
+		push @dep_lines, "depend fmri=$ips_dep type=require";
+	    } else {
+		push @dep_lines, "depend fmri=$pkg_obs type=require";
+	    }
+	}
+    }
+    foreach my $ips_dep (keys %autodep_hash) {
+	push @dep_lines, "depend fmri=$autodep_hash{$ips_dep} type=require";
     }
     push @$ref_lines, _uniq (@dep_lines)
 }
@@ -1841,8 +2167,10 @@ sub open_ips_transaction($$;$) {
     my $src_name = "";
     my $name = $package->get_ips_name();
     
-    my $ips_vendor_version = $package->eval ("%{?ips_vendor_version}%{!?ips_vendor_version:%version}");
-    my $version = $package->eval("%ips_component_version,%ips_build_version-$ips_vendor_version");
+    my $ips_vendor_version = $package->get_value_of ("ips_vendor_version");
+    my $ips_component_version = $package->get_value_of ("ips_component_version");
+    my $ips_build_version = $package->get_value_of ("ips_build_version");
+    my $version = $package->eval("${ips_component_version},${ips_build_version}-${ips_vendor_version}");
 
     my $esc_name = $package->get_ips_name();
     $esc_name =~ s/\//%2F/g;
@@ -1857,9 +2185,6 @@ sub open_ips_transaction($$;$) {
 	$name = $package->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:${name}/src}");
     }
 
-    if (scalar @lines > 0) {
-	print "Warning: Open transaction isn't first line of pkgsend script!\n";
-    }
     if (defined ($src)) {
 	push (@$ref_lines, "export PKG_REPO=\${PKGBUILD_SRC_IPS_SERVER:-\${PKGBUILD_IPS_SERVER:-$ips_server}}");
     } else {
@@ -1869,7 +2194,7 @@ sub open_ips_transaction($$;$) {
     push (@$ref_lines, "pkgsend include $manifest || exit 2");
 } 
 
-# Add summary line 
+# Add lincense action
 sub add_ips_license($$) {
     my $ref_lines = shift;
     my $package = shift;
@@ -1878,6 +2203,15 @@ sub add_ips_license($$) {
     my $license_file= $package->eval ("%_pkgdir") . "/" . $svr4_name . "/install/copyright";
 
     return if not -f $license_file;
+
+    # renamed and obsolete packages cannot have license actions
+    my $is_renamed = $package->get_meta("pkg.renamed");
+    return if (defined ($is_renamed) and 
+	     ($is_renamed eq "true" or $is_renamed eq "1"));
+    my $is_obsolete = $package->get_meta("pkg.obsolete");
+    return if (defined ($is_obsolete) and 
+	     ($is_obsolete eq "true" or $is_obsolete eq "1"));
+    
     my $license = $package->get_tag ("license");
     if (not defined ($license)) {
 	# License is the new name for the Copyright tag
@@ -1899,37 +2233,79 @@ sub add_ips_summary($$;$) {
     my $summary = $package->get_tag("summary");
     $summary = "$package" unless defined ($summary);
 
-    my $meta_hash = $package->get_meta_hash();
-    if (not defined ($$meta_hash{'pkg.name'})) {
+    # make a hash the combines the various meta tags in all %package that
+    # are used to create this IPS packages (the ones that have the same name)
+    my %bighash;
+
+    my $spec = $package->get_spec();
+    my @packages = $spec->get_packages ();
+    my $ips_name = $package->get_ips_name();
+    foreach my $pkg (@packages) {
+	# is this the same IPS package as $package?
+	next if ($pkg->get_ips_name() ne $ips_name);
+
+	my $meta_hash = $pkg->get_meta_hash();
+	foreach my $key (keys %{$meta_hash}) {
+	    if (defined $bighash{$key}) {
+		next if ($bighash{$key} eq $$meta_hash{$key});
+		$bighash{$key} .= ",\"" . $$meta_hash{$key} . "\"";
+	    } else {
+		$bighash{$key} = $$meta_hash{$key};
+	    }
+	}
+    }
+
+    if (not defined ($bighash{'pkg.name'})) {
 	my $name = $package->get_ips_name();
 	if (defined ($src_fmri) and ($src_fmri eq "-src")) {
 	    $name = $package->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:${name}/src}");
 	}
-	$$meta_hash{'pkg.name'} = $name;
+	$bighash{'pkg.name'} = $name;
     }
-    if (not defined ($$meta_hash{'description'})) {
-	$$meta_hash{'description'} = $summary;
+    if (not defined ($bighash{'pkg.description'})) {
+	my $desc = $package->eval ("%DESC");
+	if ($desc ne "%DESC") {
+	    $bighash{'pkg.description'} = "\"$desc\"";
+	}
     }
-    if (not defined ($$meta_hash{'pkg.description'})) {
-	$$meta_hash{'pkg.description'} = $summary;
+    if (not defined ($bighash{'pkg.summary'})) {
+	$bighash{'pkg.summary'} = "\"$summary\"";
     }
-    if (not defined ($$meta_hash{'pkg.summary'})) {
-	$$meta_hash{'pkg.summary'} = $summary;
-    }
-    if (not defined ($$meta_hash{'info.upstream_url'})) {
+    if (not defined ($bighash{'info.upstream_url'})) {
 	my $upstream_url = $package->get_tag("url");
-	$upstream_url = "http://pkgbuild.sf.net/" unless defined ($upstream_url);
-	$$meta_hash{'info.upstream_url'} = $upstream_url;
-    }
-    if (not defined ($$meta_hash{'info.maintainer_url'})) {
-	push (@$ref_lines, "set name=info.maintainer_url value=\"pkgbuild-sfe-devel\@sourceforge\.net\"");
+	if (defined ($upstream_url)) {
+	    $bighash{'info.upstream_url'} = "\"$upstream_url\"";
+	}
     }
 
-    foreach my $meta (keys %{$meta_hash}) {
+    my $group = $package->get_tag("group");
+    my $classification_set = 0;
+
+    my $is_renamed = 0;
+    my $is_obsolete = 0;
+    if (defined ($bighash{"pkg.renamed"}) and
+		 ($bighash{"pkg.renamed"} eq "true" or
+		  $bighash{"pkg.renamed"} eq "1")) {
+	$is_renamed = 1;
+    }
+    if (defined ($bighash{"pkg.obsolete"}) and
+		 ($bighash{"pkg.obsolete"} eq "true" or
+		  $bighash{"pkg.obsolete"} eq "1")) {
+	$is_obsolete = 1;
+    }
+
+    foreach my $meta (keys %bighash) {
+	# we want to exclude certain attributes from source packages
+	if (defined ($src_fmri)) {
+	    next if $meta eq "pkg.renamed";
+	}
+	# certain attributes should not be in renamed/obsolete packages
+	if ($meta eq "pkg.description" or $meta eq "pkg.summary") {
+	    next if $is_renamed or $is_obsolete;
+	}
 	# handle info.classification separately, as there may be more than one
 	# and they need to be in the same action
-	next if $meta eq "info.classification";
-	my $val = $$meta_hash{$meta};
+	my $val = $bighash{$meta};
 	my @values;
 	if ($val =~ /^"(.*)"$/) {
 	    # the value is quoted
@@ -1957,49 +2333,41 @@ sub add_ips_summary($$;$) {
 	map s/\\,/,/g, @values;
 	my $val_str = "";
 	map $val_str .= " value=\"$_\"", @values;
-	push (@$ref_lines, "set name=$meta$val_str");
-    }
-
-    # FIXME: this allows up to 2 classifications:
-    #  1) defined using the Group tags, this must be a freedesktop.org group
-    #  2) defined using meta(info.classification)
-    my $group = $package->get_tag("group");
-    my $classification_value;
-    if (defined $group) {
-	$classification_value = "value=\"org.freedesktop:" . $group . "\"";
-    }
-
-    if (defined $$meta_hash{"info.classification"}) {
-	if (defined($classification_value)) {
-	    $classification_value .= "value=\"" . $$meta_hash{"info.classification"} . "\"";
+	# info.classification Meta tag seen
+	$classification_set = 1 if $meta eq "info.classification";
+	if ($meta eq "info.classification" and defined($group)) {
+	    # there is also a Group tag
+	    if (defined $group) {
+		push (@$ref_lines, "set name=$meta$val_str value=\"org.rpm:" . $group . "\"");
+	    }
 	} else {
-	    $classification_value = " value=\"" . $$meta_hash{"info.classification"} . "\"";
+	    push (@$ref_lines, "set name=$meta$val_str");
 	}
     }
 
-    if (defined ($classification_value)) {
-	push (@$ref_lines, "set name=info.classification $classification_value");
+    # no meta tag sets info.classification but there is a Group tag
+    if (not $classification_set and defined ($group)) {
+	push (@$ref_lines, "set name=info.classification value=\"org.rpm:" . $group . "\"");
     }
-    if (defined ($src_fmri)) {
-	if ($src_fmri eq "-src") {
-	    # is this the source package?
-	    push (@$ref_lines, "set name=build.tool value=\"pkgbuild\"");
-	    push (@$ref_lines, "set name=net.sourceforge.pkgbuild,version value=\"@PKGBUILD_VERSION@\"");
-	} else {
-	    push (@$ref_lines, "set name=build.tool value=\"pkgbuild\"");
-	    push (@$ref_lines, "set name=net.sourceforge.pkgbuild,version value=\"@PKGBUILD_VERSION@\"");
-	    if (not $src_ips_server =~ /\/$/) {
-		$src_ips_server .= "/";
+
+    push (@$ref_lines, "set name=build.tool value=\"pkgbuild\"");
+    push (@$ref_lines, "set name=net.sourceforge.pkgbuild,version value=\"@PKGBUILD_VERSION@\"");
+    if (defined ($src_fmri) and $src_fmri ne "-src") {
+	# this is not the source package itself
+	if (not $src_ips_server =~ /\/$/) {
+	    $src_ips_server .= "/";
+	}
+	push (@$ref_lines, "set name=build.source_uri value=\"${src_ips_server}p5i/0/" . url_escape ("$src_fmri") . "\"");
+	# FIXME: build date?  e.g. build.date
+    }
+
+    if (not defined($src_fmri) or $src_fmri ne "-src") {
+	if (@predefines) {
+	    my $values = "";
+	    foreach my $predef (@predefines) {
+		$values .= " value=\"$predef\"";
 	    }
-	    push (@$ref_lines, "set name=build.source_uri value=\"${src_ips_server}p5i/0/" . url_escape ("$src_fmri") . "\"");
-	    # FIXME: build date?  e.g. build.date
-	    if (@predefines) {
-		my $values = "";
-		foreach my $predef (@predefines) {
-		    $values .= " value=\"$predef\"";
-		}
-		push (@$ref_lines, "set name=net.sourceforge.pkgbuild,defines$values");	    
-	    }
+	    push (@$ref_lines, "set name=net.sourceforge.pkgbuild,defines$values");	    
 	}
     }
 
@@ -2022,17 +2390,17 @@ sub add_ips_legacy($$$;$) {
     my $src = shift;
 
     my @packages = $spec->get_packages ();
+    my $ips_name = $package->get_ips_name();
+    my %legacy_pkgs = ();
+    my $pkg_arch = get_pkg_arch($package);
     foreach my $pkg (@packages) {
-	if ($pkg->is_subpkg()) {
-	    # is this a subpkg of $package?
-	    next if ("${package}-" . $pkg->get_pkg_tag() ne "$pkg");
-	} else {
-	    # is this $package?
-	    next if ("${package}" ne "${pkg}");
-	}
+	my $need_legacy = $pkg->get_tag("ips_legacy");
+	next if (defined ($need_legacy) and ($need_legacy eq "false" or
+					     $need_legacy eq "0"));
+	# is this the same IPS package as $package?
+	next if ($pkg->get_ips_name() ne $ips_name);
 	# PKG=$pkgname
-	my $pkgname = $pkg->get_tag ('sunw_pkg');
-	$pkgname = "$pkg" unless $pkgname;
+	my $pkgname = $pkg->get_svr4_name();
 	if (defined ($src)) {
 	    my $src_pkg_name = $spec->get_value_of ("sourcepackage");
 	    if (defined $src_pkg_name) {
@@ -2041,6 +2409,9 @@ sub add_ips_legacy($$$;$) {
 		$pkgname .= "-src";
 	    }
 	}
+	# has this legacy action been added yet?
+	next if defined($legacy_pkgs{$pkgname});
+	$legacy_pkgs{$pkgname} = 1;
 	my $summary = $pkg->get_tag ('summary');
 	$summary = "$pkg" unless defined ($summary);
 	# NAME=$desc
@@ -2078,7 +2449,7 @@ sub add_ips_legacy($$$;$) {
 
 	$desc =~ s/"/\\"/g;
 	$hotline =~ s/"/\\"/g;
-	push (@$ref_lines, "legacy arch=$arch category=$category desc=\"$desc\" hotline=\"$hotline\" name=\"$desc\" pkg=$pkgname $vendor version=$version,REV=$rev");
+	push (@$ref_lines, "legacy arch=$pkg_arch category=$category desc=\"$desc\" hotline=\"$hotline\" name=\"$desc\" pkg=$pkgname $vendor version=$version,REV=$rev");
 
 	if (defined ($src)) {
 	    # only add 1 legacy action in a source package,
@@ -2086,9 +2457,9 @@ sub add_ips_legacy($$$;$) {
 	    last;
 	}
     }
-    # as seen in Bart's blog:
-    # http://blogs.sun.com/barts/?cat=packaging+and+patching&date=20090204
-    push (@$ref_lines, "set name=variant.arch value=$arch");
+    # see http://blogs.sun.com/barts/?cat=packaging+and+patching&date=20090204
+    $pkg_arch =~ s/,/ value=/;
+    push (@$ref_lines, "set name=variant.arch value=$pkg_arch");
 }
 
 # Add close transaction
@@ -2099,28 +2470,34 @@ sub close_ips_transaction($) {
     push (@$ref_lines , "pkgsend close || exit 3");
 }
 
-my @autotag_data = (["/etc/gconf/schemas/.*\.(schemas|entries)$/",
+my @autotag_data = (["etc/gconf/schemas/.*\.(schemas|entries)",
 		     "svc:/application/desktop-cache/gconf-cache:default",
 		     "SUNWdesktop-cache"],
-		    ["usr/share/icons/.*",
+		    ["usr/share/icons/.*\.(png|svg|icon)",
 		     "svc:/application/desktop-cache/icon-cache:default",
 		     "SUNWdesktop-cache"],
-		    ["usr/lib/.*gtk-2.0/.*/immodule/.*\.so",
+		    ["usr/share/icons/.*/cursors/.*",
+		     "svc:/application/desktop-cache/icon-cache:default",
+		     "SUNWdesktop-cache"],
+		    ["usr/lib/.*gtk-2.0/.*/immodules/.*\.so",
 		     "svc:/application/desktop-cache/input-method-cache:default",
 		     "SUNWdesktop-cache"],
-		    ["usr/share/mime/packages/.*",
+		    ["usr/share/mime/packages/.*\.xml",
 		     "svc:/application/desktop-cache/mime-types-cache:default",
 		     "SUNWdesktop-cache"],
 		    ["usr/lib/.*gtk-2.0/.*loaders/.*\.so",
 		     "svc:/application/desktop-cache/pixbuf-loaders-installer:default",
 		     "SUNWdesktop-cache"],
-		    ["usr/share/applications/.*",
+		    ["usr/share/applications/.*\.desktop",
 		     "svc:/application/desktop-cache/desktop-mime-cache:default",
 		     "SUNWdesktop-cache"],
 		    ["usr/X11/lib/X11/fonts/.*\.(ttf|pcf|pcf\.gz)",
 		     "svc:/application/font/fc-cache:default",
 		     "SUNWfontconfig"],
-		    ["var/svc/manifest/.*\.xml",
+		    ["usr/share/fonts/.*\.(ttf|pcf|pcf\.gz)",
+		     "svc:/application/font/fc-cache:default",
+		     "SUNWfontconfig"],
+		    ["(var|lib)/svc/manifest/.*\.xml",
 		     "svc:/system/manifest-import:default"]
     );
 
@@ -2160,7 +2537,9 @@ sub make_ips_package ($$$$$) {
     
     if (defined $tag) {
 	if ($tag =~ /(devel|doc|l10n)/) {
-	    $tag = " $tag=true";
+	    # FIXME: disable automatic tagging for now
+	    # will become facets in the future
+	    $tag = "";
 	} else {
 	    $tag = "";
 	}
@@ -2173,10 +2552,17 @@ sub make_ips_package ($$$$$) {
 	exit (1);
     }
     my %files = %$files_ref;
+    my @filelist = ();
+    foreach my $f (keys %files) {
+	next if $files{$f} eq "!exclude";
+	push(@filelist, $f);
+    }
+    $package->set_filelist (\@filelist);
     my $pline;
     my $do_autotag = $spec->eval('%{?_use_ips_autotag}%{!?_use_ips_autotag:0}');
     foreach my $file (keys %files) {
 	$pline = $files{$file};
+	next if $files{$file} eq "!exclude";
 	if ($do_autotag) {
 	    $pline = autotag($ref_lines, $file, $pline);
 	}
@@ -2227,6 +2613,11 @@ sub create_ips_packages ($$) {
 
     my @packages = $spec->get_packages ();
     foreach $package (@packages) {
+	if (not $package->has_files(1)) {
+	    my $make_empty = $package->get_value_of("pkgbuild_make_empty_package");
+	    next if not defined ($make_empty);
+	    next if ($make_empty ne "1" and $make_empty ne "true");
+	}
 	create_ips_package ($spec, $package, $src_fmri) 
 	    unless $package->is_subpkg ();
     }
@@ -2241,12 +2632,14 @@ sub create_ips_package ($$$) {
 
     my @pkg_lines;
     my @manifest_lines;
-    debug_print "Calling ips_transaction";
+    debug_print "Opening ips_transaction";
     open_ips_transaction(\@pkg_lines, $package);
-    debug_print "Calling make_ips_dependency";
-    make_ips_dependency(\@manifest_lines, $spec, $package);
     debug_print "Calling make_ips_files";
     make_ips_files(\@manifest_lines, $spec, $package);
+    # must call make_ips_dependency after make_ips_files so that we can
+    # run the dependency generator against the file list
+    debug_print "Calling make_ips_dependency";
+    make_ips_dependency(\@manifest_lines, $spec, $package);
     debug_print "Calling make_ips_actions";
     make_ips_actions(\@manifest_lines, $package);
     debug_print "Calling add_ips_summary";
@@ -2332,10 +2725,15 @@ sub publish_src_ips_package ($) {
 sub publish_ips_packages ($) {
     my $spec = shift;
 
-    my $retval;
+    my $retval = 1;
     my @pkgs = $spec->get_packages ();
     foreach my $pkg (@pkgs) {
 	next if $pkg->is_subpkg ();
+	if (not $pkg->has_files (1)) {
+	    my $make_empty = $pkg->get_value_of("pkgbuild_make_empty_package");
+	    next if not defined ($make_empty);
+	    next if ($make_empty ne "1" and $make_empty ne "true");
+	}
 	my $esc_name = ${pkg}->get_ips_name();
 	$esc_name =~ s/\//%2F/g;
 	my $script = $spec->eval ("%_pkgmapdir") . "/scripts/" .
@@ -2375,7 +2773,7 @@ sub prepare_ips_manifest($$$) {
     my $file = shift;
     my $ref_lines = shift;
     
-    my @lines = @$ref_lines;
+    my @lines = _uniq(@$ref_lines);
     my $build_dir = $spec->eval('%buildroot');
     open FW, ">$file" or die "Failed to open file $file for writing\n";
     
@@ -2396,9 +2794,20 @@ sub create_svr4_packages ($) {
     my @packages = $spec->get_packages ();
 
     foreach my $pkg (@packages) {
-	if ($pkg->has_files() and not $pkg->has_svr4_match()) {
-	    $has_files_at_all = 1;
-	    make_solaris_pkg ($spec, $pkg) or return 0;
+	my $make_empty = $pkg->get_value_of("pkgbuild_make_empty_package");
+	if ($pkg->has_files()) {
+	    if (not $pkg->has_svr4_match()) {
+		$has_files_at_all = 1;
+		make_solaris_pkg ($spec, $pkg) or return 0;
+	    }
+	} else {
+	    if (defined ($make_empty) and ($make_empty eq "1" or
+					   $make_empty eq "true")) {
+		$has_files_at_all = 1;
+		if (not $pkg->has_svr4_match()) {
+		    make_solaris_pkg ($spec, $pkg) or return 0;
+		}
+	    }
 	}
     }
 
@@ -2456,7 +2865,7 @@ sub make_src_pkginfo ($$) {
     $summary = $pkgname unless defined ($summary);
     print $fhandle "NAME=$summary - sources\n";
     print $fhandle "DESC=$summary - sources\n";
-    print $fhandle "ARCH=$arch\n";
+    print $fhandle "ARCH=$build_arch\n";
 
     my $prodname = $spec->get_value_of ('sunw_prodname');
     print $fhandle "SUNW_PRODNAME=$prodname\n" if $prodname;
@@ -2691,20 +3100,41 @@ sub make_src_package ($) {
     return (not $retval);
 }
 
-sub set_arch($) {
+sub get_arch($) {
     my $spec = shift;
 
-    # look after for package-provided arch, if any
-    my @packages = $spec->get_packages ();
-    foreach my $pkg (@packages) {
-	my $pkg_arch = $pkg->get_tag ("buildarch");
-	next if not defined($pkg_arch);
+    # has the user specified an explicit target using --target?
+    return $target if $target ne '';
 
-	# rpm noarch is mapped on svr4 all
-	$pkg_arch = "sparc,i386,ppc" if $pkg_arch eq "noarch";
-	$arch = $pkg_arch;
-	return;
+    # look for package-provided arch, if any
+    my @packages = $spec->get_packages ();
+    my $pkg_arch = $packages[0]->get_value_of ("buildarch");
+    if (not defined ($pkg_arch)) {
+	$pkg_arch = $packages[0]->get_value_of ("buildarchitectures");
     }
+    return $arch if not defined($pkg_arch);
+    $pkg_arch = $spec->eval ($pkg_arch);
+    # rpm noarch is mapped on svr4 all
+    $pkg_arch = "sparc,i386" if $pkg_arch eq "noarch";
+    return $pkg_arch;
+}
+
+sub get_pkg_arch($) {
+    my $pkg = shift;
+
+    # has the user specified an explicit target using --target?
+    return $target if $target ne '';
+
+    # look for package-provided arch, if any
+    my $pkg_arch = $pkg->get_value_of ("buildarch");
+    if (not defined ($pkg_arch)) {
+	$pkg_arch = $pkg->get_value_of ("buildarchitectures");
+    }
+    return $arch if not defined($pkg_arch);
+    $pkg_arch = $pkg->eval ($pkg_arch);
+    # rpm noarch is mapped on svr4 all
+    $pkg_arch = "sparc,i386" if $pkg_arch eq "noarch";
+    return $pkg_arch;
 }
 
 sub main () {
@@ -2750,7 +3180,7 @@ sub main () {
 	    fatal ("The Name tag is not defined in " .
 		   $spec->get_file_name());
 	}
-	set_arch($spec);
+	$build_arch = get_arch($spec);
 	if ($check_deps) {
 	    check_build_requires ($spec) or exit (1);
 	}
@@ -2777,7 +3207,7 @@ sub main () {
 	}
 
 	my $src_fmri;
-	if ($build_command =~ /[as]/) {
+	if ($build_command =~ /[as]/ and $sourcepkg) {
 	    $pkgdir = $spec->eval ("%_srcpkgdir");
 	    mkdir_p ($pkgdir) or fatal ("Failed to create directory $pkgdir");
 	    make_src_package ($spec) or

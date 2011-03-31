@@ -35,6 +35,8 @@ sub get_name ($);
 
 use overload ('""' => \&get_name);	  
 
+my $package_counter = 0;
+
 # Create a new rpm_package object.
 sub new ($$;&) {
     my $class = shift;
@@ -42,8 +44,11 @@ sub new ($$;&) {
     my $name = shift;
     my $self = {};
 
+    $self->{_id} = ++$package_counter;
+
     $self->{_parent_spec_ref} = $parent_spec_ref;
     $self->{_tags} = {};
+    $self->{_tag_opts} = {};
     $self->{_meta} = {};
     $self->{_tags}->{release} = 0;
     my $ips_os_rel = `uname -r`;
@@ -54,11 +59,16 @@ sub new ($$;&) {
     chomp ($os_build);
     $os_build =~ s/^\S+_([0-9]+).*/$1/;
     $self->{_tags}->{ips_vendor_version} = "0.$os_build";
-    my $target = $$parent_spec_ref->{_defines}->{"_target"};
+    my $target = $$parent_spec_ref->{_defines}->{"_target_cpu"};
     if (defined $target) {
 	$self->{_tags}->{buildarchitectures} = $target;
     } else {
-	$self->{_tags}->{buildarchitectures} = 'i386';
+	$self->{_tags}->{buildarchitectures} = `uname -p`;
+    }
+    for my $tag_name ("buildrequires", "requires", "obsoletes",
+		      "prereq", "provides") {
+	my @dummy;
+	$self->{_tags}->{$tag_name} = \@dummy;
     }
     $self->{_blocks} = {};
     my @metafiles = ();
@@ -85,6 +95,7 @@ sub new_subpackage ($$$;$$) {
     my $self = {};
 
     $self->{_parent_spec_ref} = $parent_spec_ref;
+    $self->{_id} = ++$package_counter;
 
     # initialisation
     $self->{_name} = $name;
@@ -102,8 +113,11 @@ sub new_subpackage ($$$;$$) {
     $self->{_tags}->{ips_package_name} = undef;
     for my $tag_name ("buildrequires", "requires", "obsoletes",
 		      "prereq", "provides") {
-	$self->{_tags}->{$tag_name} = ();
+	my @dummy;
+	$self->{_tags}->{$tag_name} = \@dummy;
     }
+    my $tag_opts = $packages[0]->{_tag_opts};
+    $self->{_tag_opts} = {%$tag_opts};
 
     my $meta = $packages[0]->{_meta};
     $self->{_meta} = {%$meta};
@@ -158,12 +172,18 @@ sub get_ips_name ($) {
     }
 }
 
-sub set_tag ($$$) {
+sub set_tag ($$$;$) {
     my $self = shift;
     my $tag_name = shift;
     my $value = shift;
+    my $tag_opt = shift;
 
     $self->{_tags}->{$tag_name} = $value;
+    if (defined ($tag_opt) and ($tag_opt ne "")) {
+	$self->{_tag_opts}->{$tag_name} = $tag_opt;
+    } else {
+	$self->{_tag_opts}->{$tag_name} = undef;
+    }
 }
 
 sub get_tag ($$) {
@@ -173,6 +193,31 @@ sub get_tag ($$) {
     $tag_name = lc ($tag_name);
 
     return $self->{_tags}->{$tag_name};
+}
+
+sub get_value_of ($$) {
+    my $self = shift;
+    my $name = shift;
+
+    my $lcname = lc ($name);
+
+    if (defined ($self->{_tags}->{$lcname})) {
+	return $self->{_tags}->{$lcname};
+    }
+
+    my $evname = $self->eval("%$name");
+    return $evname unless $evname eq "%$name";
+
+    return undef;
+}
+
+sub get_tag_opts ($$) {
+    my $self = shift;
+    my $tag_name = shift;
+
+    $tag_name = lc ($tag_name);
+
+    return $self->{_tag_opts}->{$tag_name};
 }
 
 sub set_meta ($$$) {
@@ -377,8 +422,9 @@ sub add_metafile ($$) {
     return 1;
 }
 
-sub get_files ($) {
+sub get_files ($;$) {
     my $self = shift;
+    my $ips = shift;
 
     my $metafiles = $self->{_metafiles};
     if (@$metafiles and not $self->{_metafiles_loaded}) {
@@ -389,15 +435,20 @@ sub get_files ($) {
 	}
 	$self->{_metafiles_loaded} = 1;
     }
-    return undef if defined ($self->{_svr4_match});
+    if (not $ips) {
+	return undef if defined ($self->{_svr4_match});
+    }
     my $files = $self->{_files};
     my @all_match_files = ();
-    if (defined ($self->{_svr4_rev_match})) {
-	my $matches = $self->{_svr4_rev_match};
-	foreach my $match (@$matches) {
-	    my $match_files = $match->{_files};
-	    if (@$match_files) {
-		push (@all_match_files, @$match_files);
+    if (not $ips) {
+	if (defined ($self->{_svr4_rev_match})) {
+	    my $matches = $self->{_svr4_rev_match};
+	    foreach my $match (@$matches) {
+		my $match_files = $match->{_files};
+		next if not defined($match_files);
+		if (@$match_files) {
+		    push (@all_match_files, @$match_files);
+		}
 	    }
 	}
     }
@@ -411,21 +462,28 @@ sub get_files ($) {
     return undef;
 }
 
-sub has_files ($) {
+sub has_files ($;$) {
     my $self = shift;
+    my $ips = shift;
+
+    $ips = 0 if not defined ($ips);
 
     return 1 if defined $self->{_files};
     return 1 if defined $self->{_actions};
+    my $reqs = $self->{_tags}->{requires};
+    return 1 if @$reqs;
     my $metafiles = $self->{_metafiles};
     return 1 if @$metafiles;
-    if (defined ($self->{_svr4_match})) {
+    if (not $ips and defined ($self->{_svr4_match})) {
 	my $match_ref = $self->{_svr4_match};
-	return 1 if $$match_ref->has_files();
-    }
-    if (defined ($self->{_svr4_rev_match})) {
-	foreach my $match_rev (@$self->{_svr4_rev_match}) {
-	    return 1 if defined $$match_rev->{_files};
-	    return 1 if defined $$match_rev->{_actions};
+	return 1 if $match_ref->has_files();
+    } 
+    if (not $ips and defined ($self->{_svr4_rev_match})) {
+	foreach my $match_rev (@{$self->{_svr4_rev_match}}) {
+	    return 1 if defined $match_rev->{_files};
+	    return 1 if defined $match_rev->{_actions};
+	    my $mreqs = $match_rev->{_tags}->{requires};
+	    return 1 if @$mreqs;
 	}
     }
     return 0;
@@ -482,6 +540,16 @@ sub get_defattr ($) {
     
     my $defattr_ref = $self->{_defattr};
     return @$defattr_ref;
+}
+
+sub set_filelist ($$) {
+    my $self = shift;
+    $self->{_filelist} = shift;
+}
+
+sub get_filelist ($) {
+    my $self = shift;
+    return $self->{_filelist};
 }
 
 1;

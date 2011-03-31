@@ -3,14 +3,74 @@ NOTE: THIS IS PRE-RELEASE CODE
 ******************************
 get the latest stable version from http://pkgbuild.sf.net
 
+[n] is a sourceforge.net tracker id
+(n) is a Solaris bugster bug id
+{n} is a defect.opensolaris.org bug id
+
 Version 1.3.104:
+
+	Enhancements:
+
+	- (6990546) implement %{expand: foo} macro
+        - [1887920] (6984515) implement boolean expressions after %if
+	- (7000538) allow string comparison after %if
+        - (6983865, 6989324, 6991973) define a number of new macros commonly
+          available in rpm
+        - (6983891) implement the %exclude modifier in %files
+	- implement %{with foo} macro to be used in %if conditionals
+        - automatically generate package (runtime) dependencies on IPS
+	  systems - this feature can be disabled using the
+	  %_use_internal_dependency_generator macro.  Enabled by default.
+	- (pkgbuild-specific) relocate_from option of SUNW_BaseDir can be
+	  used to alter the base directory of a package without actually
+	  moving the files in %buildroot
+	- (pkgbuild and IPS-specific) "Requires: foo = *" generates a
+	  dependency without a version specification
+        - --nosourcepkg option disables creating source packages
+          (and corresponding attributes in IPS packages)
+        - spectool get_all_requires prints all dependencies of all packages 
+          defined in a spec
+        - spectool get_package_names has a new -a option to include
+          obsolete/renamed packages
 
 	Bugs fixed:
 
 	- fix installation when 'entire' is not installed
 	- include pkg.description and variant.arch attributes in manifests
-        - treat comma-separated values in Meta tag as multiple values, unless
-          quoted: "foo, bar" or the comma is escaped: foo\, bar.
+        - {17052} treat comma-separated values in Meta tag as multiple values,
+	  unless quoted: "foo, bar" or the comma is escaped: foo\, bar.
+        - (6983879, 6990528) fix parser problems with nested %() expressions
+          and quotes
+        - (6985298) fix globs in %doc lines
+        - (7003394) fix infinite loop in certain conditional definitions
+          and detect real infinite loops in macro definitions
+        - (7002852) allow both comma-separated and space-separated lists
+          of dependency specs in BuildRequires
+        - (7010145) fix the definition of host_cpu in macros.in so it's not
+          hardcoded to i686
+	- (6983885) fix runtime errors with regexps when the package name
+ 	  or path name contains + chars
+	- (6983872) fix the definition of cxx_optflags so it's not optflags
+	- [2904560] show the generated package name
+	- [2991209] Wrapper Scripts are overly complex and don't support symlink
+	  patch by Peter Bray
+	- [3040813] publisher URL parsing problems
+	  patch by Chris Ridd
+	- [3078143] %doc should be relative to source dir, not build root
+	- [3152163] wget_source() fails if $topdir/SOURCES does not exits
+	- {16464} pkgbuild exists with the undefinied value in the
+          rpm_package.pm
+	  patch by Michał Pryć
+	- fix the attributes of /usr in IPS package, if it is the basedir
+	  (and therefore not includes in %files)
+	- fix autotag rules so that directories are not tagged
+	- reduce the number of recursive calls in the parser so it works
+	  with very long spec files
+	- omit empty packages in spectool's get_package_names and
+	  get_publish_scripts, but allow creating packages that only
+	  contain dependencies (no files or actions)
+        - fix all kinds of ARCH variables that were incorrect when the
+          --target option was used
 
 Version 1.3.103:
 

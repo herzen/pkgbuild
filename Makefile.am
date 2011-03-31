@@ -29,7 +29,8 @@ pkgbuild_SCRIPTS = \
 	pkgbuild.pl \
 	pkgbuild-postprocess \
 	spectool.pl \
-	pkgtool.pl
+	pkgtool.pl \
+	ips-dependency-generator
 pkgbuild_PROGRAMS = \
 	pkgdbgrep
 bin_SCRIPTS = \
@@ -55,5 +56,6 @@ EXTRA_DIST= $(plain_modules) $(gen_module_sources) \
 	pkgbuild-postprocess \
 	pkgnames \
 	macros.in \
-	version-file.in
+	version-file.in \
+	ips-dependency-generator
 
