@@ -2008,10 +2008,10 @@ sub make_ips_dependency ($$$) {
 		fatal ("failed to open temporary file $tmpfile");
 	    my $buildroot = $package->eval ("%buildroot");
 	    foreach my $fname (@$filelist_ref) {
-		print FILELIST "$buildroot/$fname\n";
+		print FILELIST "/$fname\n";
 	    }
 	    close FILELIST;
-	    my @autodeps = `@PKGBUILD_LIBDIR@/ips-dependency-generator -f $tmpfile` or
+	    my @autodeps = `@PKGBUILD_LIBDIR@/ips-dependency-generator -R '$buildroot' -f $tmpfile` or
 		print "No dependencies discovered\n";
 	    `rm -f $tmpfile`;
 	    my $ips_name = $package->get_ips_name ();

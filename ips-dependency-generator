@@ -40,7 +40,8 @@
 function print_help_and_exit {
         print "\nUsage:\n $0 arguments" \
             "\n\nArgument list:" \
-            "\n\t-f <path to the file with list of files" \
+            "\n\t-f <path to the file with list of files>" \
+            "\n\t-R <path to the proto area>" \
             "\n\t-h <print this help and exit>"
         [[ -z "$1" ]] && exit 0
         exit "$1"
@@ -92,9 +93,9 @@ function ctrl_c {
 function main {
         # filter out any directories and non-existent files
         while read line; do
-	    test -d "$line" && continue
-	    test ! -f "$line" && continue
-	    if [[ -x "$line" ]]; then
+	    test -d "$proto_path$line" && continue
+	    test ! -f "$proto_path$line" && continue
+	    if [[ -x "$proto_path$line" ]]; then
                 # dummy mode to enable pkgdepend's check for scripts
 		echo "$line mode=0755" >> "$filelist_tmp0"
             else
@@ -107,10 +108,10 @@ function main {
         cat "${generate_tmp}.res" | sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | sed -e 's/^pkg:\///' || return 1
 }
 
-while getopts f:h o; do
+while getopts f:R:h o; do
         case "$o" in
                 f)  pkg_filelist="$OPTARG";;
-                
+                R)  proto_path="$OPTARG";;
                 h)  print_help_and_exit;;
                 \?) print_help_and_exit;;
         esac
@@ -155,10 +156,9 @@ filelist_tmp=$(mktemp)
 generate_tmp=$(mktemp)
 
 search_path="-d /"
-for arg in "$@"
-do
-        search_path=$search_path" -d \"$arg\" "
-done
+if [[ -n "$proto_path" ]]; then
+        search_path="-d $proto_path "
+fi
 
 # MAIN FUNCTION CALL
 main

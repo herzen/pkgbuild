@@ -1,5 +1,11 @@
 2011-04-07  Laszlo Peter  <laszlo.peter@oracle.com>
 
+	* ips-dependency-generator: fix to use the correct -d arg
+	* pkgbuild.pl.in: use the new -R option of ips-dependency-generator
+	  to tell it where the root of the proto area is
+
+2011-04-07  Laszlo Peter  <laszlo.peter@oracle.com>
+
 	* ips_package.pm: recognise PUBLISHED message when using file:/// repo
 	* ips_utils.pm: fix publishing to file:/// repos; implement
 	  get_incorporations() - a more efficient way to query all
