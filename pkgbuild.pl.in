@@ -2255,13 +2255,6 @@ sub add_ips_summary($$;$) {
 	}
     }
 
-    if (not defined ($bighash{'pkg.name'})) {
-	my $name = $package->get_ips_name();
-	if (defined ($src_fmri) and ($src_fmri eq "-src")) {
-	    $name = $package->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:${name}/src}");
-	}
-	$bighash{'pkg.name'} = $name;
-    }
     if (not defined ($bighash{'pkg.description'})) {
 	my $desc = $package->eval ("%DESC");
 	if ($desc ne "%DESC") {
@@ -2303,6 +2296,12 @@ sub add_ips_summary($$;$) {
 	if ($meta eq "pkg.description" or $meta eq "pkg.summary") {
 	    next if $is_renamed or $is_obsolete;
 	}
+	if ($meta eq "info.classification" and ($is_renamed or $is_obsolete)) {
+	    # no classification in renamed/obsolete pkgs
+	    $classification_set = 1;
+	    next;
+	}
+
 	# handle info.classification separately, as there may be more than one
 	# and they need to be in the same action
 	my $val = $bighash{$meta};

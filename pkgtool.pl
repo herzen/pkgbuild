@@ -1528,24 +1528,40 @@ sub update_incorporations ($) {
     my $spec = $specs_to_build[$spec_id];
 
     my @ps = $spec->get_packages ();
+    my @pnames = ();
     foreach my $p (@ps) {
 	# subpackages are merged in the main package
 	next if ($p->is_subpkg());
+	if (not $p->has_files(1)) {
+	    my $make_empty = $p->get_value_of("pkgbuild_make_empty_package");
+	    next if not defined ($make_empty);
+	    next if ($make_empty ne "1" and $make_empty ne "true");
+	}
+	my $pn = $p->get_ips_name();
+	push(@pnames, $pn);
+    }
+
+    my @pkg_inc = $ips_utils->get_incorporations(\@pnames);
+    # always try entire, for older IPS clients that do not support the
+    # pkg search command above
+    if (not @pkg_inc) {
+	@pkg_inc = ("entire");
+    }
+
+    foreach my $p (@ps) {
+	# subpackages are merged in the main package
+	next if ($p->is_subpkg());
+	if (not $p->has_files(1)) {
+	    my $make_empty = $p->get_value_of("pkgbuild_make_empty_package");
+	    next if not defined ($make_empty);
+	    next if ($make_empty ne "1" and $make_empty ne "true");
+	}
 	my $pn = $p->get_ips_name();
 	my $ips_vendor_version = $p->get_value_of ("ips_vendor_version");
 	my $ips_component_version = $p->get_value_of ("ips_component_version");
 	my $ips_build_version = $p->get_value_of ("ips_build_version");
 	my $version = $p->eval("${ips_component_version},${ips_build_version}-${ips_vendor_version}");
-	# get all the incorporations the packages are included in
-	my @pkg_inc = 
-	    `pkg search -o pkg.shortfmri -Hl :depend:incorporate:$pn 2>/dev/null`;
-	# always try entire, for older IPS clients that do not support the
-	# pkg search command above
-	if (not @pkg_inc) {
-	    @pkg_inc = ("entire");
-	}
 	foreach my $incorp (@pkg_inc) {
-	    chomp ($incorp);
 	    if (not defined($all_incorporations{$incorp})) {
 		msg_info (1, "Loading incorporation $incorp");
 		$all_incorporations{$incorp} = 
@@ -1555,7 +1571,7 @@ sub update_incorporations ($) {
 		    next;
 		}
 	    }
-	    msg_info (1, "Updating incorporation $incorp");
+	    msg_info (2, "Updating incorporation $incorp");
 	    $all_incorporations{$incorp}->update_depend ($pn, $version);
 	    if ($all_incorporations{$incorp}->changed()) {
 		$incorporated{$pn} = $incorp;
@@ -1611,7 +1627,7 @@ sub install_pkgs_ips ($) {
 	my $is_obsolete = $pkg->get_meta("pkg.obsolete");
 	next if (defined ($is_obsolete) and 
 		 ($is_obsolete eq "true" or $is_obsolete eq "1"));
-	if (not $pkg->has_files()) {
+	if (not $pkg->has_files(1)) {
 	    my $make_empty = $pkg->get_value_of("pkgbuild_make_empty_package");
 	    next if not defined ($make_empty);
 	    next if ($make_empty ne "1" and $make_empty ne "true");

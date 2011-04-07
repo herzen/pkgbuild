@@ -345,6 +345,10 @@ sub publish($$) {
 	$self->{_fmri} = $1;
 	$self->{_changed} = 0;
 	return $1;
+    } elsif (defined ($msg) and $msg =~ /^(pkg:\/[^@]+@[^\n]+)\nPUBLISHED/s) {
+	$self->{_fmri} = $1;
+	$self->{_changed} = 0;
+	return $1;
     } else {
 	return undef;
     }

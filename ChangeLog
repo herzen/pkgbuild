@@ -1,3 +1,18 @@
+2011-04-07  Laszlo Peter  <laszlo.peter@oracle.com>
+
+	* ips_package.pm: recognise PUBLISHED message when using file:/// repo
+	* ips_utils.pm: fix publishing to file:/// repos; implement
+	  get_incorporations() - a more efficient way to query all
+	  incorporations that include a list of packages
+	* pkgbuild.pl.in: do not include pkg.name in manifest;
+	  do not set info.classification for renamed/obsolete pkgs
+	* pkgtool.pl: use ips_utils::get_incorporations() instead of
+	  querying each pkg separately
+	* rpm_spec.pm.in: rename obsoleted_by to renamed_to; fix an = vs ==
+	  problem causing packages with identical IPS package names not
+	  to be recognised to be the same
+	* NEWS: update
+
 2011-03-31  Laszlo Peter  <laszlo.peter@oracle.com>
 
 	* Makefile.am: add ips-dependency-generator

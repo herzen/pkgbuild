@@ -77,7 +77,14 @@ sub read_cfg ($) {
 		$pkgbuild_ips_port = 80 if $pkgbuild_ips_server =~ m{^http:};
 		$pkgbuild_ips_port = 443 if $pkgbuild_ips_server =~ m{^https:};
 	    }
-	} 
+	} elsif ($pkgbuild_ips_server =~ /^file:\/\/(.*)/) {
+	    if (not -f "$1/pkg5.repository") {
+		print "ERROR: IPS repo not found at $1\n";
+		exit(1);
+	    }
+	    $pkgbuild_ips_port = 0;
+	    $pkgbuild_ips_host = "";
+	}
     }
     while (my $line = <IPS_AUTH>) {
 	chomp ($line);
@@ -165,6 +172,8 @@ sub verify_server ($) {
 
     return undef if not defined ($ips_server);
 
+    return undef if ($ips_server =~ /^file:\/\//);
+
     if ($ips_server =~ /([^\/])$/) {
 	return "server URI must end with a \"/\"";
     }
@@ -235,6 +244,43 @@ sub is_depotd_enabled ($) {
 	}
     }
     return $self->{_depotd_enabled};
+}
+
+# given a list of package names, return a list of packages that
+# incorporate those packages
+sub get_incorporations($@) {
+    my $self = shift;
+    my $pkgs_ref = shift;
+    my $search_prefix = ":depend:incorporate:";
+    my $search_str = "";
+    my %incorp_hash;
+    foreach my $pkg (@$pkgs_ref) {
+	if (length($search_str) > 800) {
+	    print "running $search_str\n";
+	    my @outlines = `pkg search -o pkg.shortfmri -Hl $search_str 2>/dev/null`;
+	    foreach my $line (@outlines) {
+		chomp($line);
+		$incorp_hash{$line} = 1;
+	    }
+	    $search_str = "";
+	}
+	if ($search_str ne "") {
+	    $search_str .= " OR $search_prefix$pkg";
+	} else {
+	    $search_str .= "$search_prefix$pkg";
+	}
+    }
+    if ($search_str ne "") {
+	print "running $search_str\n";
+	my @outlines = `pkg search -o pkg.shortfmri -Hl $search_str 2>/dev/null`;
+	foreach my $line (@outlines) {
+	    chomp($line);
+	    $incorp_hash{$line} = 1;
+	}
+    }
+
+    my @incorps = keys %incorp_hash;
+    return @incorps;
 }
 
 1;

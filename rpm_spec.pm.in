@@ -1483,7 +1483,7 @@ sub _process_tag ($$$) {
 	               "ips_vendor_version");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
 		      "buildconflicts", "prereq", "provides", "buildprereq",
-	              "renamed_to");
+	              "renamed_to", "obsoleted_by");
     my @ord_tags = ( "source", "patch" );
     my @localised_tags = ("summary");
     my $lcline = lc($line);
@@ -1530,7 +1530,7 @@ sub _process_tag ($$$) {
 		if ($#all_packages > 0) {
 		    foreach my $pkg (@all_packages) {
 			# skip the current package
-			next if $pkg->{_id} = $package_ref->{_id};
+			next if $pkg->{_id} == $package_ref->{_id};
 			if ($pkg->get_ips_name() eq $value) {
 			    # a pkg with the same IPS name exists already
 			    $is_subpkg = 1;
@@ -1555,6 +1555,10 @@ sub _process_tag ($$$) {
 	    # since there is no scripting FIXME?
 	    $tagname = $tag;
 	    $tagname =~ s/^([a-z_]*).*$/$1/;
+	    if ($tagname eq "obsoleted_by") {
+		$tagname = "renamed_to";
+		print "WARNING: please use Renamed_To instead of Obsoleted_By\n";
+	    }
 	    my @values = split /\s*,\s*/, $value;
 	    foreach my $v (@values) {
 		# split space-separated dependencies
