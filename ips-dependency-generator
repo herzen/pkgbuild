@@ -103,9 +103,12 @@ function main {
             fi
 	done < "$pkg_filelist"
         /usr/bin/awk '{print "file " $1 " path=" $1 " " $2}' "$filelist_tmp0" > "$filelist_tmp" || return 1
-        echo "pkgdepend generate $search_path -m \"$filelist_tmp\" |grep '^depend' > \"$generate_tmp\"" | sh|| return 1
+	ARCH=$(uname -p)
+	echo "set name=variant.arch value=${ARCH}" >> $filelist_tmp || return 1
+        echo "pkgdepend generate $search_path -m \"$filelist_tmp\" > \"$generate_tmp\"" | sh|| return 1
         pkgdepend -R / resolve -m "$generate_tmp" || return 1
-        cat "${generate_tmp}.res" | sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | sed -e 's/^pkg:\///' || return 1
+        cat "${generate_tmp}.res" | grep '^depend' | \
+	    sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | sed -e 's/^pkg:\///' || return 1
 }
 
 while getopts f:R:h o; do

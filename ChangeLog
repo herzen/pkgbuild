@@ -1,3 +1,9 @@
+2011-04-25  Laszlo Peter  <laszlo.peter@oracle.com>
+
+	* ips-dependency-generator: leave non-depend lines in the dummy
+	  manifest so that pkgdepend resolve can identify the files that
+	  belong to this package.
+
 2011-04-07  Laszlo Peter  <laszlo.peter@oracle.com>
 
 	* ips-dependency-generator: fix to use the correct -d arg
