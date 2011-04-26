@@ -1693,6 +1693,18 @@ sub install_pkgs_ips ($) {
     foreach my $pkg (@pkgs) {
 	# subpackages are merged in the main package
 	next if ($pkg->is_subpkg());
+	# do not install renamed or obsolete packages
+	my $is_renamed = $pkg->get_meta("pkg.renamed");
+	next if (defined ($is_renamed) and 
+		 ($is_renamed eq "true" or $is_renamed eq "1"));
+	my $is_obsolete = $pkg->get_meta("pkg.obsolete");
+	next if (defined ($is_obsolete) and 
+		 ($is_obsolete eq "true" or $is_obsolete eq "1"));
+	if (not $pkg->has_files(1)) {
+	    my $make_empty = $pkg->get_value_of("pkgbuild_make_empty_package");
+	    next if not defined ($make_empty);
+	    next if ($make_empty ne "1" and $make_empty ne "true");
+	}
 	my $pn = $pkg->get_ips_name();
 	if ($ips_utils->is_installed($pn)) {
 	    next;

@@ -1,3 +1,7 @@
+2011-04-26  Laszlo Peter  <laszlo.peter@oracle.com>
+
+	* pkgtool.pl: do not attempt to install renamed/obsolete/empty packages
+
 2011-04-25  Laszlo Peter  <laszlo.peter@oracle.com>
 
 	* ips-dependency-generator: leave non-depend lines in the dummy
