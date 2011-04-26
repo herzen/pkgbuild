@@ -1706,9 +1706,6 @@ sub install_pkgs_ips ($) {
 	    next if ($make_empty ne "1" and $make_empty ne "true");
 	}
 	my $pn = $pkg->get_ips_name();
-	if ($ips_utils->is_installed($pn)) {
-	    next;
-	}
 	my $ips_vendor_version = $pkg->get_value_of ("ips_vendor_version");
 	my $ips_component_version = $pkg->get_value_of ("ips_component_version");
 	my $ips_build_version = $pkg->get_value_of ("ips_build_version");
@@ -1734,7 +1731,10 @@ sub install_pkgs_ips ($) {
 	}
 	msg_info (1, "Running pfexec pkg install --no-refresh $all_pkgs");
 	$msg=`pfexec pkg install --no-refresh $all_pkgs 2>&1`;
-	if ( $? > 0 ) {
+	if ( $? == 4 ) {
+	    # means no update was necessary
+	    msg_info (1, "all packages already installed");
+	} elsif ( $? > 0 ) {
 	    msg_error "failed to update IPS packages: $msg";
 	    $build_status[$spec_id] = 'FAILED';
 	    $status_details[$spec_id] = $msg;
