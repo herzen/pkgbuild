@@ -1735,7 +1735,7 @@ sub install_pkgs_ips ($) {
 	    # means no update was necessary
 	    msg_info (1, "all packages already installed");
 	} elsif ( $? > 0 ) {
-	    my $err = $? >> 8
+	    my $err = $? >> 8;
 	    msg_error "failed to update IPS packages: Error $err: $msg";
 	    $build_status[$spec_id] = 'FAILED';
 	    $status_details[$spec_id] = $msg;
