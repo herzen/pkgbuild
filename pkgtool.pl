@@ -1731,11 +1731,12 @@ sub install_pkgs_ips ($) {
 	}
 	msg_info (1, "Running pfexec pkg install --no-refresh $all_pkgs");
 	$msg=`pfexec pkg install --no-refresh $all_pkgs 2>&1`;
-	if ( $? == 4 ) {
+	if ( $? >> 8 == 4 ) {
 	    # means no update was necessary
 	    msg_info (1, "all packages already installed");
 	} elsif ( $? > 0 ) {
-	    msg_error "failed to update IPS packages: $msg";
+	    my $err = $? >> 8
+	    msg_error "failed to update IPS packages: Error $err: $msg";
 	    $build_status[$spec_id] = 'FAILED';
 	    $status_details[$spec_id] = $msg;
 	    return 0;
