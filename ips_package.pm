@@ -214,6 +214,7 @@ sub version_match($$) {
 }
 
 # update a dependency with a new version
+# return 1 if an update was needed, 0 otherwise
 sub update_depend($$$) {
     my $self = shift;
     my $name = shift;
@@ -224,8 +225,10 @@ sub update_depend($$$) {
 			   $version)) {
 	    $self->{_dependencies}->{$name}->{'version'} = $version;
 	    $self->{_changed} = 1;
+	    return 1;
 	}
     }
+    return 0;
 }
 
 # FIXME: add files, dirs, etc.

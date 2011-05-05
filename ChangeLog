@@ -1,3 +1,11 @@
+2011-05-06  Laszlo Peter  <laszlo.peter@oracle.com>>
+
+	* ips_package.pm: return 1 from update_depend if a version change
+	  was needed.
+	* pkgtool.pl: fix a bug that affected specs that build packages
+	  belonging to different consolidations and only one consolidation
+	  was updated in the install phase; eliminate extra diag messages
+
 2011-04-26  Laszlo Peter  <laszlo.peter@oracle.com>
 
 	* pkgtool.pl: fix a bug where pkgtool did not install newly built

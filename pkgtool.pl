@@ -1572,9 +1572,12 @@ sub update_incorporations ($) {
 		}
 	    }
 	    msg_info (2, "Updating incorporation $incorp");
-	    $all_incorporations{$incorp}->update_depend ($pn, $version);
-	    if ($all_incorporations{$incorp}->changed()) {
+	    my $changed = $all_incorporations{$incorp}->update_depend ($pn, $version);
+	    if ($changed) {
+		msg_info (2, "Updated the version of $pn");
 		$incorporated{$pn} = $incorp;
+	    } else {
+		msg_info (2, "No updated needed for $pn");
 	    }
 	}
     }
@@ -1807,6 +1810,7 @@ sub warn_always ($$$) {
 	msg_warning (0, "skipping package $spec_name: required package $dep not installed");
 	msg_warning (0, "and no spec file specified on the command line provides it");
     }
+    return 1;
 }
 
 sub warn_once ($$$) {
@@ -1821,11 +1825,14 @@ sub warn_once ($$$) {
 	if (not defined ($warned_about{$dep})) {
 	    msg_warning (0, "$dep is required but not found");
 	    $warned_about{$dep}=1;
+	    return 1;
 	}
     }
+    return 0;
 }
 
 sub warn_never ($$$) {
+    return 0;
 }
 
 sub get_dependencies ($$@) {
@@ -1984,15 +1991,17 @@ sub check_dependency ($$&&@) {
 		    return 0;
 		}
 	    } else {
-		&$warning_callback ($spec_name, $capability, "NOT_FOUND");
-		msg_info (0, "No spec file for $capability found.");
-		msg_info (0, "Try specifying additional spec file directories");
-		msg_info (0, "using the --specdirs option");
+		if (&$warning_callback ($spec_name, $capability, "NOT_FOUND")) {
+		    msg_info (0, "No spec file for $capability found.");
+		    msg_info (0, "Try specifying additional spec file directories");
+		    msg_info (0, "using the --specdirs option");
+		}
 		return 0;
 	    }
 	} else {
-	    &$warning_callback ($spec_name, $capability, "NOT_FOUND");
-	    msg_info (0, "Hint: use the --autodeps to locate spec files for dependencies automatically");
+	    if (&$warning_callback ($spec_name, $capability, "NOT_FOUND")) {
+		msg_info (0, "Hint: use the --autodeps to locate spec files for dependencies automatically");
+	    }
 	    return 0;
 	}
     } else {
