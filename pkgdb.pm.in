@@ -168,11 +168,13 @@ sub _select_package($@) {
     my $pkg = shift;
     my @pkgnames = @_;
 
-    my @favoured_packages = qw(SUNWcs SUNWcsu SUNWcsr SUNWcsxu
+    my @favoured_packages = qw(system/locale/.* system/.* library/.*
+                               runtime/.* desktop/.* gnome/.* text/.*
+                               SUNWcs SUNWcsu SUNWcsr SUNWcsxu
                                SUNWcar SUNWcarx SUNWcsd
-                               SUNWcsl SUNWcslx
-                               system/locale/.* system/.* library/.*
-                               runtime/.* desktop/.* gnome/.* text/.*);
+                               SUNWcsl SUNWcslx);
+    my @blacklisted_packages = qw(consolidation/.*
+                                  compatibility/packages/.*);
     if (defined($pkg)) {
 	my $safepkg = $pkg;
 	$safepkg =~ s/\+/\\+/g;
@@ -183,6 +185,16 @@ sub _select_package($@) {
 	unshift @favoured_packages, "${safepkg}r";
 	unshift @favoured_packages, "${safepkg}u";
 	unshift @favoured_packages, "${safepkg}";
+    }
+
+    # filter out blacklisted pkgs
+    foreach my $p (@blacklisted_packages) {
+	my @pkgnames2 = grep !/(?:pkg:\/+)?${p}(@.*)?$/, @pkgnames;
+	@pkgnames = @pkgnames2;
+    }
+
+    if (not @pkgnames) {
+	return undef;
     }
 
     foreach my $p (@favoured_packages) {
@@ -261,6 +273,9 @@ sub get_svr4_pkgname($$) {
 	    my @s_o_copy = @search_out;
 	    map $_ =~ s/.* pkg=([^ ]*) .*/$1/s, @search_out;
 	    my $spkg = _select_package ($pkg, @search_out);
+	    if (not defined($spkg)) {
+		return undef;
+	    }
 	    $self->{svr4_pkgname_cache}->{$pkg} = $spkg;
 	    my $legacy_line = grep / pkg=$spkg /, @s_o_copy;
 	    if ($s_o_copy =~ / name="([^"]+)" /) {
@@ -356,6 +371,9 @@ sub get_ips_pkgname($$$) {
 		    }
 		}
 		my $sel_pname = _select_package ($pkg_only, @pnames);
+		if (not defined($sel_pname)) {
+		    return undef;
+		}
 		$self->msg_info (0, "Selected $sel_pname for $pkg_only");
 		# look up the package that this package was renamed to
 		$sel_pname = $self->get_ips_pkgname ($sel_pname);
@@ -385,12 +403,14 @@ sub get_ips_pkgname($$$) {
     # No exact match found, but pkg info did return a match, let's use it
     if (@partial_matches) {
 	my $best_match = _select_package($pkg, @partial_matches);
-	$self->msg_info (0, "Selected \"$best_match\" for $pkg");
-	# look up the selected package name again for version info
-	$best_match = $self->get_ips_pkgname ($best_match);
-	$self->{ips_pkgname_cache}->{$pkg} = "$best_match";
-	$self->{ips_pkgname_cache}->{$pkg_only} = "$best_match";
-	return $self->{ips_pkgname_cache}->{$pkg};
+	if (defined($best_match)) {
+	    $self->msg_info (0, "Selected \"$best_match\" for $pkg");
+	    # look up the selected package name again for version info
+	    $best_match = $self->get_ips_pkgname ($best_match);
+	    $self->{ips_pkgname_cache}->{$pkg} = "$best_match";
+	    $self->{ips_pkgname_cache}->{$pkg_only} = "$best_match";
+	    return $self->{ips_pkgname_cache}->{$pkg};
+	}
     }
 
     # search for local or remote matches using pkg search
@@ -399,6 +419,11 @@ sub get_ips_pkgname($$$) {
     my @pkgnames = $self->file2pkgs($pkg, 1);
     if (@pkgnames) {
 	my $spkg = _select_package($pkg, @pkgnames);
+	if (not defined ($spkg)) {
+	    $self->{ips_pkgname_cache}->{$pkg} = "%UNDEF%";
+	    $self->{ips_pkgname_cache}->{$pkg_only} = "%UNDEF%";
+	    return undef;
+	}
 	# look up package again, in case it was renamed
 	my $pkg_info = `/usr/bin/pkg info -r '$spkg' 2>/dev/null`;
 	if ($pkg_info =~ /\n\s*Renamed to:\s([^\n]+)\n/) {

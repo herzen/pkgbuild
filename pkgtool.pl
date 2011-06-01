@@ -1548,6 +1548,8 @@ sub update_incorporations ($) {
 	@pkg_inc = ("entire");
     }
 
+    # FIXME: filter out pkgs delivered by this spec
+
     foreach my $p (@ps) {
 	# subpackages are merged in the main package
 	next if ($p->is_subpkg());
@@ -1575,9 +1577,12 @@ sub update_incorporations ($) {
 	    my $changed = $all_incorporations{$incorp}->update_depend ($pn, $version);
 	    if ($changed) {
 		msg_info (2, "Updated the version of $pn");
-		$incorporated{$pn} = $incorp;
+		if (not defined ($incorporated{$pn})) {
+		    $incorporated{$pn} = {};
+		}
+		$incorporated{$pn}->{$incorp} = 1;
 	    } else {
-		msg_info (2, "No updated needed for $pn");
+		msg_info (2, "No update needed for $pn");
 	    }
 	}
     }
@@ -1645,11 +1650,13 @@ sub install_pkgs_ips ($) {
 	# only try to install the updated incorporation, it will
 	# pull the updated package, if the package is installed
 	if (defined ($incorporated{$pn})) {
-	    if (not defined ($incorps{$incorporated{$pn}})) {
-		$all_pkgs = "$all_pkgs " . 
-		    $all_incorporations{$incorporated{$pn}}->get_fmri();
-		# don't add the same incorporation name to the args again
-		$incorps{$incorporated{$pn}} = 1;
+	    for my $incorp (keys %{$incorporated{$pn}}) {
+		if (not defined ($incorps{$incorp})) {
+		    $all_pkgs = "$all_pkgs " . 
+			$all_incorporations{$incorp}->get_fmri();
+		    # don't add the same incorporation name to the args again
+		    $incorps{$incorp} = 1;
+		}
 	    }
 	    # on newer version of pkg, we also need to specify the package names
 	    if ($os_build >= 129) {

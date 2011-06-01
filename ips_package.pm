@@ -146,6 +146,9 @@ sub add_depend($$$;$) {
 
     my $version = $fmri;
     $version =~ s/^\S+@//;
+    if (not $fmri =~ /@/) {
+	$version = undef;
+    }
     $fmri =~ s/^(\S+)@.*/$1/;
     $fmri =~ s/^pkg:\///;
     $self->{_changed} = 1;
@@ -198,6 +201,9 @@ sub version_split($) {
 sub version_match($$) {
     my $version1 = shift;
     my $version2 = shift;
+
+    return 0 unless defined ($version1);
+    return 0 unless defined ($version2);
 
     my ($cv1, $bv1, $vv1, $ts1) = version_split ($version1);
     my ($cv2, $bv2, $vv2, $ts2) = version_split ($version2);
@@ -289,15 +295,17 @@ sub write_manifest($$) {
 	print MANIFEST "set name=$name value=$self->{_attributes}->{$name}\n";
     }
     foreach my $dep (keys %{$self->{_dependencies}}) {
+	my $v = "";
+	if (defined ($self->{_dependencies}->{$dep}->{'version'})) {
+	    my $v = "@" . $self->{_dependencies}->{$dep}->{'version'};
+	}
 	if (defined ($self->{_dependencies}->{$dep}->{'variant_arch'})) {
-	    print MANIFEST "depend fmri=${dep}@" .
-		$self->{_dependencies}->{$dep}->{'version'} .
+	    print MANIFEST "depend fmri=${dep}${v}" .
 		" type=$self->{_dependencies}->{$dep}->{'type'} " .
 		"variant.arch=" .
 		"$self->{_dependencies}->{$dep}->{'variant_arch'}\n";
 	} else {
-	    print MANIFEST "depend fmri=${dep}@" .
-		$self->{_dependencies}->{$dep}->{'version'} .
+	    print MANIFEST "depend fmri=${dep}${v}" .
 		" type=$self->{_dependencies}->{$dep}->{'type'}\n";
 	}
     }

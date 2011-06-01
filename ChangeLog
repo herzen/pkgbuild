@@ -1,4 +1,11 @@
-2011-05-06  Laszlo Peter  <laszlo.peter@oracle.com>>
+2011-06-02  Laszlo Peter  <laszlo.peter@oracle.com>
+
+	* ips_package.pm: handle versionless dependencies
+	* pkgdb.pm.in: blacklist "compatibility/*" packages as dependencies
+	* pkgtool.pl: handle the case of a package included in more than
+	  one incorporation
+
+2011-05-06  Laszlo Peter  <laszlo.peter@oracle.com>
 
 	* ips_package.pm: return 1 from update_depend if a version change
 	  was needed.
