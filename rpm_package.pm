@@ -55,9 +55,16 @@ sub new ($$;&) {
     chomp ($ips_os_rel);
     $self->{_tags}->{ips_component_version} = '%{version}';
     $self->{_tags}->{ips_build_version} = $ips_os_rel;
-    my $os_build = `uname -v`;
-    chomp ($os_build);
-    $os_build =~ s/^\S+_([0-9]+).*/$1/;
+    my $os_build;
+    if (-x "/usr/bin/pkg") {
+	$os_build = `pkg info release/name | grep Branch`;
+	chomp($os_build);
+	$os_build =~ s/^.*: *([0-9.]+)/$1/;
+    } else {
+	$os_build = `uname -v`;
+	chomp ($os_build);
+	$os_build =~ s/^\S+_([0-9]+).*/$1/;
+    }
     $self->{_tags}->{ips_vendor_version} = "0.$os_build";
     my $target = $$parent_spec_ref->{_defines}->{"_target_cpu"};
     if (defined $target) {
@@ -393,6 +400,56 @@ sub add_action($$) {
     return if not defined $action_string;
     my $actions = $self->{_actions};
     push(@$actions, $action_string);
+}
+
+sub set_default_mogrify($$) {
+    my $self = shift;
+    my $fname = shift;
+
+    $self->{__default_mogrify} = $fname;
+}
+
+sub unset_default_mogrify($) {
+    my $self = shift;
+
+    $self->{__no_default_mogrify} = 1;
+}
+
+sub get_default_mogrify($) {
+    my $self = shift;
+
+    if (defined ($self->{__no_default_mogrify})) {
+	return undef;
+    }
+
+    if (defined ($self->{__default_mogrify})) {
+	return $self->{__default_mogrify};
+    }
+
+    my $pkgbuild_d_m_r = $self->eval('%{?__pkgbuild_default_mogrify_rules}');
+    if ($pkgbuild_d_m_r ne '') {
+	return $pkgbuild_d_m_r;
+    }
+
+    return undef;
+}
+
+sub add_mogrify_rule($$) {
+    my $self = shift;
+    my $rule_string = shift;
+    
+    if (not defined $self->{_mogrify_rules}) {
+        my @rules_array = ();
+        $self->{_mogrify_rules} = \@rules_array;
+    }
+    return if not defined $rule_string;
+    my $rules = $self->{_mogrify_rules};
+    push(@$rules, $rule_string);
+}
+
+sub get_mogrify_rules($) {
+    my $self = shift;
+    return ($self->{_mogrify_rules});
 }
 
 sub add_file ($$) {

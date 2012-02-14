@@ -1297,10 +1297,10 @@ sub is_provided ($) {
             $pkginfo_version{$capability} = $version;
 	}
 	# if no svr4 package was found, look for an IPS package
-	if (not $result and defined ($ips)) {
+	if (not $result and -x "/usr/bin/pkg") {
 	    # no svr4 package (or IPS package with a legacy action) found
 	    # let's look for an IPS package
-	    my $pkg_out = `pkg info -l $capability 2>&1`;
+	    my $pkg_out = `/usr/bin/pkg info -l $capability 2>&1`;
 	    $result = (! $?);
 	    $pkginfo{$capability} = $result;
 	    my $version = $pkg_out;
@@ -1548,8 +1548,28 @@ sub update_incorporations ($) {
 	@pkg_inc = ("entire");
     }
 
-    # FIXME: filter out pkgs delivered by this spec
-
+    foreach my $p (@ps) {
+	# subpackages are merged in the main package
+	next if ($p->is_subpkg());
+	if (not $p->has_files(1)) {
+	    my $make_empty = $p->get_value_of("pkgbuild_make_empty_package");
+	    next if not defined ($make_empty);
+	    next if ($make_empty ne "1" and $make_empty ne "true");
+	}
+	my $pn = $p->get_ips_name();
+	my $idx = 0;
+	# filter out incorporations between parts of this package
+	while ($idx <= $#pkg_inc) {
+	    my $incorp_shortname = $pkg_inc[$idx];
+	    $incorp_shortname =~ s/^pkg:\///;
+	    $incorp_shortname =~ s/@.*//g;
+	    if($incorp_shortname eq $pn) {
+		msg_info(2, "Omitting incorportion $incorp_shortname");
+		delete($pkg_inc[$idx]);
+	    }
+	    $idx++;
+	}
+    }
     foreach my $p (@ps) {
 	# subpackages are merged in the main package
 	next if ($p->is_subpkg());
@@ -2332,12 +2352,42 @@ sub copy_sources ($) {
     my $src_path;
     my $target;
 
+    my $install_post = $spec->eval('%{?__spec_install_post}');
+    if ($install_post ne "" and not $install_post =~ /^\//) {
+	my $fullfname = find_spec ($install_post);
+	if (not defined ($fullfname)) {
+	    $build_status[$spec_id] = 'FAILED';
+	    $status_details[$spec_id] = "Spec file not found: $install_post\n";
+	    return 0;
+	}
+	copy_spec($spec, $fullfname) or return 0;
+	my $target = "$topdir/SPECS/$install_post";
+	`chmod a+x $target`;
+    }
+
     my @packages = $spec->get_packages ();
     foreach my $pkg (@packages) {
 	next if not defined $pkg;
 	my $cp_file = $pkg->get_tag ('sunw_copyright');
 	next if not defined $cp_file;
 	push (@sources, $cp_file);
+    }
+
+    foreach my $pkg (@packages) {
+	next if not defined $pkg;
+	my $default_mogrify = $pkg->get_default_mogrify();
+	if (defined ($default_mogrify)) {
+	    if (not $default_mogrify =~ /^\//) {
+		# relative path
+		my $fullfname = find_spec ($default_mogrify);
+		if (not defined ($fullfname)) {
+		    $build_status[$spec_id] = 'FAILED';
+		    $status_details[$spec_id] = "Mogrify rule file not found: $default_mogrify\n";
+		    return 0;
+		}
+		copy_spec($spec, $fullfname) or return 0;
+	    }
+	}
     }
 
     my @class_scripts = $spec->get_class_script_names ();
@@ -3159,6 +3209,20 @@ sub process_spec ($) {
 	} else {
 	    $provider{$pkgname} = $spec_id;
 	    msg_debug (2, "$pkgname is provided by spec $spec");
+	}
+	my $ipsname = $pkg->get_ips_name();
+	if (defined ($provider{$ipsname}) and $provider{$ipsname} != $spec_id) {
+	    my $prev_spec = $specs_to_build[$provider{$ipsname}];
+	    msg_warning (0, "skipping spec file " . 
+			 $spec->get_base_file_name() . 
+			 ": $ipsname already defined by spec file " . 
+			 $prev_spec->get_file_name ());
+	    $build_status[$spec_id] = "ERROR";
+	    $status_details[$spec_id] = "$ipsname is already defined by spec file " .
+		$prev_spec->get_file_name ();
+	} else {
+	    $provider{$ipsname} = $spec_id;
+	    msg_debug (2, "$ipsname is provided by spec $spec");
 	}
 	my @provides = $pkg->get_array ('provides');
 	foreach my $prov (@provides) {

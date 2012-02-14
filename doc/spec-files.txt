@@ -1,7 +1,7 @@
 The description of pkgbuild's spec files
 
 
-1 Introduction
+1  Introduction
 
   pkgbuild uses build "recipes" called spec files to define what sources
   are used for building a component, how to set up the source tree, build
@@ -23,7 +23,7 @@ The description of pkgbuild's spec files
   at http://www.rpm.org/max-rpm-snapshot/ch-rpm-inside.html
 
 
-2 Overview of the format
+2  Overview of the format
 
   Spec files are plain text files.  Lines starting with a # are comments.
   The percent character has a special meaning therefore it has to be
@@ -80,9 +80,9 @@ The description of pkgbuild's spec files
   the person who made the change and the description of the change.
 
 
-3 Macros
+3  Macros
 
-3.1 Macro definitions
+3.1  Macro definitions
 
   Macros are defined using the %define statement:
 
@@ -115,7 +115,7 @@ The description of pkgbuild's spec files
   %{version} expands to 1.0
 
 
-3.2 Conditional macro expansion
+3.2  Conditional macro expansion
 
   Undefined macros do not get expanded.  In most cases this is not
   desirable so conditional macro expansions can be used to deal with
@@ -137,7 +137,7 @@ The description of pkgbuild's spec files
   %define fred %{?foo}%{!?foo:%{bar}}
 
 
-3.3 Using the output of external commands
+3.3  Using the output of external commands
 
   The %(command) expression can be used to colled the output of
   an external command, just like $(command) or `command` in shell
@@ -146,7 +146,7 @@ The description of pkgbuild's spec files
   %define os_release %(uname -r)
 
 
-3.4 Predefined macros
+3.4  Predefined macros
 
   A number of commonly used macros are predefined in the
   macros file under $(libdir)/pkgbuild-$(version).  The most
@@ -215,8 +215,18 @@ The description of pkgbuild's spec files
     When set to 1, automatically add actuators to some well known
     file types (e.g. GNOME .desktop files, desktop icons, gconf schemas)
 
+  %__spec_install_post
 
-4 Tags
+    When set to a path to an executable, it is executed after the %install
+    scriptlet, with $RPM_BUILD_ROOT as its sole argument.
+
+  %__pkgbuild_default_mogrify_rules
+
+    When set to a path to a file, generated IPS package manifests are
+    processed with pkgmogrify(1) using the file as the transformation file.
+
+
+4  Tags
 
   Spec files contains lots of information about the component they
   belong to.  Some of this information is used during the build
@@ -326,6 +336,14 @@ The description of pkgbuild's spec files
     Sets the vendor-specific branch version portion of the IPS version
     string, 0.133 in the above example.  See pkg(5).
 
+  IPS_Legacy:
+    When set to 0 or false, no legacy action is added to the package
+    manifest.  Default: 1
+
+  Pkgbuild_Make_Empty_Package:
+    When set to 1 or true pkgbuild creates a package even if it only
+    contains metadata (no files or directories).  Default: 0
+
   Meta is a special tag introduced for adding arbitrary metadata to
   IPS packages (using the 'set' action).  The syntax is:
 
@@ -334,6 +352,18 @@ The description of pkgbuild's spec files
   Example:
 
   Meta(info.classification): org.opensolaris.category.2008:Applications/Games
+
+  Comma-separated values generate multiple values of the same attribute.
+  Use \, or double quotes to include a comma in the value.  The following
+  creates a single "set" action with 2 values, "application" and "desktop":
+
+  Meta(my_package_category): application, desktop
+
+  The following 2 examples do exactly the same, they create a single
+  "set" action with a single value: "hello, world!"
+
+  Meta(my_welcome_message): "hello, world!"
+  Meta(my_welcome_message): hello\, world!
 
   Other commonly used Meta tags are:
 
@@ -355,8 +385,9 @@ The description of pkgbuild's spec files
   License         the description of the license in the license action
   Requires        depend action
 
-  A "legacy" action is also added to the manifest.  It uses the package
-  data defined for SVr4 packaging, for example SUNW_Pkg and SUNW_Category.
+  A "legacy" action is also added to the manifest, except when disabled
+  using the IPS_Legacy tag (see above).  It uses the package data defined
+  for SVr4 packaging, for example SUNW_Pkg and SUNW_Category.
 
 
 4.2  Source and Patch tags
@@ -403,7 +434,7 @@ The description of pkgbuild's spec files
   ExclusiveOS, Prefix, Obsoletes, Provides, Conflicts, Prereq
 
 
-5 Preamble
+5  Preamble
 
   Spec files start with a list of tag definitions that describe the
   entire component.  This is called the Preamble in RPM's terminology.
@@ -520,6 +551,21 @@ The description of pkgbuild's spec files
         being created.  File name dependencies are also translated to
 	package names based on which package contains the file.
 
+	When creating IPS packages, by default, pkgbuild automatically
+        adds a minimum version specification to all dependencies.  The
+        minimum version used is the version of the package currently
+        installed on the system.
+
+	A different minimum version can be specified using the following
+        syntax:
+
+	Requires: foo >= 1.0
+
+	"any version" can also be specified, this syntax is specific
+        to pkgbuild:
+
+	Requires: foo = *
+
   BuildConflicts: opposite of BuildRequires.  Declares that the presence
         of the given package(s) or file(s) is incompatible with the build
 	process of this component.
@@ -550,7 +596,7 @@ The description of pkgbuild's spec files
   it is still a good practice to add it.
 
 
-6 Packages
+6  Packages
 
   A spec file can define one or more SVr4 and one or more IPS packages.
   While the files in these packages are the same, the package boundaries
@@ -637,7 +683,7 @@ The description of pkgbuild's spec files
   Development files for %{name}
 
 
-7 Scriptlets
+7  Scriptlets
 
   Scriptlets are shell script fragments that interact with the component's
   native build system, for example GNU make and GNU autotools or ant or
@@ -891,7 +937,7 @@ The description of pkgbuild's spec files
   any affected actions are tagged with "restart_fmri=svc://some/service".
 
 
-9 Files and actions
+9  Files and actions
 
   The contents of the package prototype area created in the %install
   section need to be sorted into binary packages.  Most item are
@@ -1150,6 +1196,18 @@ The description of pkgbuild's spec files
             svc:/system/manifest-import:default
 
 
+9.3  Package manifest transformations
+
+  pkgbuild can invoke pkgmogrify(1) to perform transformations on the
+  generated package manifest.  A file containing default tranformations
+  can be specified using the __pkgbuild_default_mogrify_rules macro.
+  In addition, each package can have a %mogrify section that defines
+  transformations in-line.  When both the __pkgbuild_default_mogrify_rules
+  macro and the %mogrify section are used for the same package, the
+  default tranformation rules are applied first, followed by the
+  contents of the %morgify section.
+
+
 10 Multi-level spec file structures
 
   This section discusses some features intended to make it easier to
@@ -1313,12 +1371,10 @@ The description of pkgbuild's spec files
   ...
   %endif
 
-  A generic %if statement is also available.  In the current version
-  of pkgbuild, it only accepts 1 for logical true 0 for logical false
-  as its argument.  Expression evaluation can be done in a subshell
-  macro:
+  A generic %if statement is also available.  It can be followed by
+  a boolean expression that evaluates to either 1 (true) or 0 (false).
 
-  %if %(test %foo = "fred" && echo 1 || echo 0)
+  %if %foo == "fred"
   ...
   %endif
 
@@ -1371,9 +1427,5 @@ The description of pkgbuild's spec files
 
    pkgbuild mailing list:
    http://lists.sourceforge.net/mailman/listinfo/pkgbuild-sfe-devel
-
-   OpenSolaris software porters:
-   http://hub.opensolaris.org/bin/view/Community+Group+sw-porters/
-   http://mail.opensolaris.org/mailman/listinfo/sw-porters-discuss
 
    IRC: irc://freenode:net/#pkgbuild

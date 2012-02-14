@@ -1,3 +1,31 @@
+2012-02-08  Laszlo Peter  <laszlo.peter@oracle.com>
+
+	* ips-dependency-generator: use exit status 2 to indicate partial
+	  dependency resolution; fix pkgdepend invocation to work with
+	  more recent versions of IPS
+	* ips_package.pm: improve incorporation parsing to work with newer
+	  incorporation packages
+	* pkgbuild.pl.in: if %__spec_install_post is defined and points to
+	  an executable script, run it after %install; update package
+	  attribute names to follow Solaris 11 standards (e.g. source-uri
+	  becomes source_uri); update package names in autotag_data to
+	  IPS names; run pkgmogrify on the manifest if a transformation
+	  file is defined using __pkgbuild_default_mogrify_rules or the
+	  %mogrify section
+	* pkgdb.pm.in: improve SVr4 to IPS conversion
+	* pkgtool.pl: copy __spec_install_post script and transformation
+	  file to SPECS dir; record IPS package names in provider array
+	  so that pkgtool can resolve package interdependencies defined
+	  with IPS package names
+	* rpm_package.pm: determine the default branch version based on
+	  the version of release/name instead of parsing `uname -v`;
+	  define APIs for adding transformation files
+	* rpm_spec.pm.in: implement %mogrify section, __spec_install_post,
+	  __pkgbuild_default_mogrify_rules
+	* NEWS: update
+	* doc/spec-files.txt: update
+	* doc/spectool.1: update
+
 2011-06-02  Laszlo Peter  <laszlo.peter@oracle.com>
 
 	* ips_package.pm: handle versionless dependencies

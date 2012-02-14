@@ -59,6 +59,7 @@ sub new ($;$$) {
     $self->{_dependencies} = {};
     $self->{_attributes} = {};
     $self->{_changed} = 0;
+    $self->{_pure_incorp} = 1;
 
     bless ($self, $class);
     return $self;
@@ -115,6 +116,7 @@ sub new_from_fmri($$) {
     $self->{_attributes} = {};
     $self->{_fmri} = $fmri;
     $self->{_changed} = 0;
+    $self->{_pure_incorp} = 1;
 
     bless ($self, $class);
     $self->load_from_fmri() or return undef;
@@ -142,7 +144,7 @@ sub add_depend($$$;$) {
     my $self = shift;
     my $fmri = shift;
     my $type = shift;
-    my $variant_arch = shift;
+    my $other_attrs = shift;
 
     my $version = $fmri;
     $version =~ s/^\S+@//;
@@ -155,7 +157,7 @@ sub add_depend($$$;$) {
 
     $self->{_dependencies}->{$fmri}->{'type'} = $type;
     $self->{_dependencies}->{$fmri}->{'version'} = $version;
-    $self->{_dependencies}->{$fmri}->{'arch'} = $variant_arch;
+    $self->{_dependencies}->{$fmri}->{'other_attrs'} = $other_attrs;
 }
 
 # split an IPS version string into components, as defined in pkg(5)
@@ -265,15 +267,42 @@ sub load_from_fmri($) {
 	return 0;
     }
 
+    my $warned = 0;
+
     foreach my $line (@manifest) {
-	if ($line =~ /^depend fmri=(\S+) type=(\S+)/) {
-	    $self->add_depend($1, $2);
-	}
-	if ($line =~ /^depend fmri=(\S+) type=(\S+) variant.arch=(\S+)$/) {
-	    $self->add_depend($1, $2, $3);
-	}
-	if ($line =~ /^set name=(\S+) value=(.*)/) {
+	if ($line =~ /^depend (.+)$/) {
+	    my $l = $1;
+	    my $fmri;
+	    my $type;
+	    my $other_attrs;
+	    while (not $l =~ /^\s*$/) {
+		if ($l =~ /fmri=(\S+)/) {
+		    $fmri=$1;
+		    $l =~ s/fmri=(\S+)\s*//;
+		} elsif ($l =~ /type=(\S+)/) {
+		    $type=$1;
+		    $l =~ s/type=(\S+)\s*//;
+		} elsif ($l =~ /(\S+)/) {
+		    if (defined ($other_attrs)) {
+			$other_attrs .= $1;
+		    } else {
+			$other_attrs = $1;
+		    }
+		    $l =~ s/(\S+)\s*//;
+		}
+	    }
+	    $self->add_depend($fmri, $type, $other_attrs);
+	} elsif ($line =~ /^set name=(\S+) value=(.*)/) {
 	    $self->add_attribute($1, $2);
+	} elsif ($line =~ /^signature /) {
+	    next;
+	} else {
+	    if (not $warned) {
+		print "Package $self->{_fmri} is not a pure incorporation\n";
+		print "pkgbuild won't update it\n";
+		$warned = 1;
+	    }
+	    $self->{_pure_incorp} = 0;
 	}
     }
 
@@ -299,11 +328,10 @@ sub write_manifest($$) {
 	if (defined ($self->{_dependencies}->{$dep}->{'version'})) {
 	    my $v = "@" . $self->{_dependencies}->{$dep}->{'version'};
 	}
-	if (defined ($self->{_dependencies}->{$dep}->{'variant_arch'})) {
+	if (defined ($self->{_dependencies}->{$dep}->{'other_attrs'})) {
 	    print MANIFEST "depend fmri=${dep}${v}" .
 		" type=$self->{_dependencies}->{$dep}->{'type'} " .
-		"variant.arch=" .
-		"$self->{_dependencies}->{$dep}->{'variant_arch'}\n";
+		"$self->{_dependencies}->{$dep}->{'other_attrs'}\n";
 	} else {
 	    print MANIFEST "depend fmri=${dep}${v}" .
 		" type=$self->{_dependencies}->{$dep}->{'type'}\n";
@@ -340,6 +368,7 @@ sub publish($$) {
     my $pkgmapsdir = shift;
 
     return "UNCHANGED" if (not $self->{_changed});
+    return "UNCHANGED" if (not $self->{_pure_incorp});
 
     $self->write_manifest($pkgmapsdir) or return undef;
     $self->_push_manifest($pkgmapsdir) or return undef;

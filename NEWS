@@ -36,6 +36,19 @@ Version 1.3.104:
         - (IPS and pkgbuild-specific) new tag renamed_to allows adding
           dependencies to renamed/obsolete pkgs that need not be installed
           for building the spec
+        - (IPS and pkgbuild-specific) %mogrify section in spec files can
+          be used to specify pkgmogrify(1) transformations applied to the
+          generated manifest.  Also, a file with default transformations
+          may be specified by defining the __pkgbuild_default_mogrify_rules
+          macro.
+        - implement the __spec_install_post macro.  When this macro
+          explands to an executable script, it is called after the %install
+          section with $RPM_BUILD_ROOT as its sole argument.
+        - (pkgbuild-specific) new tag: PkgBuild_Make_Empty_Package
+	  when set to true or 1, pkgbuild creates a package even if it has
+          no contents (e.g. renamed/obsolete)
+        - (pkgbuild and IPS-specific) new tag: IPS_legacy: when set to false,
+          no legacy action is added to the package
 
 	Bugs fixed:
 
@@ -61,12 +74,12 @@ Version 1.3.104:
 	- [3040813] publisher URL parsing problems
 	  patch by Chris Ridd
 	- [3078143] %doc should be relative to source dir, not build root
-	- [3152163] wget_source() fails if $topdir/SOURCES does not exits
+	- [3152163] wget_source() fails if $topdir/SOURCES does not exist
 	- {16464} pkgbuild exists with the undefinied value in the
           rpm_package.pm
 	  patch by Michał Pryć
 	- fix the attributes of /usr in IPS package, if it is the basedir
-	  (and therefore not includes in %files)
+	  (and therefore not included in %files)
 	- fix autotag rules so that directories are not tagged
 	- reduce the number of recursive calls in the parser so it works
 	  with very long spec files
@@ -76,11 +89,10 @@ Version 1.3.104:
         - fix all kinds of ARCH variables that were incorrect when the
           --target option was used
         - fix publishing to file:/// repos
-        - (pkgbuild-specific) new tag: PkgBuild_Make_Empty_Package
-	  when set to true or 1, pkgbuild creates a package even if it has
-          no contents (e.g. renamed/obsolete)
-        - (pkgbuild and IPS-specific) new tag: IPS_legacy: when set to false,
-          not legacy action is added to the package
+        - use the version of the "release/name" package to determine the
+          default branch version.
+        - change attribute names to conform to Solaris 11 standards, e.g.
+          -'s changed to _'s.
 
 Version 1.3.103:
 

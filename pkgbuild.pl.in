@@ -784,6 +784,31 @@ sub do_block ($$) {
     unlink $script_name;
     if ($retval) {
 	print "Bad exit status from $script_name (%$block_name)\n";
+	return 0;
+    }
+
+    if ($block_name eq "install") {
+	my $install_post = $spec->eval ("%{?__spec_install_post}");
+	if ($install_post ne "") {
+	    # there is a post-%install hook script defined
+	    if (not $install_post =~ /^\//) {
+		# not an absolute path, look for it in the SPECS dir
+		my $specdir = $spec->eval ("%_specdir");
+		if (not -x "$specdir/$install_post") {
+		    print "ERROR: __spec_install_post script not found: $specdir/$install_post\n";
+		    return 0;
+		} else {
+		    $install_post = "$specdir/$install_post";
+		}
+	    } elsif (not -x $install_post) {
+		print "ERROR: __spec_install_post script not found: $install_post\n";
+		return 0;
+	    }
+	    my $RPM_BUILD_ROOT = $spec->eval ('%buildroot');
+	    print "Executing post-%install hook script $install_post $RPM_BUILD_ROOT\n";
+	    system ("$install_post $RPM_BUILD_ROOT");
+	    $retval = $?;
+	}
     }
 
     return (not $retval);
@@ -1838,7 +1863,7 @@ sub get_proto_hash ($$$) {
 		       not defined ($file_info{$parent_dir}) and
 		       not defined ($default_dirs{$parent_dir})) {
 		    # SVr4 packages need to add parent dirs up to $basedir,
-		    # bug IPS packages have to go all the way to /
+		    # but IPS packages have to go all the way to /
 		    if (not defined ($do_ips) and "/$parent_dir" eq "$basedir") {
 			last;
 		    }
@@ -2011,8 +2036,14 @@ sub make_ips_dependency ($$$) {
 		print FILELIST "/$fname\n";
 	    }
 	    close FILELIST;
-	    my @autodeps = `@PKGBUILD_LIBDIR@/ips-dependency-generator -R '$buildroot' -f $tmpfile` or
-		print "No dependencies discovered\n";
+	    my @autodeps = `@PKGBUILD_LIBDIR@/ips-dependency-generator -R '$buildroot' -f $tmpfile`;
+	    if ($? != 0) {
+		if (($? >> 8) == 2) {
+		    print "WARNING: dependency generator partially failed\n";
+		} else {
+		    print "No dependencies discovered\n";
+		}
+	    }
 	    `rm -f $tmpfile`;
 	    my $ips_name = $package->get_ips_name ();
 	    foreach my $pkgname (@autodeps) {
@@ -2264,10 +2295,10 @@ sub add_ips_summary($$;$) {
     if (not defined ($bighash{'pkg.summary'})) {
 	$bighash{'pkg.summary'} = "\"$summary\"";
     }
-    if (not defined ($bighash{'info.upstream_url'})) {
+    if (not defined ($bighash{'info.upstream-url'})) {
 	my $upstream_url = $package->get_tag("url");
 	if (defined ($upstream_url)) {
-	    $bighash{'info.upstream_url'} = "\"$upstream_url\"";
+	    $bighash{'info.upstream-url'} = "\"$upstream_url\"";
 	}
     }
 
@@ -2356,7 +2387,7 @@ sub add_ips_summary($$;$) {
 	if (not $src_ips_server =~ /\/$/) {
 	    $src_ips_server .= "/";
 	}
-	push (@$ref_lines, "set name=build.source_uri value=\"${src_ips_server}p5i/0/" . url_escape ("$src_fmri") . "\"");
+	push (@$ref_lines, "set name=build.source-uri value=\"${src_ips_server}p5i/0/" . url_escape ("$src_fmri") . "\"");
 	# FIXME: build date?  e.g. build.date
     }
 
@@ -2378,7 +2409,7 @@ sub add_ips_summary($$;$) {
 	$source_values .= " value=\"$src\"";
     }
     if ($source_values ne "") {
-	push (@$ref_lines, "set name=info.source_url$source_values");
+	push (@$ref_lines, "set name=info.source-url$source_values");
     }
 }
 
@@ -2471,31 +2502,31 @@ sub close_ips_transaction($) {
 
 my @autotag_data = (["etc/gconf/schemas/.*\.(schemas|entries)",
 		     "svc:/application/desktop-cache/gconf-cache:default",
-		     "SUNWdesktop-cache"],
+		     "service/gnome/desktop-cache"],
 		    ["usr/share/icons/.*\.(png|svg|icon)",
 		     "svc:/application/desktop-cache/icon-cache:default",
-		     "SUNWdesktop-cache"],
+		     "service/gnome/desktop-cache"],
 		    ["usr/share/icons/.*/cursors/.*",
 		     "svc:/application/desktop-cache/icon-cache:default",
-		     "SUNWdesktop-cache"],
+		     "service/gnome/desktop-cache"],
 		    ["usr/lib/.*gtk-2.0/.*/immodules/.*\.so",
 		     "svc:/application/desktop-cache/input-method-cache:default",
-		     "SUNWdesktop-cache"],
+		     "service/gnome/desktop-cache"],
 		    ["usr/share/mime/packages/.*\.xml",
 		     "svc:/application/desktop-cache/mime-types-cache:default",
-		     "SUNWdesktop-cache"],
+		     "service/gnome/desktop-cache"],
 		    ["usr/lib/.*gtk-2.0/.*loaders/.*\.so",
 		     "svc:/application/desktop-cache/pixbuf-loaders-installer:default",
-		     "SUNWdesktop-cache"],
+		     "service/gnome/desktop-cache"],
 		    ["usr/share/applications/.*\.desktop",
 		     "svc:/application/desktop-cache/desktop-mime-cache:default",
-		     "SUNWdesktop-cache"],
+		     "service/gnome/desktop-cache"],
 		    ["usr/X11/lib/X11/fonts/.*\.(ttf|pcf|pcf\.gz)",
 		     "svc:/application/font/fc-cache:default",
-		     "SUNWfontconfig"],
+		     "system/library/fontconfig"],
 		    ["usr/share/fonts/.*\.(ttf|pcf|pcf\.gz)",
 		     "svc:/application/font/fc-cache:default",
-		     "SUNWfontconfig"],
+		     "system/library/fontconfig"],
 		    ["(var|lib)/svc/manifest/.*\.xml",
 		     "svc:/system/manifest-import:default"]
     );
@@ -2516,6 +2547,7 @@ sub autotag ($$$) {
 	    next if not defined ($dep);
 	    my $ips_dep = $pkgdb->get_ips_pkgname ($dep);
 	    if (defined ($ips_dep)) {
+		$ips_dep =~ s/@([^,]+),[^-]+-(\S+)/\@$1-$2/;
 		if(not grep { "$_" eq "depend fmri=$ips_dep type=require" } @$ref_lines) {	
 		    # add dependency if it's not already there
 		    push(@$ref_lines, "depend fmri=$ips_dep type=require");
@@ -2617,9 +2649,62 @@ sub create_ips_packages ($$) {
 	    next if not defined ($make_empty);
 	    next if ($make_empty ne "1" and $make_empty ne "true");
 	}
-	create_ips_package ($spec, $package, $src_fmri) 
-	    unless $package->is_subpkg ();
+	if (not $package->is_subpkg ()) {
+	    create_ips_package ($spec, $package, $src_fmri) or return 0;
+	}
     }
+
+    return 1;
+}
+
+# run mogrify rules, if any, on the newly created manifest
+sub mogrify_ips_manifest($$) {
+    my $package = shift;
+    my $manifest = shift;
+
+    my $tmpfile = `mktemp`;
+    chomp($tmpfile);
+
+    my $default_mogrify = $package->get_default_mogrify();
+    if (defined ($default_mogrify)) {
+	print "Executing default pkgmogrify rules: $default_mogrify\n";
+	my $specdir = $package->eval ("%_specdir");
+	system("pkgmogrify $specdir/$default_mogrify $manifest > $tmpfile");
+	if ($? != 0) {
+	    print "ERROR: default mogrify rules failed\n";
+	    unlink ($tmpfile);
+	    return 0;
+	} else {
+	    `mv $tmpfile $manifest`;
+	}
+    }
+
+    my $mogrify_rules_ref = $package->get_mogrify_rules();
+    if (defined ($mogrify_rules_ref)) {
+	my $fhandle;
+	my $rule_file;
+	($fhandle, $rule_file) = open_tempfile ($package);
+	foreach my $line (@$mogrify_rules_ref) {
+	    print $fhandle "$line\n";
+	}
+	close $fhandle;
+
+	print "Executing inline pkgmogrify rules for package $package\n";
+	system ("pkgmogrify $rule_file $manifest > $tmpfile");
+	if ($? != 0) {
+	    print "ERROR: mogrify rules for package $package failed\n";
+	    unlink ($tmpfile);
+	    return 0;
+	} else {
+	    `mv $tmpfile $manifest`;
+	}
+
+	unlink ($rule_file);
+    }
+
+    unlink ($tmpfile);
+
+    return 1;
 }
 
 sub create_ips_package ($$$) {
@@ -2660,6 +2745,9 @@ sub create_ips_package ($$$) {
     prepare_ips_script($spec, $script, \@pkg_lines);
     debug_print "Prepare manifest - $manifest";
     prepare_ips_manifest($spec, $manifest, \@manifest_lines);
+    mogrify_ips_manifest($package, $manifest) or return 0;
+
+    return 1;
 }
 
 sub create_ips_src_package ($) {
@@ -3234,7 +3322,10 @@ sub main () {
 	    
 	    if ($pkgformat eq "ips") {
 		# Create IPS package(s)
-		create_ips_packages ($spec, $src_fmri);
+		if (not create_ips_packages ($spec, $src_fmri)) {
+		    print "ERROR: failed to generate IPS package(s)\n";
+		    exit (1);
+		}
 		# Call the script to publish it
 		if (not publish_ips_packages ($spec)) {
 		    print "ERROR: failed to publish package to $ips_server\n";

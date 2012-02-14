@@ -62,7 +62,7 @@ my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 # i.e. pre|preun wrong,  preun|pre good.
 my $all_script_names = "preun|postun|pre|post|verifyscript|triggerin|triggerun|triggerpostun|check";
 my $all_block_names = "prep|build|install|clean|check|changelog|$all_script_names";
-my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use|actions";
+my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use|actions|mogrify";
 
 sub get_version () {
     my $version = "@PKGBUILD_VERSION@";
@@ -207,7 +207,10 @@ sub new ($;$$) {
         # if this is a %use'd rpm_spec inherit the macros from the parent
 	my $parent_def_ref = $parent_spec->{_defines};
 	$self->{_defines} = {%$parent_def_ref};
+	# do not inherit these macros from the main spec:
 	delete ($self->{_defines}->{_build_src_dir_name});
+	delete ($self->{_defines}->{__spec_install_post});
+	delete ($self->{_defines}->{__pkgbuild_default_mogrify_rules});
     } else {
 	# fill with values read from the macros file in _read_macros()
 	$self->{_defines} = {%default_macros};
@@ -228,6 +231,7 @@ sub new ($;$$) {
     
     bless ($self, $class);
     my $main_package = rpm_package->new (\$self);
+    
     my @packages = ($main_package);
     $self->{_packages} = \@packages;
 
@@ -2842,6 +2846,103 @@ sub _process_actions ($$$;$) {
     return 1;
 }
 
+# process that contents of a %mogrify section
+sub _process_mogrify ($$$;$) {
+    my $self = shift;
+    my $fhandle = shift;
+    my $line = shift;
+    my $package_name = shift;
+
+    my $package_ref;
+    my $default_mogrify_rules = 1;
+
+    if (defined $line) {
+	my %macro_opts = $self->_process_macro_opts ('Dn:', $line, "mogrify");
+	if (defined ($self->{error})) {
+	    return 0;
+	}
+	if (($macro_opts{'argc'} > 1) or
+	    (defined ($macro_opts{'n'}) and ($macro_opts{'argc'} > 0))) {
+	    $self->_set_error ("Too many names: $line", $fhandle);
+	    return 0;
+	}
+	$package_ref = $self->{_packages}[0];
+	if (not defined($package_name)) {
+	    if (defined ($macro_opts{'n'})) {
+		$package_name = $self->eval ($macro_opts{'n'});
+	    } elsif (defined ($macro_opts{'argv0'})) {
+		$package_name = $package_ref->get_name() . "-" . 
+		    $self->eval ($macro_opts{'argv0'});
+	    } else {
+		$package_name = $package_ref->get_name();
+	    }
+	}
+	$package_ref = undef;
+	$package_ref = $self->find_package_by_name ($package_name);
+	if (defined ($macro_opts{"D"})) {
+	    $default_mogrify_rules = 0;
+	}
+    } else {
+	if (not defined ($package_name)) {
+	    $self->_set_error ("assertion failed: _process_mogrify: \$line or \$package_name must be defined");
+	    return 0;
+	}
+	$package_ref = $self->find_package_by_name ($package_name);
+    }
+
+    if (not defined ($package_ref)) {
+	$self->_set_error ("Undefined package $package_name", $fhandle);
+	return 0;
+    }
+
+    if ($default_mogrify_rules) {
+	my $pkgbuild_d_m_r = $self->eval('%{?__pkgbuild_default_mogrify_rules}');
+	if ($pkgbuild_d_m_r ne '') {
+	    $package_ref->set_default_mogrify ($pkgbuild_d_m_r);
+	}
+    } else {
+	$package_ref->unset_default_mogrify ()
+    }
+
+    $line = $self->_get_next_line ($fhandle);
+    if (not defined($line)) {
+	if (defined $self->{error}) {
+	    return 0;
+	}
+	return 1;
+    }
+    my $eline = $self->_preprocess_line ($line);
+
+    while (1) {
+	if ($eline =~ /^$/) {
+	    # ignore empty lines
+	} elsif ($eline =~ /^#/) {
+	    # comment, skip to next line
+	} elsif ($eline =~ /^\s*%define/) {
+	    if (not $self->_process_define ($fhandle, $self->_pre_eval ($line))) {
+		return (0);
+	    }
+	} elsif ($eline =~ /^\s*([^%].*)$/) {
+	    $package_ref->add_mogrify_rule($1);
+	} else {
+	    $self->_unget_line($fhandle, $line);
+	    last;
+	}
+	
+	$line = $self->_get_next_line ($fhandle);
+	if (not defined($line)) {
+	    last;
+	}
+	$eline = $self->_preprocess_line ($line);
+    }
+
+    if (defined $self->{error}) {
+	return 0;
+    }
+
+    return 1;
+}
+
 sub _process_top_level ($$$) {
     my $self = shift;
     my $fhandle = shift;
@@ -2872,6 +2973,8 @@ sub _process_top_level ($$$) {
 	    $self->_process_files ($fhandle, $line) or return 0;
 	} elsif ($eline =~ /^%actions/) {
 	    $self->_process_actions($fhandle, $line) or return 0;
+	} elsif ($eline =~ /^%mogrify/) {
+	    $self->_process_mogrify($fhandle, $line) or return 0;
 	} elsif ($eline =~ /^\s*%define/) {
 	    $self->_process_define ($fhandle, $self->_pre_eval ($line))
 		or return 0;
@@ -3443,6 +3546,26 @@ sub get_included_files ($) {
 	my @more_includes = $$used_spec->get_included_files ();
 	if (@more_includes) {
 	    push (@includes, @more_includes);
+	}
+    }
+
+    my $install_post = $self->eval('%{?__spec_install_post}');
+    if ($install_post ne '') {
+	if (not $install_post =~ /^\//) {
+	    # relative path
+	    push(@includes, $install_post);
+	}
+    }
+
+    my @all_packages = $self->get_packages();
+    foreach my $pkg (@all_packages) {
+	next if not defined ($pkg);
+	my $default_mogrify = $pkg->get_default_mogrify();
+	if (defined ($default_mogrify)) {
+	    if (not $default_mogrify =~ /^\//) {
+		# relative path
+		push(@includes, $default_mogrify);
+	    }
 	}
     }
     return _uniq (@includes);

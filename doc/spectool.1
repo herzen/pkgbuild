@@ -87,10 +87,11 @@ Print the files sections of each given spec file
 get\_meta
 Print the Meta tags defined in each spec file
 .TP
-get\_package\_names
+get\_package\_names \fI[-a]\fR
 Print the package names defined in each given
 spec file.  Use \fI\-\-ips\fR or \fI\-\-svr4\fR to select the package
-format, otherwise package names of the native format are printed
+format, otherwise package names of the native format are printed.
+Use \fI\-a\fR to include obsolete/renamed IPS packages.
 .TP
 match\_package\_names
 Display how \fI%package\fR labels map to SVr4 package
@@ -109,6 +110,10 @@ get\_requires \fIpackage name\fR
 Prints the runtime dependencies (\fIRequires\fR
 tags) belonging to package label \fIpackage name\fR and defined
 in each given spec file.  Example:
+.TP
+get\_all\_requires
+Prints all runtime dependencies (Requires tags) belonging to
+all packages defined in the given spec file.
 .sp
 spectool get\_requires SUNWgtk2\-devel SUNWgtk2.spec
 .TP

@@ -497,12 +497,16 @@ sub file2pkgs($$;$) {
 	chomp($branch);
 	$branch =~ s/^[^0-9]*([0-9]+).*/$1/;
 	my $highest_branch;
+	my $ptype_h_b;
 	my $pname_h_b;
 	foreach my $ips_line (@ips_lines) {
 	    my $pname;
+	    my $ptype;
 	    if ($ips_line =~ /^(path|legacy_pkg|pkg.fmri)\s.*pkg:\/(.+)/) {
+		$ptype = $1;
 		$pname = $2;
 	    } elsif ($ips_line =~ /^(incorporate|require)\s+depend\s+([^\s]+)/) {
+		$ptype = $1;
 		$pname = $2;
 	    } else {
 		next;
@@ -515,9 +519,25 @@ sub file2pkgs($$;$) {
 			if ($highest_branch < $1) {
 			    $pname_h_b = $pname;
 			    $highest_branch = $1;
+			    $ptype_h_b = $ptype;
+			} elsif ($highest_branch == $1) {
+			    if ($ptype_h_b =~ /(incorporate|require)/) {
+				# prefer any action to incorporate or require
+				$pname_h_b = $pname;
+				$highest_branch = $1;
+				$ptype_h_b = $ptype;
+			    } elsif ($ptype_h_b eq "legacy_pkg" and
+				     not $ptype =~ /(incorporate|require)/) {
+				# prefer legacy to incorporate or require
+				# but not other types of references
+				$pname_h_b = $pname;
+				$highest_branch = $1;
+				$ptype_h_b = $ptype;
+			    }
 			}
 		    } else {
 			$pname_h_b = $pname;
+			$ptype_h_b = $ptype;
 			$highest_branch = $1;
 		    }
 		}

@@ -75,7 +75,7 @@ function cleanup {
 function ctrl_c {
         print "Ctrl^c pressed. Exitting..."
         cleanup
-        exit 0
+        exit 1
 }
 
 # NAME
@@ -88,7 +88,7 @@ function ctrl_c {
 # 	Main function, which calculates the dependencies.
 #
 #
-# 	Return 0 on success, 1 otherwise.
+# 	Return 0 on success, 1 on error, 2 on warnings.
 #
 function main {
         # filter out any directories and non-existent files
@@ -105,10 +105,39 @@ function main {
         /usr/bin/awk '{print "file " $1 " path=" $1 " " $2}' "$filelist_tmp0" > "$filelist_tmp" || return 1
 	ARCH=$(uname -p)
 	echo "set name=variant.arch value=${ARCH}" >> $filelist_tmp || return 1
-        echo "pkgdepend generate $search_path -m \"$filelist_tmp\" > \"$generate_tmp\"" | sh|| return 1
-        pkgdepend -R / resolve -m "$generate_tmp" || return 1
-        cat "${generate_tmp}.res" | grep '^depend' | \
-	    sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | sed -e 's/^pkg:\///' || return 1
+        echo "pkgdepend generate $search_path -m \"$filelist_tmp\" > \"$generate_tmp\"" | sh
+	retval=$?
+	if [ $retval != 0 ]; then
+	    # pkgdepend generate failed, keep trying but return a warning
+	    retval=2
+	fi
+        pkgdepend -R / resolve -m "$generate_tmp"
+	retval2=$?
+	echo "pkgdepend resolve returned $retval" 1>&2
+	if [ $retval2 != 0 ]; then
+	    # pkgdepend failed to resolve some deps
+	    retval=2
+	fi
+	deps="$(cat "${generate_tmp}.res" | grep '^depend' | \
+	    sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | \
+            sed -e 's/^pkg:\///' | \
+            grep -v '^'$(basename ${generate_tmp})'$')"
+	if [ $? != 0 ]; then
+	    return 1
+	fi
+
+	if [ "x$deps" != x ]; then
+	    # some dependencies were found
+	    echo "$deps"
+	    return $retval
+	else
+	    if [ $retval = 2 ]; then
+		# pkgdepend resolve failed and no deps were found
+		return 1
+	    fi
+	fi
+
+	return $retval
 }
 
 while getopts f:R:h o; do
@@ -165,12 +194,17 @@ fi
 
 # MAIN FUNCTION CALL
 main
+retval=$?
 
-if (( $? == 0 )); then
+if (( $retval == 0 )); then
         cleanup
         exit 0
+elif (( $retval == 2 )); then
+        print "\n\nDependency discovery completed with warnings\n" 1>&2
+	cleanup
+	exit 2
 else
-        print "\n\nFailed to calculate dependencies!\n" 1>&2
+        print "\n\nFailed to discover dependencies ($?)!\n" 1>&2
         cleanup
         exit 1
 fi
