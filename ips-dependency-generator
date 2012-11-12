@@ -20,7 +20,7 @@
 #
 # CDDL HEADER END
 #
-# Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2010, 2012 Oracle and/or its affiliates. All rights reserved.
 #
 
 #
@@ -97,12 +97,12 @@ function main {
 	    test ! -f "$proto_path$line" && continue
 	    if [[ -x "$proto_path$line" ]]; then
                 # dummy mode to enable pkgdepend's check for scripts
-		echo "$line mode=0755" >> "$filelist_tmp0"
+		echo "$line mode=0755 owner=root group=bin" >> "$filelist_tmp0"
             else
-		echo "$line" >> "$filelist_tmp0"
+		echo "$line mode=0644 owner=root group=bin" >> "$filelist_tmp0"
             fi
 	done < "$pkg_filelist"
-        /usr/bin/awk '{print "file " $1 " path=" $1 " " $2}' "$filelist_tmp0" > "$filelist_tmp" || return 1
+        /usr/bin/awk '{print "file " $1 " path=" $1 " " $2 " " $3 " " $4 " "}' "$filelist_tmp0" > "$filelist_tmp" || return 1
 	ARCH=$(uname -p)
 	echo "set name=variant.arch value=${ARCH}" >> $filelist_tmp || return 1
         echo "pkgdepend generate $search_path -m \"$filelist_tmp\" > \"$generate_tmp\"" | sh
@@ -118,12 +118,17 @@ function main {
 	    # pkgdepend failed to resolve some deps
 	    retval=2
 	fi
-	deps="$(cat "${generate_tmp}.res" | grep '^depend' | \
-	    sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | \
-            sed -e 's/^pkg:\///' | \
-            grep -v '^'$(basename ${generate_tmp})'$')"
+	cat "${generate_tmp}.res" | grep '^depend' > /dev/null
 	if [ $? != 0 ]; then
-	    return 1
+	    # no dependencies discovered in any of the files in the package
+	else
+	    deps="$(cat "${generate_tmp}.res" | grep '^depend' | \
+	        sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | \
+                sed -e 's/^pkg:\///' | \
+                grep -v '^'$(basename ${generate_tmp})'$')"
+	    if [ $? != 0 ]; then
+	        return 1
+	    fi
 	fi
 
 	if [ "x$deps" != x ]; then

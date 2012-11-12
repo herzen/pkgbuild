@@ -2024,6 +2024,7 @@ sub make_ips_dependency ($$$) {
 
     if ($package->eval ('%_use_internal_dependency_generator') eq "1") {
 	print "Looking for dependencies using the internal dependency generator\n";
+	print "for package $package\n";
 	my $filelist_ref = $package->get_filelist ();
 	if (@$filelist_ref) {
 	    my $tmpfile = `/usr/bin/mktemp /tmp/pkgbuild-filelist-XXXX` or
@@ -2042,6 +2043,7 @@ sub make_ips_dependency ($$$) {
 		    print "WARNING: dependency generator partially failed\n";
 		} else {
 		    print "No dependencies discovered\n";
+		    return 0;
 		}
 	    }
 	    `rm -f $tmpfile`;
@@ -2186,7 +2188,8 @@ sub make_ips_dependency ($$$) {
     foreach my $ips_dep (keys %autodep_hash) {
 	push @dep_lines, "depend fmri=$autodep_hash{$ips_dep} type=require";
     }
-    push @$ref_lines, _uniq (@dep_lines)
+    push @$ref_lines, _uniq (@dep_lines);
+    return 1;
 }
 
 # Add open transaction line - with pkgsend command
@@ -2254,6 +2257,18 @@ sub add_ips_license($$) {
     push (@$ref_lines, "license $license_file license=\"$license\"");
 }
 
+sub _concat($) {
+    my $text = shift;
+
+    return undef if not defined ($text);
+
+    $text =~ s/\n/ /g;
+    $text =~ s/ +/ /g;
+    $text =~ s/^ //;
+    $text =~ s/ $//;
+    return $text;
+}
+
 # Add summary line
 # src_fmri == "-src" means this is the source package
 sub add_ips_summary($$;$) {
@@ -2287,9 +2302,14 @@ sub add_ips_summary($$;$) {
     }
 
     if (not defined ($bighash{'pkg.description'})) {
-	my $desc = $package->eval ("%DESC");
-	if ($desc ne "%DESC") {
-	    $bighash{'pkg.description'} = "\"$desc\"";
+	my $desc = $package->get_block('description');
+	if (defined($desc)) {
+	    $bighash{'pkg.description'} = "\"" . _concat($desc) . "\"";
+	} else {
+	    $desc = $package->eval ("%DESC");
+	    if ($desc ne "%DESC") {
+		$bighash{'pkg.description'} = "\"$desc\"";
+	    }
 	}
     }
     if (not defined ($bighash{'pkg.summary'})) {
@@ -2723,7 +2743,7 @@ sub create_ips_package ($$$) {
     # must call make_ips_dependency after make_ips_files so that we can
     # run the dependency generator against the file list
     debug_print "Calling make_ips_dependency";
-    make_ips_dependency(\@manifest_lines, $spec, $package);
+    make_ips_dependency(\@manifest_lines, $spec, $package) or return 0;
     debug_print "Calling make_ips_actions";
     make_ips_actions(\@manifest_lines, $package);
     debug_print "Calling add_ips_summary";

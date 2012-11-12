@@ -1,3 +1,12 @@
+2012-11-12  Laszlo Peter  <laca@sun.com>
+
+	* doc/spectool.1: move example to the right place
+	* ips-dependency-generator: update for s11u1 version of pkgdepend
+	  and correctly identify failed dependency detection.
+	* pkgbuild.pl.in: differentiate between failed dependency
+	  detection and no identified dependencies; use correct desciption
+	  for subpackages
+
 2012-02-15  Laszlo Peter  <laszlo.peter@oracle.com>
 
 	* configure.in: bump version

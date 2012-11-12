@@ -1,5 +1,5 @@
 '\" t
-.TH PKGTOOL 1 "Jun 2, 2010"
+.TH PKGTOOL 1 "Feb 15, 2012"
 .SH NAME
 
 spectool \- A tool for extracting information from \fBpkgbuild\fR(1) spec files
@@ -110,12 +110,12 @@ get\_requires \fIpackage name\fR
 Prints the runtime dependencies (\fIRequires\fR
 tags) belonging to package label \fIpackage name\fR and defined
 in each given spec file.  Example:
+.sp
+spectool get\_requires SUNWgtk2\-devel SUNWgtk2.spec
 .TP
 get\_all\_requires
 Prints all runtime dependencies (Requires tags) belonging to
 all packages defined in the given spec file.
-.sp
-spectool get\_requires SUNWgtk2\-devel SUNWgtk2.spec
 .TP
 get\_prereq \fIpackage\_name\fR
 Same as \fIget\_requires\fR but for \fIPreReq\fR tags.
@@ -230,6 +230,6 @@ Spec file description in /usr/share/doc/pkgbuild/spec-files.txt
 
 .SH NOTES
 
-Written by Laszlo (Laca) Peter, Oracle Corporation, 2010
+Written by Laszlo (Laca) Peter, Oracle Corporation, 2012
 
 .\" end of man page
