@@ -1408,6 +1408,20 @@ sub list_all_files ($) {
     return @file_list;
 }
 
+# return an UTC time string from the given unix time
+sub utctime($) {
+    my $time = shift;
+
+    my @utc = gmtime($time);
+    my $year = $utc[5] + 1900;
+    my $month = substr("0" . ($utc[4] + 1), -2);
+    my $day = substr("0" . $utc[3], -2);
+    my $hour = substr("0" . $utc[2], -2);
+    my $min = substr("0" . $utc[1], -2);
+    my $sec = substr("0" . $utc[0], -2);
+    return $year . $month . $day . "T" . $hour . $min . $sec . "Z";
+}
+
 # Start filling up the manifest
 # If the type is not supported write warning and return undef
 sub get_ips_proto_line ($$$$$$$$$$$$) {
@@ -1495,14 +1509,14 @@ sub get_ips_proto_line ($$$$$$$$$$$$) {
 		}
 	    }
 	    if (defined ($svc_values)) {
-		# add an opensolaris.smf.fmri attribute with all
+		# add an org.opensolaris.smf.fmri attribute with all
 		# smf services defined in the package
-		my $smf_fmri = $package->get_meta("opensolaris.smf.fmri");
+		my $smf_fmri = $package->get_meta("org.opensolaris.smf.fmri");
 		if (defined ($smf_fmri)) {
-		    $package->set_meta("opensolaris.smf.fmri",
+		    $package->set_meta("org.opensolaris.smf.fmri",
 				       $smf_fmri . "," . $svc_values);
 		} else {
-		    $package->set_meta("opensolaris.smf.fmri", $svc_values);
+		    $package->set_meta("org.opensolaris.smf.fmri", $svc_values);
 		}
 	    }
 	}
@@ -1512,6 +1526,14 @@ sub get_ips_proto_line ($$$$$$$$$$$$) {
 	    my $preserve_option = $file->get_preserve;
 	    $preserve_option = "true" unless defined ($preserve_option);
 	    $line .= " preserve=\"$preserve_option\"";
+	}
+	my $timestamp = $file->get_timestamp();
+	if (defined ($timestamp)) {
+	    if ($timestamp == 1) {
+		# use system timestamp
+		$timestamp = utctime((stat($fname))[9]);
+	    }
+	    $line .= " timestamp=$timestamp"
 	}
     } elsif ( $type eq 'd' ) {
 	my $file1 = $fname;
@@ -1523,6 +1545,16 @@ sub get_ips_proto_line ($$$$$$$$$$$$) {
 	$file1 =~ s/^$basedir/$new_basedir/;
 	$file1 =~ s/^\/*//;
 	$line = "dir mode=$mode owner=$user group=$group path=\"$file1\"";	
+	if (defined ($file)) {
+	    my $timestamp = $file->get_timestamp();
+	    if (defined ($timestamp)) {
+		if ($timestamp == 1) {
+		    # use system timestamp
+		    $timestamp = utctime((stat($fname))[9]);
+		}
+		$line .= " timestamp=$timestamp"
+	    }
+	}
     } elsif ( $type eq 's' ) {
 	# read the link target of the file in the proto area
 	my $target = readlink ($fname);
@@ -2224,8 +2256,7 @@ sub open_ips_transaction($$;$) {
     } else {
 	push (@$ref_lines, "export PKG_REPO=\${PKGBUILD_IPS_SERVER:-$ips_server}");
     }
-    push (@$ref_lines, "eval `pkgsend open $name\@$version` || exit 1");
-    push (@$ref_lines, "pkgsend include $manifest || exit 2");
+    push (@$ref_lines, "pkgsend publish -s \"\$PKG_REPO\" $manifest || exit 1");
 } 
 
 # Add lincense action
@@ -2514,10 +2545,7 @@ sub add_ips_legacy($$$;$) {
 
 # Add close transaction
 sub close_ips_transaction($) {
-    my $ref_lines = shift;
-    my @lines = @$ref_lines;
-    
-    push (@$ref_lines , "pkgsend close || exit 3");
+    return;
 }
 
 my @autotag_data = (["etc/gconf/schemas/.*\.(schemas|entries)",
@@ -2735,11 +2763,17 @@ sub create_ips_package ($$$) {
     debug_print "Publishing ips package";
 
     my @pkg_lines;
-    my @manifest_lines;
+    my $name = $package->get_ips_name();
+    my $ips_vendor_version = $package->get_value_of ("ips_vendor_version");
+    my $ips_component_version = $package->get_value_of ("ips_component_version");
+    my $ips_build_version = $package->get_value_of ("ips_build_version");
+    my $version = $package->eval("${ips_component_version},${ips_build_version}-${ips_vendor_version}");
+    my @manifest_lines = ("set name=pkg.fmri value=$name\@$version");
     debug_print "Opening ips_transaction";
     open_ips_transaction(\@pkg_lines, $package);
     debug_print "Calling make_ips_files";
     make_ips_files(\@manifest_lines, $spec, $package);
+    print "DEBUG: 1st manifest line: $manifest_lines[0]\n";
     # must call make_ips_dependency after make_ips_files so that we can
     # run the dependency generator against the file list
     debug_print "Calling make_ips_dependency";

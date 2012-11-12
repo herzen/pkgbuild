@@ -164,6 +164,19 @@ sub get_preserve ($) {
     return $self->{_preserve};
 }
 
+sub set_timestamp($$) {
+    my $self = shift;
+    my $timestamp = shift;
+
+    $self->{_timestamp} = $timestamp;
+}   
+
+sub get_timestamp($) {
+    my $self = shift;
+
+    return $self->{_timestamp};
+}
+
 sub set_compression ($$) {
     my $self = shift;
     my $compression = shift;

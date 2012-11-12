@@ -57,7 +57,7 @@ sub new ($$;&) {
     $self->{_tags}->{ips_build_version} = $ips_os_rel;
     my $os_build;
     if (-x "/usr/bin/pkg") {
-	$os_build = `pkg info release/name | grep Branch`;
+	$os_build = `pkg info -l release/name | grep Branch`;
 	chomp($os_build);
 	$os_build =~ s/^.*: *([0-9.]+)/$1/;
     } else {

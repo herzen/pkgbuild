@@ -1735,6 +1735,8 @@ sub _get_unpack_commands ($$) {
 	$uncompress = "/usr/bin/bzip2 -dc";
     } elsif ($srcname =~ /(\.tar\.gz|\.tgz)$/) {
 	$uncompress = "/usr/bin/gzip -dc";
+    } elsif ($srcname =~ /(\.xz)$/) {
+        $uncompress = "/usr/bin/xz -dc"; 
     } elsif ($srcname =~ /(\.tar\.Z)$/) {
        $uncompress = "/usr/bin/uncompress -c";
     } elsif ($srcname =~ /(\.tar)$/) {
@@ -2564,6 +2566,7 @@ sub _process_files ($$$;$) {
     my $class_name = "none";
     my $exclude = 0;
     my $preserve;
+    my $timestamp = 0;
 
     $line = $self->_get_next_line ($fhandle);
     if (not defined($line)) {
@@ -2666,6 +2669,14 @@ sub _process_files ($$$;$) {
 	    $eline =~ s/^\s*%config\s*\([^)]*\)\s*// or
 		$eline =~ s/^\s*%config\s*//;
 	    next;	    
+	} elsif ($eline =~ /^\s*%timestamp/) {
+	    $timestamp = 1;
+	    if ($eline =~ /^\s*timestamp\s*\(([^)]*)\)\s*/) {
+		$timestamp = $1;
+	    }
+	    $eline =~ s/^\s*%timestamp\s*\([^)]*\)\s*// or
+		$eline =~ s/^\s*%timestamp\s*//;
+	    next;	    
 	} elsif ($eline =~ /^\s*%exclude\s+/) {
 	    $exclude = 1;
 	    $eline =~ s/^\s*%exclude\s+//;
@@ -2721,6 +2732,9 @@ sub _process_files ($$$;$) {
 	    if (defined ($preserve)) {
 		$file->set_preserve($preserve);
 	    }
+	    if ($timestamp) {
+		$file->set_timestamp($timestamp);
+	    }
 	    $package_ref->add_file ($file);
 	} elsif ($eline =~ /^\s*([A-Za-z0-9]\S*)/) {
 	    $self->_set_error ("File must begin with \"/\": $1", $fhandle);
@@ -2741,6 +2755,7 @@ sub _process_files ($$$;$) {
         $class_name = "none";
 	$exclude = 0;
 	$preserve = undef;
+	$timestamp = 0;
 
 	$line = $self->_get_next_line ($fhandle);
 	if (not defined($line)) {

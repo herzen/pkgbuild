@@ -1,3 +1,15 @@
+2012-11-13  Laszlo Peter  <laca@sun.com>
+
+	* pkgbuild.pl.in: implement %timestamp; use pkgsend publish instead
+	  of pkgsend open/include/close; implement xz tarball decompression;
+	  use mktemp for temporary log file to avoid potential race condition
+	* rpm_file.pm: implement set_timestamp / get_timestamp
+	* rpm_package.pm: check info of release/name locally only
+	* rpm_spec.pm.in: implement xz tarball decompression; parse
+	  %timestamp
+	* NEWS: update
+	* doc/spec-files.txt: update for %timestamp
+
 2012-11-12  Laszlo Peter  <laca@sun.com>
 
 	* doc/spectool.1: move example to the right place

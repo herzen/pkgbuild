@@ -2156,7 +2156,7 @@ sub find_source ($$) {
     my $src_path;
 
     my @the_tarball_dirlist = split /[:]/, $defaults->get ('tarballdirs');
-    if ($src =~ /\.(tar\.gz|tgz|tar\.bz2|tar\.bzip2|zip|jar)$/) {
+    if ($src =~ /\.(tar\.gz|tgz|tar\.bz2|tar\.bzip2|zip|xz|jar)$/) {
 	$is_tarball = 1;
 
 	foreach my $srcdir (@the_tarball_dirlist) {
@@ -2820,7 +2820,14 @@ sub run_build ($;$) {
     my $save_log_name = $current_log;
     msg_log ("INFO: Build command: \"$command\"");
     msg_log ("INFO: Starting $build_engine_name build engine at " . `date`);
-    my $tempfile = "/tmp/$build_engine_name.out.$$";
+    my $tempfile = `mktemp "/tmp/$build_engine_name.out.XXXXXX"`;
+    chomp($tempfile);
+    if ($? != 0) {
+	msg_error ("failed to create temporary log file for $spec");
+	$build_status[$spec_id] = "FAILED";
+	$status_details[$spec_id] = "$build_engine_name failed to create log file";
+	return 0;
+    }
     msg_log ("INFO: Build engine output is written to $tempfile");
     msg_log ("INFO: and will be appended to this log when completed.");
     log_cmdout_starts ();
@@ -2832,7 +2839,7 @@ sub run_build ($;$) {
 	system ($command);
 	$build_result = $?;
     } else {
-	`$command > $tempfile 2>&1`;
+	`$command >> $tempfile 2>&1`;
 	$build_result = $?; 
     }
     system ("sed -e 's/^/$build_engine_name: /' $tempfile >> $the_log_dir/$log_name 2>&1; rm -f $tempfile");

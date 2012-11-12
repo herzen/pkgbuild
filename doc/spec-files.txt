@@ -1048,6 +1048,13 @@ The description of pkgbuild's spec files
   %hard - when applied to a symlink, it becomes a hard link in the
          prototype / manifest.
 
+  %timestamp(time) - set the timestamp attribute of the file or
+         directory to the given time (UTC), example:
+	 %timestamp(20121009T073849Z)
+  %timestamp - set the timestamp attribute of the file or directory
+         to the last modification date/time of the file/directory
+         in $RPM_BUILD_ROOT
+
   %doc - flags documentation files, see Section 9.1.2
   
   %verify - ignored
