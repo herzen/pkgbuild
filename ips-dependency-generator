@@ -121,6 +121,7 @@ function main {
 	cat "${generate_tmp}.res" | grep '^depend' > /dev/null
 	if [ $? != 0 ]; then
 	    # no dependencies discovered in any of the files in the package
+	    true
 	else
 	    deps="$(cat "${generate_tmp}.res" | grep '^depend' | \
 	        sed -e 's/^depend fmri=\([^ ]*\) type=.*/\1/' | \

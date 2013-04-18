@@ -23,6 +23,11 @@ Version 1.3.105:
 	- ips-dependency-generator fixed to work on Solaris 11 update 1
 	- ips-dependency-generator and pkgbuild fixed to differentiate
 	  between failed dependency detection and no dependencies.
+        - fix configure script to work for newer versions of GNU sed
+          (patch from Jan Lana)
+        - fix publishing IPS source packages
+        - fix defining the default branch version based on the running
+          Solaris build
 
 Version 1.3.104:
 

@@ -1,3 +1,13 @@
+2013-04-18  Laszlo Peter  <laszlo.peter@oracle.com>
+
+	* NEWS: update
+	* configure.in: fix detecting newer versions of GNU sed (patch from
+	  Jan Lana @ oracle)
+	* ips-dependency-generator: add noop in if branch to fix syntax error
+	* pkgbuild.pl.in: fix publishing IPS source packages
+	* rpm_package.pm.in: fix default branch version generated from
+	  version or release/name on running system to avoid extra "0."
+
 2012-11-13  Laszlo Peter  <laca@sun.com>
 
 	* pkgbuild.pl.in: implement %timestamp; use pkgsend publish instead

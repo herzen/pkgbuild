@@ -2773,7 +2773,6 @@ sub create_ips_package ($$$) {
     open_ips_transaction(\@pkg_lines, $package);
     debug_print "Calling make_ips_files";
     make_ips_files(\@manifest_lines, $spec, $package);
-    print "DEBUG: 1st manifest line: $manifest_lines[0]\n";
     # must call make_ips_dependency after make_ips_files so that we can
     # run the dependency generator against the file list
     debug_print "Calling make_ips_dependency";
@@ -2815,6 +2814,13 @@ sub create_ips_src_package ($) {
 
     my @pkg_lines;
     my @manifest_lines;
+    my $ips_name = $package->get_ips_name();
+    my $src_pkgname = $spec->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:$ips_name/src}");
+    my $ips_vendor_version = $package->get_value_of ("ips_vendor_version");
+    my $ips_component_version = $package->get_value_of ("ips_component_version");
+    my $ips_build_version = $package->get_value_of ("ips_build_version");
+    my $version = $package->eval("${ips_component_version},${ips_build_version}-${ips_vendor_version}");
+    my @manifest_lines = ("set name=pkg.fmri value=$src_pkgname\@$version");
     debug_print "Calling ips_transaction";
     open_ips_transaction(\@pkg_lines, $package, 1);
     debug_print "Calling make_ips_files";

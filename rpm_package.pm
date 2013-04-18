@@ -64,8 +64,9 @@ sub new ($$;&) {
 	$os_build = `uname -v`;
 	chomp ($os_build);
 	$os_build =~ s/^\S+_([0-9]+).*/$1/;
+	$os_build = "0.$os_build";
     }
-    $self->{_tags}->{ips_vendor_version} = "0.$os_build";
+    $self->{_tags}->{ips_vendor_version} = "$os_build";
     my $target = $$parent_spec_ref->{_defines}->{"_target_cpu"};
     if (defined $target) {
 	$self->{_tags}->{buildarchitectures} = $target;

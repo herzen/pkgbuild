@@ -36,7 +36,7 @@ AC_MSG_CHECKING([if $GNU_SED is GNU sed])
 SED_IS_GNU=no
 $GNU_SED --version 2>/dev/null | grep 'Free Software Foundation' > /dev/null \
        && SED_IS_GNU=yes
-$GNU_SED --version 2>/dev/null | head -1 | grep '^GNU sed ' > /dev/null \
+$GNU_SED --version 2>/dev/null | head -1 | grep 'GNU sed ' > /dev/null \
        || SED_IS_GNU=no
 AC_MSG_RESULT([$SED_IS_GNU])
 if test $SED_IS_GNU = no; then
