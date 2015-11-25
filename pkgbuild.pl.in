@@ -1016,7 +1016,8 @@ sub make_depend ($$) {
 	if (defined ($pkg) and defined($pkgname)) {
 	    print $fhandle "P $pkg $pkgname\n"; 
 	} else {
-	    print "WARNING: omitting $dep from the SVr4 depend file\n";
+	    print "WARNING: unknown dependency $dep\n";
+	    print $fhandle "P $dep\n"; 
 	}
     }
 
