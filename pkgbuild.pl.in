@@ -2813,7 +2813,6 @@ sub create_ips_src_package ($) {
     debug_print "Publishing ips source package";
 
     my @pkg_lines;
-    my @manifest_lines;
     my $ips_name = $package->get_ips_name();
     my $src_pkgname = $spec->eval ("%{?ips_sourcepackage}%{!?ips_sourcepackage:$ips_name/src}");
     my $ips_vendor_version = $package->get_value_of ("ips_vendor_version");
