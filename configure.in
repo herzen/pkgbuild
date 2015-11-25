@@ -23,7 +23,7 @@ AC_MSG_CHECKING([if $PATCH is GNU patch])
 PATCH_IS_GNU=no
 $PATCH --version 2>/dev/null | grep 'Free Software Foundation' > /dev/null \
        && PATCH_IS_GNU=yes
-$PATCH --version 2>/dev/null | head -1 | grep '^patch ' > /dev/null \
+$PATCH --version 2>/dev/null | head -1 | grep -E '^(patch|GNU patch) ' > /dev/null \
        || PATCH_IS_GNU=no
 AC_MSG_RESULT([$PATCH_IS_GNU])
 if test $PATCH_IS_GNU = no; then
@@ -36,7 +36,7 @@ AC_MSG_CHECKING([if $GNU_SED is GNU sed])
 SED_IS_GNU=no
 $GNU_SED --version 2>/dev/null | grep 'Free Software Foundation' > /dev/null \
        && SED_IS_GNU=yes
-$GNU_SED --version 2>/dev/null | head -1 | grep 'GNU sed ' > /dev/null \
+$GNU_SED --version 2>/dev/null | head -1 | grep 'GNU sed' > /dev/null \
        || SED_IS_GNU=no
 AC_MSG_RESULT([$SED_IS_GNU])
 if test $SED_IS_GNU = no; then
