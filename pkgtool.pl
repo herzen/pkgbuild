@@ -1971,7 +1971,17 @@ sub get_dependencies ($$@) {
 	@this_pkg_requires = $pkg->get_array ('buildrequires');
 	next if not @this_pkg_requires or not defined $this_pkg_requires[0];
 	msg_debug (3, "adding \"@this_pkg_requires\" to the dependencies of $spec");
-	push (@dependencies, @this_pkg_requires);
+	# OpenIndiana names SFEgcc sanely
+	my @real_deps = map {
+	    if ($_ eq "SFEgcc") {
+		"runtime/gcc"
+	    }
+	    elsif ($_ eq "SFEgcc-46") {
+		"runtime/gcc-46"
+	    }
+	    else { $_ }
+	} @this_pkg_requires ;
+	push (@dependencies, @real_deps);
     }
 
     if (not $build_only) {

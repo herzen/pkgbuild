@@ -413,6 +413,15 @@ sub get_ips_pkgname($$$) {
 	}
     }
 
+    # See if the package name is redefined in packages.xml
+    {
+	my $tags = rpm_spec::get_distro_tags "pkgs/pkg[string(name)=\'$pkg\']/ips_package_name";
+	if (@$tags) {
+	    $self->msg_info (0, "Package $pkg was renamed to @$tags[1]");
+	    return @$tags[1];
+	}
+    }
+
     # search for local or remote matches using pkg search
 
     # file2pkgs works for package names, too

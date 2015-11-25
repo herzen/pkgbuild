@@ -35,6 +35,7 @@
 #use strict;
 
 use warnings;
+use XML::XPath;
 use rpm_package;
 use rpm_file;
 use packagebase;
@@ -63,6 +64,12 @@ my $_pkgbuild_libdir = "@PKGBUILD_LIBDIR@";
 my $all_script_names = "preun|postun|pre|post|verifyscript|triggerin|triggerun|triggerpostun|check";
 my $all_block_names = "prep|build|install|clean|check|changelog|$all_script_names";
 my $all_keywords = "$all_block_names|define|patch|setup|files|description|package|iclass|rclass|use|actions";
+
+my $distro_file_name = "${_homedir}/oi-sfe-tools/packages.xml";
+# Tags from the XML file relevant to pkgbuild, which we prevent the spec from redefining
+# Don't use the exists function on an array because that is deprecated; define a hash instead
+my %distro_tag_names = ("ips_package_name", 0, "group", 0, "summary", 0);
+my $xpath;
 
 sub get_version () {
     my $version = "@PKGBUILD_VERSION@";
@@ -138,6 +145,25 @@ sub _init () {
     `mkdir -p /var/tmp/pkgbuild-${logname}`;
 }
 
+# Get redefinitions for some tags from the XML file for that purpose, using the
+# XPath location path supplied as our argument that tells us how to find them
+sub get_distro_tags ($) {
+    return () unless (defined($xpath));
+    my @nodes = $xpath->findnodes(shift);
+    my @tags = ();
+    foreach my $node (@nodes) {
+	my $name = $node->getName;
+#	Create an association list of tag name/value pairs
+#	Our XML file uses some tags unknown to pkgbuild, so make sure the tag is relevant
+	push @tags, $name, $node->getChildNode(1)->getValue
+	    if (exists $distro_tag_names{$name});
+    }
+#   Return a reference to the list instead of the list itself, in case we will want
+#   this function to also handle Meta tags, in which case we will return two lists.
+#   (It is not possible to return more than one list in Perl other than by reference.)
+    return \@tags;
+}
+
 # Create a new rpm_spec object.
 # Return undef if the spec_file is not found
 # args:
@@ -157,7 +183,11 @@ sub new ($;$$) {
     if (! -r $spec_file) {
 	return (undef);
     }
-    
+
+#   If there is a distribution-specific XML file which redefines some tags, process it
+    $xpath = XML::XPath->new(filename => $distro_file_name)
+	if (-f $distro_file_name);
+
     if (not $spec_file =~ /^\//) {
 	my $current_dir=`pwd`;
 	chomp ($current_dir);
@@ -1540,7 +1570,17 @@ sub _process_tag ($$$) {
 		    $package_ref->set_subpkg($is_subpkg);
 		}
 	    }
-	    $package_ref->set_tag ($tagname, $value, $tag_opt);
+            if ($tagname eq "name" ) {
+                # set tags defined by distro in xml file for that purpose
+                # @$distro_tags is an association list of tag names and values
+                my $distro_tags = get_distro_tags ("pkgs/pkg[string(name)=\'$value\']/child::*");
+                $package_ref->set_tag (shift @$distro_tags, shift @$distro_tags, $tag_opt)
+                    while (@$distro_tags);
+           }
+#          Ignore tag specified by spec if the tag was set using get_distro_tags
+           $package_ref->set_tag ($tagname, $value, $tag_opt)
+               unless (defined $package_ref->get_tag ($tagname) &&
+                       exists $distro_tag_names{$tagname});
 	    return 1;
 	}
     }
@@ -2562,6 +2602,13 @@ sub _process_files ($$$;$) {
     my $class_name = "none";
     my $exclude = 0;
     my $preserve;
+
+#   Get IPS_package_name and other tags from distribution-specific XML file
+    unless ($is_subpkg) {
+	my $distro_tags = get_distro_tags ("pkgs/pkg/pkg[string(name)=\'$package_name\']/child::*");
+	$new_package->set_tag (shift @$distro_tags, shift @$distro_tags)
+	    while (@$distro_tags)
+    }
 
     $line = $self->_get_next_line ($fhandle);
     if (not defined($line)) {

@@ -624,6 +624,9 @@ sub check_build_requires ($) {
 	foreach my $req (@reqss) {
 	    next if not defined $req;
 	    check_dep ($spec, $req) or
+# SFEgcc does not map into anything in the new naming scheme, since
+# the main package is SFEgccruntime, so treat it as a special case
+		$req eq "SFEgcc" or
 		message ("error: $req is required to build " .
 			 $spec), return 0;
 	}
