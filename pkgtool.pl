@@ -2244,7 +2244,7 @@ sub find_source ($$) {
     my $src_path;
 
     my @the_tarball_dirlist = split /[:]/, $defaults->get ('tarballdirs');
-    if ($src =~ /\.(tar\.gz|tgz|tar\.bz2|tar\.bzip2|zip|jar)$/) {
+    if ($src =~ /\.(tar\.gz|tgz|tar\.bz2|tar\.bzip2|tar\.xz|txz|zip|jar)$/) {
 	$is_tarball = 1;
 
 	foreach my $srcdir (@the_tarball_dirlist) {
