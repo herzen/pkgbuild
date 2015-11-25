@@ -98,6 +98,7 @@ my $download_test = 0;
 # Which package mechanism are we going to install by default?
 my $ips;
 my $svr4;
+my $nopkg;
 
 sub process_defaults () {
     my $default_spec_dir = "$topdir/SPECS";
@@ -366,9 +367,11 @@ sub init () {
 	(defined ($ips_utils) and $ips_utils->is_depotd_enabled())) {
 	$ips = 1;
 	$svr4 = undef;
+	$nopkg = undef;
     } else {
 	$ips = undef;
 	$svr4 = 1;
+	$nopkg = undef;
     }
 }
 
@@ -767,12 +770,22 @@ sub set_ips($) {
 	}
 	$ips = shift;
 	$svr4 = undef;
+	$nopkg = undef;
 }
 
 sub set_svr4($) {
 	msg_info (0,"SVr4 packages will be installed by default");
 	$svr4 = shift;
 	$ips = undef;
+	$nopkg = undef;
+}
+
+sub set_nopkg($) {
+	msg_info (0,"Packages will be copied into the filesystem without using a package system");
+	msg_warning (0,"This may break your system!");
+	$ips = undef;
+	$svr4 = undef;
+	$nopkg = shift;
 }
 
 sub process_options {
@@ -871,6 +884,7 @@ sub process_options {
 		},
 		'ips' => sub { set_ips(1); },
 		'svr4' => sub { set_svr4(1); },
+		'nopkg' => sub { set_nopkg(1); },
                 'rmlog' => sub { shift; $defaults->set ('rmlog', shift); },
                 'sourcepkg!' => sub { shift; $defaults->set ('sourcepkg', shift); },
 		'<>' => \&process_args);
@@ -948,6 +962,11 @@ Options:
     --svr4
 
 		  Install SVr4 packages by default.
+
+    --nopkg
+
+		  Don't install any packages, simply copy the files.
+		  WARNING: This may break your system!
 
     --rmlog
 
@@ -1512,6 +1531,95 @@ sub install_pkgs_svr4 ($) {
 		$build_status[$spec_id] = 'FAILED';
 		$status_details[$spec_id] = $msg;
 		return 0;
+	    }
+	}
+    }
+    
+    unlink ($adminfile);
+    return 1;
+}
+
+sub install_pkgs_nopkg ($) {
+    my $spec_id = shift;
+    my $spec = $specs_to_build[$spec_id];
+    
+    my @pkgs = $spec->get_package_names ($ds);
+    my $verbose = $defaults->get ('verbose');
+    if ($verbose > 0) {
+	map msg_info (0, "Installing $_\n"), @pkgs;
+    }
+    
+    my $pkgsdir = $spec->get_value_of ("_topdir") . "/PKGS";
+    
+    my $adminfile = "/tmp/pkg.admin.$$";
+    make_admin_file ($adminfile);
+
+# FIXME: should install in dependency order
+    foreach my $pkg (@pkgs) {
+	my $msg;
+	
+	# Only install SVr4 package if --svr4 is defined
+	if (defined $nopkg) {
+		my $nopkgdir = "/tmp/.pkgtool-pkg.tmp.$$";
+            if (-e $nopkgdir) {
+		    `rm -rf $nopkgdir`;
+	    }
+	    `mkdir $nopkgdir`;
+
+	    if (defined ($ds)) {
+		$msg=`/usr/bin/pkgtrans $pkgsdir/$pkg $nopkgdir all 2>&1`;
+	    } else {
+		$msg=`/usr/bin/pkgtrans $pkgsdir $nopkgdir $pkg 2>&1`;
+	    }
+	    
+	    if ($? > 0) {
+		unlink ($adminfile);
+		msg_error "failed to install package: $msg";
+		$build_status[$spec_id] = 'FAILED';
+		$status_details[$spec_id] = $msg;
+		return 0;
+	    }
+
+	    my $basedir = `grep '^BASEDIR=' $nopkgdir/$pkg/pkginfo |cut -d = -f 2`;
+	    chomp $basedir;
+
+	    my $pkgmap = `cat $nopkgdir/$pkg/pkgmap`;
+
+	    # Install directories first.
+	    while ($pkgmap =~ /^\S+ [dx] \S+ (\S+) (\S+)/mg) {
+		my ($path, $mode) = ($1, $2);
+
+		if (! -d "$basedir/$path") {
+		    `pfexec mkdir -m $mode -p $basedir/$path`;
+		}
+	    }
+
+	    # Install files. Skip editable/volatile files that already exist.
+	    while ($pkgmap =~ /^\S+ ([fev]) \S+ (\S+) (\S+)/mg) {
+		my ($type, $path, $mode) = ($1, $2, $3);
+
+		if ($type !~ /^[ev]$/ || ! -e "$basedir/$path") {
+		    `pfexec cp -Ppf $nopkgdir/$pkg/reloc/$path $basedir/$path`;
+		    `pfexec chmod $mode $basedir/$path`;
+		}
+	    }
+
+	    # Install links.
+	    while ($pkgmap =~ /^\S+ ([sl]) \S+ (\S+)=(\S+)/mg) {
+		my ($type, $path, $dest) = ($1, $2, $3);
+
+		# Make sure the last argument to ln won't be interpreted as a
+		# directory name by removing existing directories and symlinks
+		# to directories first.
+		if (-e "$basedir/$path") {
+			`pfexec rm -rf $basedir/$path`;
+		}
+
+		if ($type eq 'l') {
+			`pfexec ln -f $dest $basedir/$path`;
+		} else {
+			`pfexec ln -sf $dest $basedir/$path`;
+		}
 	    }
 	}
     }
@@ -2673,6 +2781,8 @@ sub build_spec ($$$) {
 		install_pkgs_ips ($spec_id) || return 0;
 	    } elsif (defined ($svr4)) {
 		install_pkgs_svr4 ($spec_id) || return 0;
+            } elsif (defined ($nopkg)) {
+                install_pkgs_nopkg ($spec_id) || return 0;
 	    } else {
 		msg_error ("Internal error: either IPS or SVr4 should be selected");
 		return 0;
@@ -2753,6 +2863,10 @@ sub run_build ($;$) {
     }
 
     if ($build_mode eq "-bp") {
+	$the_command = "$the_command --nodeps";
+    }
+
+    if ($nopkg) {
 	$the_command = "$the_command --nodeps";
     }
 
