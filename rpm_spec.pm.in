@@ -2332,6 +2332,8 @@ sub _process_macro ($$$$$$) {
 	    my $uncompress;
 	    if ($val =~ /\.bz2$/) {
 		$uncompress = "bzip2 -d < %{_sourcedir}/$val";
+	    } elsif ($val =~ /\.xz$/) {
+		$uncompress = "xz -d < %{_sourcedir}/$val";
 	    } elsif ($val =~ /\.(gz|zip)$/) {
 		$uncompress = "gzip -d < %{_sourcedir}/$val";
 	    }
@@ -2623,9 +2625,9 @@ sub _process_files ($$$;$) {
 	    $eline =~ s/^\s*%doc\s*//;
 	    # automatic compression: a pkgbuild extension
 	    my $compression;
-	    if ($eline =~ /^\((compress|gzip|bzip2)\)/) {
+	    if ($eline =~ /^\((compress|gzip|bzip2|xz)\)/) {
 		$compression = $1;
-		$eline =~ s/^\((compress|gzip|bzip2)\)\s*//;
+		$eline =~ s/^\((compress|gzip|bzip2|xz)\)\s*//;
 	    }
 	    # no special processing needed if it's a file with a full path name
 	    next if $eline =~ /^\//;

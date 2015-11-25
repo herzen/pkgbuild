@@ -1243,6 +1243,11 @@ sub get_doc_proto_line ($$$$;$) {
 	    system ("/usr/bin/bzip2 -9 './$basedir/$docdir/$fname'");
 	    $comp_retval = $?;
 	    $fname .= ".bz2";
+	} elsif ($compression eq 'xz') {
+	    system ("rm -f './$basedir/$docdir/${fname}.xz'");
+	    system ("/usr/bin/xz -9 './$basedir/$docdir/$fname'");
+	    $comp_retval = $?;
+	    $fname .= ".xz";
 	}
 	if ($comp_retval != 0) {
 	    fatal ("ERROR: failed to $compression documentation file $mydir/$basedir/$docdir/$fname");
