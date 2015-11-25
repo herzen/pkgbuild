@@ -2514,8 +2514,15 @@ sub copy_patches ($) {
 
 	my @the_patch_dirlist = split /[:]/, $defaults->get ('patchdirs');
 	foreach my $the_patch_dir (@the_patch_dirlist) {
+	    $patch_path = "$the_patch_dir/$patch";
+	    if (! -f "$patch_path") {
+		msg_info (3, "   not found in $patch_path");
+	    } else {
+		msg_info (3, "   found in $patch_path");
+		last;
+	    }
+
 	    $patch_path = "$the_patch_dir/$patch_base_name";
-	    
 	    if (! -f "$patch_path") {
 		msg_info (3, "   not found in $patch_path");
 	    } else {
