@@ -67,7 +67,7 @@ sub read_cfg ($) {
     open IPS_AUTH, "/usr/bin/pkg publisher -H |" or
 	die "Cannot read IPS configuration";
     my $pkgbuild_ips_host;
-    my $pkgbuild_ips_port;
+    my $pkgbuild_ips_port = 0;
     my $pkgbuild_ips_server = $ENV{PKGBUILD_IPS_SERVER};
     if (defined ($pkgbuild_ips_server)) {
 	if ($pkgbuild_ips_server =~ /^https?:\/\/([^:\/]+)(:([0-9]+))?/) {
