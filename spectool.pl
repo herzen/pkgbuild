@@ -40,7 +40,7 @@ my $ips_utils = new ips_utils ();
 my $spec_command;
 my $spec_cmd_arg;
 my @spec_names = ();
-my @specs = ();
+our @specs = ();
 my $spec_counter = 0;
 my @predefs = ();
 my $defaults;
@@ -57,6 +57,7 @@ my $long_output = 0;
 my $print_all = 0;
 my $ips;
 my $svr4;
+our $run_from_pkgnmmap;
 # --------- messages -------------------------------------------------------
 sub print_message ($$) {
     my $min_verbose = shift;
@@ -1076,8 +1077,12 @@ sub main {
     exit ($exit_val);
 }
 
+unless ($run_from_pkgnmmap) {
+
 $pkgbuild_path = shift (@ARGV);
 $build_engine = $pkgbuild_path;
 
 init;
 main;
+
+}
