@@ -1026,53 +1026,9 @@ sub main {
 	usage (1);
     }
     
-    if ($spec_command eq "eval") {
-	do_eval ();
-    } elsif ($spec_command eq "get_packages") {
-	do_get_packages ();
-    } elsif ($spec_command eq "get_used_spec_files") {
-	do_get_used_spec_files ();
-    } elsif ($spec_command eq "get_sources") {
-	do_get_sources ();
-    } elsif ($spec_command eq "get_public_sources") {
-	do_get_public_sources ();
-    } elsif ($spec_command eq "get_patches") {
-	do_get_patches ();
-    } elsif ($spec_command eq "get_public_patches") {
-	do_get_public_patches ();
-    } elsif ($spec_command eq "get_block") {
-	do_get_block ();
-    } elsif ($spec_command eq "get_files") {
-	do_get_files ();
-    } elsif ($spec_command eq "get_package_names") {
-	do_get_package_names ();
-    } elsif ($spec_command eq "match_package_names") {
-	do_match_package_names ();
-    } elsif ($spec_command eq "get_classes") {
-	do_get_classes ();
-    } elsif ($spec_command eq "get_meta") {
-	do_get_meta ();
-    } elsif ($spec_command eq "get_class_script_names") {
-	do_get_class_script_names ();
-    } elsif ($spec_command eq "get_included_files") {
-	do_get_included_files ();
-    } elsif ($spec_command eq "get_publish_scripts") {
-	do_get_publish_scripts ();
-    } elsif ($spec_command eq "get_ips_pkgname") {
-	do_get_ips_pkgname ();
-    } elsif ($spec_command eq "get_requires") {
-	do_get_requires ();
-    } elsif ($spec_command eq "get_all_requires") {
-	do_get_all_requires ();
-    } elsif ($spec_command eq "get_buildrequires") {
-	do_get_buildrequires ();
-    } elsif ($spec_command eq "get_prereq") {
-	do_get_prereq ();
-    } elsif ($spec_command eq "get_error") {
-	do_get_error ();
-    } elsif ($spec_command eq "verify") {
-	do_verify ();
-    }
+    no strict "refs";
+    my $symname = "do_" . $spec_command;
+    &$symname;
 
     exit ($exit_val);
 }
