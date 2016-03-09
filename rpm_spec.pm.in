@@ -32,14 +32,15 @@
 #  Authors:  Laszlo Peter  <laca@sun.com>
 #
 
-#use strict;
+use v5.10;
+no strict "refs";
 
-use warnings;
 use rpm_package;
 use rpm_file;
 use packagebase;
 
 package rpm_spec;
+use pkgnmmap qw(read_yaml_file distro_pkgname);
 
 sub get_name ($);
 
@@ -133,6 +134,8 @@ sub _init () {
     if (-f "${_homedir}/.pkgbuildmacros") {
 	_read_macros ("${_homedir}/.pkgbuildmacros");
     }
+
+    read_yaml_file ();
 
     # FIXME: should really be mkdir_p %{tmppath}
     `mkdir -p /var/tmp/pkgbuild-${logname}`;
@@ -1450,6 +1453,22 @@ sub _process_include ($$$$@) {
     return (1);
 }
 
+sub _push_tag ($$$) {
+    my $tagname = shift;
+    my $value = shift;
+    my $pkgref = shift;
+    # If a "mapping" version of a (Build)Requires tag is used,
+    # look up what the pnm package name maps into
+    if ($tagname =~ "(build)?requiresm") {
+	$pkgref->push_tag (
+	    $tagname eq 'buildrequiresm' ?
+	    'buildrequires' : 'requires',
+	    distro_pkgname($value));
+    } else {
+	$pkgref->push_tag ($tagname, $value);
+    }
+}
+
 sub _process_tag ($$$) {
     my $self = shift;
     my $fhandle = shift;
@@ -1487,7 +1506,7 @@ sub _process_tag ($$$) {
 	               "ips_vendor_version");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
 		      "buildconflicts", "prereq", "provides", "buildprereq",
-	              "renamed_to", "obsoleted_by");
+	              "renamed_to", "obsoleted_by", "buildrequiresm", "requiresm");
     my @ord_tags = ( "source", "patch" );
     my @localised_tags = ("summary");
     my $lcline = lc($line);
@@ -1567,11 +1586,11 @@ sub _process_tag ($$$) {
 	    foreach my $v (@values) {
 		# split space-separated dependencies
 		while ($v =~ /([^<>=]+\s*((<=|=<|<|=|>|>=|=>)\s*[^\s<>=]+|))\s+([^\s<>=]+)/) {
-		    $package_ref->push_tag ($tagname, $1);
+		    _push_tag ($tagname, $1, $package_ref);
 		    $v = $4;
 		}
 		if (defined ($v)) {
-		    $package_ref->push_tag ($tagname, $v);
+		    _push_tag ($tagname, $v, $package_ref);
 		}
 	    }
 	    return 1;
