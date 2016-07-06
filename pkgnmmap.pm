@@ -9,19 +9,23 @@ our @EXPORT_OK = qw(read_yaml_file distro_pkgname);
 my $csv_filename = '../data/mapping.csv';
 my $yaml_filename = 'include/mapping.yaml';
 my @col_titles;
+my @unames;
 my %mappings;
 my $monopkgs = 0;
 my $multipkgs = 0;
 my $distro_names;
+my $distro_regexs;
 my $mappings;
-# We will need to compute this
-my $distro_num = 0;
+my $distro_num;
 
 sub read_csv_file {
     open CSVS, '<', shift;
     my $line = <CSVS>;
     chomp $line;
     @col_titles = split /,/, $line;
+    @unames = split /,/, $line;
+    # Discard first item of titles lists, which describes what the symbols mean
+    shift @col_titles; shift @unames;
     while ($line = <CSVS>) {
 	chomp $line;
 	my ($key, @list) = split /,/, $line;
@@ -47,23 +51,31 @@ sub members_eq {
     else { members_eq (@tail); }
 }
 
+sub determine_distro {
+    my $uname = `uname -v`; chomp $uname;
+    for ( my $i = 0; $i < scalar @$distro_regexs; $i++ ) {
+	if ( $uname =~ $distro_regexs->[$i] ) { return $i; }
+    }
+    die 'Unknown distribution';
+}
+
 sub create_yaml_file {
     read_csv_file ($csv_filename);
     say "$multipkgs packages with different names; $monopkgs with the same name";
 
     open YAMLS, '>', $yaml_filename;
-    print YAMLS Dump( \@col_titles, \%mappings );
+    print YAMLS Dump( \@col_titles, \@unames, \%mappings );
 }
 
 sub read_yaml_file {
     my $data;
-    if (-f $yaml_filename) {
-	$data = do {
-	    if( open my $fh, '<', $yaml_filename) { local $/; <$fh> }
-	    else { undef }
-	};
-	( $distro_names, $mappings ) = Load( $data );
-    }
+    if (not -f $yaml_filename) { return; }
+    $data = do {
+	if (open my $fh, '<', $yaml_filename) { local $/; <$fh> }
+	else { undef }
+    };
+    ( $distro_names, $distro_regexs, $mappings ) = Load( $data );
+    $distro_num = determine_distro();
 }
 
 sub distro_pkgname {
