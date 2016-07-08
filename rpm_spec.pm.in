@@ -33,14 +33,19 @@
 #
 
 use v5.10;
-no strict "refs";
 
 use rpm_package;
 use rpm_file;
 use packagebase;
+require "pkgnmmap.pl";
 
 package rpm_spec;
-use pkgnmmap qw(read_yaml_file distro_pkgname);
+
+# Defined in pkgnmmap.pl:
+sub read_yaml_file;
+sub distro_pkgname($);
+our @distro_defines;
+
 
 sub get_name ($);
 
@@ -232,6 +237,20 @@ sub new ($;$$) {
 	}
     }
     
+    # Process macros specifying the local distribution, defined in pkgnmmap.pl
+    for (my $i=0; $i < scalar @distro_defines; $i+=2) {
+	# This roundabout way of setting the value of the pkgbuild %define
+	# was the only way I could manage to avoid the error:
+	#     pkgbuild: %if: invalid boolean expression: %{solaris11}
+	# Apparently, the problem is that otherwise Perl uses a number
+	# instead of a string for the value.  One has to directly assign
+	# a string literal.
+	my $numstr;
+	if ($distro_defines[$i + 1]) { $numstr = "1"; }
+	else { $numstr = "0"; }
+	$self->{_defines}->{$distro_defines[$i]} = $numstr;
+    }
+
     bless ($self, $class);
     my $main_package = rpm_package->new (\$self);
     

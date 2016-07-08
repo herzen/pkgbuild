@@ -1,10 +1,8 @@
-package pkgnmmap;
+package rpm_spec;
 use v5.10;
-use parent qw(Exporter);
+
 use YAML::XS;
 use autodie;
-
-our @EXPORT_OK = qw(read_yaml_file distro_pkgname);
 
 my $csv_filename = '../data/mapping.csv';
 my $yaml_filename = 'include/mapping.yaml';
@@ -12,6 +10,11 @@ my $distro_names;
 my $distro_regexs;
 my $mappings;
 my $distro_num;
+
+# Define these temporarily here until it is more clear how we are going to go
+# about doing this.
+our @distro_defines = ('solaris11' => 0, 'oihipster' => 0, 'omnios' => 0,
+    'solaris12' => 0);
 
 sub determine_distro {
     my $uname = `uname -v`; chomp $uname;
@@ -30,9 +33,11 @@ sub read_yaml_file {
     };
     ( $distro_names, $distro_regexs, $mappings ) = Load( $data );
     $distro_num = determine_distro();
+    # We are at the proof of concept stage with this
+    $distro_defines[2*$distro_num + 1] = 1;
 }
 
-sub distro_pkgname {
+sub distro_pkgname ($) {
     my $key = shift;
     unless ($mappings) {
 	die '(Build)Requires tag was used but mappings.yaml file is not present';
@@ -40,5 +45,3 @@ sub distro_pkgname {
     my $symb = $mappings->{$key};
     ref $symb ? $symb->[$distro_num] : $symb;
 }
-
-return 1;
