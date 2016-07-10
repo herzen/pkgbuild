@@ -39,9 +39,11 @@ sub read_yaml_file {
 
 sub distro_pkgname ($) {
     my $key = shift;
-    unless ($mappings) {
-	die '(Build)Requires tag was used but mappings.yaml file is not present';
-    }
+    return "" unless $mappings;
     my $symb = $mappings->{$key};
-    ref $symb ? $symb->[$distro_num] : $symb;
+    if (defined $symb) {
+	ref $symb ? $symb->[$distro_num] : $symb;
+    } else {
+	"";
+    }
 }

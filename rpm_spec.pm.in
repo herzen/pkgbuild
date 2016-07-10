@@ -1476,16 +1476,14 @@ sub _push_tag ($$$) {
     my $tagname = shift;
     my $value = shift;
     my $pkgref = shift;
-    # If a "mapping" version of a (Build)Requires tag is used,
-    # look up what the pnm package name maps into
-    if ($tagname =~ "(build)?requiresm") {
-	$pkgref->push_tag (
-	    $tagname eq 'buildrequiresm' ?
-	    'buildrequires' : 'requires',
-	    distro_pkgname($value));
-    } else {
-	$pkgref->push_tag ($tagname, $value);
+    # If this is a (Build)Requires tag, replace the value with the mapped
+    # value if the value is present as a key in the pkgnmmap database
+    if ($tagname =~ "(build)?requires") {
+	if (my $mapped_value = distro_pkgname($value)) {
+	    $value = $mapped_value;
+	}
     }
+    $pkgref->push_tag ($tagname, $value);
 }
 
 sub _process_tag ($$$) {
@@ -1525,7 +1523,7 @@ sub _process_tag ($$$) {
 	               "ips_vendor_version");
     my @multi_tags = ("buildrequires", "requires", "obsoletes", "conflicts",
 		      "buildconflicts", "prereq", "provides", "buildprereq",
-	              "renamed_to", "obsoleted_by", "buildrequiresm", "requiresm");
+	              "renamed_to", "obsoleted_by");
     my @ord_tags = ( "source", "patch" );
     my @localised_tags = ("summary");
     my $lcline = lc($line);
