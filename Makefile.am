@@ -11,6 +11,7 @@ gen_module_sources = \
 	rpm_spec.pm.in \
 	pkgdb.pm.in
 plain_modules = \
+	pkgnmmap.pl \
 	packagebase.pm \
 	rpm_file.pm \
 	rpm_package.pm \
