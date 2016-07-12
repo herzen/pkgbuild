@@ -349,19 +349,8 @@ sub init () {
 	$_homedir = (getpwuid($uid))[7];
     }
 
-    if ($os eq "solaris") {
 	$build_engine_name = "pkgbuild";
 	$build_engine = $pkgbuild_path;
-    } elsif (defined (find_in_path ("rpmbuild"))) {
-	$build_engine = "rpmbuild";
-	$build_engine_name = "rpmbuild";
-    } elsif (defined (find_in_path ("rpm"))) {
-	$build_engine = "rpm";
-	$build_engine_name = "rpm";
-    } else {
-	$build_engine_name = "pkgbuild";
-	$build_engine = $pkgbuild_path;
-    }
     if (defined ($ENV{PKGBUILD_IPS_SERVER}) or
 	(defined ($ips_utils) and $ips_utils->is_depotd_enabled())) {
 	$ips = 1;
@@ -1241,11 +1230,9 @@ sub print_status_html {
 		my @pkgs = $specs_to_build[$i]-> get_package_names ($ds);
 		my $ctr = 1;
 		for my $pkg (@pkgs) {
-		    if ($os eq "solaris") {
 			if (not $ds) {
 			    $pkg = "$pkg.tar.gz";
 			}
-		    }
 		    print SUM_LOG "    <a href=\"$the_rpm_url/$pkg\">[$ctr]</a> \n";
 		    $ctr++;
 		}
@@ -1282,7 +1269,6 @@ sub is_provided ($) {
 	    return 0;
 	}
     }
-    if ($os eq "solaris") {
 	if (defined $pkginfo{$capability}) {
 	    return $pkginfo{$capability};
 	}
@@ -1313,20 +1299,11 @@ sub is_provided ($) {
 	    $pkginfo_version{$capability} = $version;
 	}
 	return $result;
-    } else {
-	`sh -c "rpm -q --whatprovides $capability" >/dev/null 2>&1`;
-	my $result = (! $?);
-	`sh -c "rpm -q $capability" >/dev/null 2>&1`;
-	$result = ($result or (! $?));
-    
-	return ($result);
-    }
 }
 
 sub is_installed ($) {
     my $pkg = shift;
 
-    if ($os eq "solaris") {
 	if (defined $pkginfo{$pkg}) {
 	    return $pkginfo{$pkg};
 	}
@@ -1341,11 +1318,6 @@ sub is_installed ($) {
             $pkginfo_version{$pkg} = $version;
         }
 	return $result;
-    } else {
-	`sh -c "rpm -q $pkg" >/dev/null 2>&1`;
-	my $result = (! $?);
-	return ($result);
-    }
 }
 
 sub what_provides ($) {
@@ -1353,17 +1325,7 @@ sub what_provides ($) {
 
     $capability =~ s/ .*//;
 
-    if ($os eq "solaris") {
 	return $capability . "-" . $pkginfo_version{$capability};
-    } else {
-	my $rpm=`sh -c "rpm -q --whatprovides $capability" 2>&1 | head -1`;
-	if ($?) {
-	    $rpm=`sh -c "rpm -q $capability" 2>&1 | head -1`;
-	}
-	chomp $rpm;
-	$rpm =~ s/-[^-]+$//;
-	return ($rpm);
-    }
 }
 
 sub install_good_pkgs ($) {
@@ -2678,7 +2640,7 @@ sub build_spec ($$$) {
 
 	foreach my $dep (@dependencies) {
 	    $dep =~ s/ .*//;
-	    
+
 	    if (not $prep_only) {
 		$this_result = check_dependency ($spec_id, $dep,
 						 \&build_spec, \&warn_always, ($build_only, $prep_only));
@@ -2724,16 +2686,9 @@ sub build_spec ($$$) {
     }
 
     if (not $build_only) {
-	if ($os eq "solaris") {
 	    if (defined ($ips)) {
 		update_incorporations ($spec_id);
 		install_pkgs_ips ($spec_id) || return 0;
-	    } elsif (defined ($svr4)) {
-		install_pkgs_svr4 ($spec_id) || return 0;
-	    } else {
-		msg_error ("Internal error: either IPS or SVr4 should be selected");
-		return 0;
-	    }
 	} else {
 	    install_rpms ($spec_id) || return 0;
 	}
@@ -2874,11 +2829,7 @@ sub do_build_order () {
 
 sub do_install_order () {
     for (my $i = 0; $i <= $#specs_to_build; $i++) {
-	if ($os eq "solaris") {
 	    print_order ($i, \&print_pkgs);
-	} else {
-	    print_order ($i, \&print_rpms);
-	}
     }
 }
 
@@ -2983,14 +2934,11 @@ sub do_uninstall_pkgs () {
     my $command;
     my $pkgrm;
     my $suffix = '';
-    if ($os eq "solaris") {
+    {
 	make_admin_file ($adminfile);
 	$command = "pfexec /usr/sbin/pkgrm -a $adminfile -n 2>&1";
 	$pkgrm = "pkgrm";
 	$suffix = "'.*'"
-    } else {
-	$command = "rpm -v --erase --nodeps 2>&1";
-	$pkgrm = "rpm";
     }
     my $verbose = $defaults->get ('verbose');
     my $remove_status;
@@ -3032,9 +2980,7 @@ sub do_uninstall_pkgs () {
 	    }
 	}
     }
-    if ($os eq "solaris") {
 	unlink ($adminfile);
-    }
     if ($verbose > 0) {
 	print_status;
     }
@@ -3050,14 +2996,9 @@ sub do_install_pkgs () {
     my $pkgsdir = $specs_to_build[0]->get_value_of ("_topdir") . "/PKGS";    
     my $command;
     my $pkgadd;
-    if ($os eq "solaris") {
 	make_admin_file ($adminfile);
 	$command = "pfexec /usr/sbin/pkgadd -a $adminfile -n -d $pkgsdir";
 	$pkgadd = "pkgadd";
-    } else {
-	$command = "rpm -v --upgrade";
-	$pkgadd = "rpm";
-    }
     my $verbose = $defaults->get ('verbose');
     my $install_status;
     foreach my $ref (@pkg_list) {
@@ -3103,9 +3044,7 @@ sub do_install_pkgs () {
 	    }
 	}
     }
-    if ($os eq "solaris") {
 	unlink ($adminfile);
-    }
     if ($verbose > 0) {
 	print_status;
     }
