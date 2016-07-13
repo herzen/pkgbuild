@@ -25,6 +25,7 @@
 #  Authors:  Laszlo Peter  <laca@sun.com>
 #
 
+use v5.10;
 use strict;
 use warnings;
 use Getopt::Long qw(:config gnu_compat no_auto_abbrev bundling pass_through);
@@ -77,6 +78,9 @@ my %all_specs;
 my %provider;
 my %warned_about;
 my %specs_copied;
+
+my @pkgs_to_install = ();
+my @pkgs_unavailable = ();
 
 my $logname = $ENV{USER} || $ENV{LOGNAME} || `logname`;
 chomp ($logname);
@@ -1290,6 +1294,18 @@ sub is_provided ($) {
 	    $result = (! $?);
 	    $pkginfo{$capability} = $result;
 	    my $version = $pkg_out;
+	    ## FIXME: The following test is SFE-specific
+	    ##	      What we should really be testing for is whether $capability
+	    ##        is a member of @specs_to_build
+#	    unless ($result or $capability eq "$specs_to_build[0]") {
+	    unless ($result or $capability =~ /^SFE/) {
+		`/usr/bin/pkg list -n $capability 2>&1`;
+		if ($?) {
+		    push @pkgs_unavailable, $capability;
+		} else {
+		    push @pkgs_to_install, $capability;
+		}
+	    }
 	    $version =~ s/^.*\n\s*Branch:\s([0-9.]+|None)\s*\n.*$/$1/s;
 	    if ($version eq "None") {
 		# Branch is None, look for Version instead
@@ -2660,9 +2676,27 @@ sub build_spec ($$$) {
 	}
 	
 	if (! $result) {
+	    if (@pkgs_to_install and not @pkgs_unavailable) {
+		msg_info (0, "Running pfexec pkg install @pkgs_to_install");
+		my $msg=`pfexec pkg install --no-refresh @pkgs_to_install 2>&1`;
+		if ($? > 0) {
+		    my $err = $? >> 8;
+		    msg_error "failed to update IPS packages: Error $err: $msg";
+		    $build_status[$spec_id] = 'FAILED';
+		    $status_details[$spec_id] = $msg;
+		    return 0;
+		} else {
+		    my @msg_lines = split /\n/, $msg;
+		    foreach my $msg_line (@msg_lines) {
+			msg_info (1, $msg_line);
+		    }
+		}
+	    } else {
+		msg_error "The packages @pkgs_unavailable are unavailable. (@pkgs_to_install are available but were not installed.)";
 	    $build_status[$spec_id]="DEP_FAILED";
 	    $status_details[$spec_id]="Dependency check failed";
 	    return 0;
+	    }
 	}
     }
 
