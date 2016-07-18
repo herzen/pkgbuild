@@ -622,7 +622,7 @@ sub check_build_requires ($) {
     foreach my $pkg (@packages) {
 	my @reqss = $pkg->get_array ("buildrequires");
 	foreach my $req (@reqss) {
-	    next if (not defined $req or $req =~ "SFEgcc");
+	    next if not defined $req;
 	    check_dep ($spec, $req) or
 		message ("error: $req is required to build " .
 			 $spec), return 0;
