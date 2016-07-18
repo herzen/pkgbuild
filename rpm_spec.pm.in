@@ -43,7 +43,7 @@ package rpm_spec;
 
 # Defined in pkgnmmap.pl:
 sub read_yaml_file;
-sub distro_pkgname($);
+sub distro_pkgname;
 our @distro_defines;
 
 
@@ -140,7 +140,7 @@ sub _init () {
 	_read_macros ("${_homedir}/.pkgbuildmacros");
     }
 
-    read_yaml_file ();
+    read_yaml_file ($_topdir . '/SPECS/');
 
     # FIXME: should really be mkdir_p %{tmppath}
     `mkdir -p /var/tmp/pkgbuild-${logname}`;

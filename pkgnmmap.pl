@@ -4,8 +4,7 @@ use v5.10;
 use YAML::XS;
 use autodie;
 
-my $csv_filename = '../data/mapping.csv';
-my $yaml_filename = 'include/mapping.yaml';
+my $yaml_filename = 'mapping.yaml';
 my $distro_names;
 my $distro_regexs;
 my $mappings;
@@ -25,10 +24,10 @@ sub determine_distro {
 }
 
 sub read_yaml_file {
-    my $data;
-    if (not -f $yaml_filename) { return; }
-    $data = do {
-	if (open my $fh, '<', $yaml_filename) { local $/; <$fh> }
+    my $pathname = shift . $yaml_filename;
+    if (not -f $pathname) { return; }
+    my $data = do {
+	if (open my $fh, '<', $pathname) { local $/; <$fh> }
 	else { undef }
     };
     ( $distro_names, $distro_regexs, $mappings ) = Load( $data );
@@ -37,7 +36,7 @@ sub read_yaml_file {
     $distro_defines[2*$distro_num + 1] = 1;
 }
 
-sub distro_pkgname ($) {
+sub distro_pkgname {
     my $key = shift;
     return "" unless $mappings;
     my $symb = $mappings->{$key};

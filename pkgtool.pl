@@ -36,6 +36,8 @@ use File::Basename;
 use ips_utils;
 use ips_package;
 
+my $yaml_filename = 'mapping.yaml';
+
 my $ips_utils = new ips_utils ();
 
 my $ips_server = $ENV{PKGBUILD_IPS_SERVER};
@@ -3151,6 +3153,7 @@ sub copy_specs () {
 	    }
 	}
 	my @used_specs = get_specs_used ($fname);
+	push @used_specs, $yaml_filename if (-f 'include/'. $yaml_filename);
 	next if not @used_specs;
 	foreach my $subspec0 (@used_specs) {
 	    my $subspec = find_spec ($subspec0);
