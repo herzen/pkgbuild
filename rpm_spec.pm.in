@@ -237,18 +237,9 @@ sub new ($;$$) {
 	}
     }
     
-    # Process macros specifying the local distribution, defined in pkgnmmap.pl
+    # Process macros defined in the yaml file
     for (my $i=0; $i < scalar @distro_defines; $i+=2) {
-	# This roundabout way of setting the value of the pkgbuild %define
-	# was the only way I could manage to avoid the error:
-	#     pkgbuild: %if: invalid boolean expression: %{solaris11}
-	# Apparently, the problem is that otherwise Perl uses a number
-	# instead of a string for the value.  One has to directly assign
-	# a string literal.
-	my $numstr;
-	if ($distro_defines[$i + 1]) { $numstr = "1"; }
-	else { $numstr = "0"; }
-	$self->{_defines}->{$distro_defines[$i]} = $numstr;
+	$self->{_defines}->{$distro_defines[$i]} = $distro_defines[$i + 1]
     }
 
     bless ($self, $class);

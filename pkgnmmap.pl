@@ -9,11 +9,7 @@ my $distro_names;
 my $distro_regexs;
 my $mappings;
 my $distro_num;
-
-# Define these temporarily here until it is more clear how we are going to go
-# about doing this.
-our @distro_defines = ('solaris11' => 0, 'oihipster' => 0, 'omnios' => 0,
-    'solaris12' => 0);
+our @distro_defines = ();
 
 sub determine_distro {
     my $uname = `uname -v`; chomp $uname;
@@ -25,15 +21,21 @@ sub determine_distro {
 
 sub read_yaml_file {
     my $pathname = shift . $yaml_filename;
+    my $defines;
     if (not -f $pathname) { return; }
     my $data = do {
 	if (open my $fh, '<', $pathname) { local $/; <$fh> }
 	else { undef }
     };
-    ( $distro_names, $distro_regexs, $mappings ) = Load( $data );
+    ( $distro_names, $distro_regexs, $defines, $mappings ) = Load( $data );
     $distro_num = determine_distro();
-    # We are at the proof of concept stage with this
-    $distro_defines[2*$distro_num + 1] = 1;
+
+    # Create an association list with the distribution-specific defines
+    my @defines = %$defines;
+    for (my $i=0; $i < scalar @defines; $i+=2) {
+	$distro_defines[$i] = $defines[$i];
+	$distro_defines[$i+1] = $defines[$i+1][$distro_num];
+    }
 }
 
 sub distro_pkgname {
@@ -46,3 +48,5 @@ sub distro_pkgname {
 	"";
     }
 }
+
+return 1;
