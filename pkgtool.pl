@@ -1813,7 +1813,7 @@ sub warn_always ($$$) {
 
     if ($reason eq "DEP_FAILED") {
 	msg_warning (0, "skipping package $spec_name: required package $dep failed");
-    } elsif ($reason eq "NOT_FOUND") {
+    } elsif ($reason eq "NOT_FOUND" and not grep $dep, @pkgs_to_install) {
 	msg_warning (0, "skipping package $spec_name: required package $dep not installed");
 	msg_warning (0, "and no spec file specified on the command line provides it");
     }
@@ -1998,7 +1998,8 @@ sub check_dependency ($$&&@) {
 		    return 0;
 		}
 	    } else {
-		if (&$warning_callback ($spec_name, $capability, "NOT_FOUND")) {
+		if (&$warning_callback ($spec_name, $capability, "NOT_FOUND") and
+		    not grep $capability, @pkgs_to_install) {
 		    msg_info (0, "No spec file for $capability found.");
 		    msg_info (0, "Try specifying additional spec file directories");
 		    msg_info (0, "using the --specdirs option");
