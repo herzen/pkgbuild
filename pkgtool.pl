@@ -1434,31 +1434,6 @@ sub publish_ips_pkg ($) {
     return $retval;
 }
 
-sub install_rpms ($) {
-    my $spec_id = shift;
-    my $spec = $specs_to_build[$spec_id];
-
-    my @rpms =  $spec->get_rpm_paths ();
-# FIXME: is this OK?
-#    map $_ =~ s/^/$topdir\//, @rpms;
-    my $command = "rpm --upgrade -v @rpms";
-
-    my $verbose = $defaults->get ('verbose');
-    if ($verbose > 0) {
-	map msg_info (0, "Installing $_\n"), @rpms;
-    }
-
-    my $msg=`$command 2>&1`;
-    if ($? > 0) {
-	msg_error "failed to install rpm: $msg";
-	$build_status[$spec_id] = 'FAILED';
-	$status_details[$spec_id] = $msg;
-	return 0;
-    }
-
-    return 1;
-}
-
 sub install_pkgs_svr4 ($) {
     my $spec_id = shift;
     my $spec = $specs_to_build[$spec_id];
@@ -2726,8 +2701,6 @@ sub build_spec ($$$) {
 	    if (defined ($ips)) {
 		update_incorporations ($spec_id);
 		install_pkgs_ips ($spec_id) || return 0;
-	} else {
-	    install_rpms ($spec_id) || return 0;
 	}
     }
 
