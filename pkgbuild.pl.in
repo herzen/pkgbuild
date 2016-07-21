@@ -1583,11 +1583,11 @@ sub get_ips_proto_line ($$$$$$$$$$$$) {
 	    #   %@ or %{@} expands to the name of the file
 	    #   %{basename:foo} expands to the basename of the foo
 	    my $tag = "$tagref";
-	    $tag =~ s/%{@}/$ipsfname/g;
+	    $tag =~ s/%\{@}/$ipsfname/g;
 	    $tag =~ s/%@/$ipsfname/g;
-	    while ($tag =~ /%{basename:([^}]*)}/) {
+	    while ($tag =~ /%\{basename:([^}]*)}/) {
 		my $bname = basename($1);
-		$tag =~ s/%{basename:([^}]*)}/$bname/;
+		$tag =~ s/%\{basename:([^}]*)}/$bname/;
 	    }
 	    # filter out duplicate tags
 	    if (index(" $line "," $tag ") == -1) {

@@ -1924,11 +1924,11 @@ sub _process_macro_opts ($$$$;$$) {
 	    $opt_line =~ s/\s*%{$name.$package.$macro}(\s*)/$1/;
 	} else {
 	    $opt_line =~ s/\s*%$name.$macro(\s*)/$1/;
-	    $opt_line =~ s/\s*%{$name.$macro}(\s*)/$1/;
+	    $opt_line =~ s/\s*%\{$name.$macro}(\s*)/$1/;
 	}
     } else {
 	$opt_line =~ s/\s*%$macro(\s*)/$1/;
-	$opt_line =~ s/\s*%{$macro}(\s*)/$1/;
+	$opt_line =~ s/\s*%\{$macro}(\s*)/$1/;
     }
     $macro_opts{argc} = 0;
     my @tokens = _split_opts ($opt_line);
@@ -2490,7 +2490,7 @@ sub _process_block ($$$;$$) {
 	    } else {
 		print "WARNING: undefined macro $line\n";
 	    }
-	} elsif (not $line =~ /^%(${all_keywords}|%{?)/) {
+	} elsif (not $line =~ /^%($\{all_keywords}|%\{?)/) {
 	    if ($block_name =~ /(prep|build|install|check|clean|changelog)/) {
 		$self->_append_to_block ($block_name, $eline);
 	    } else {

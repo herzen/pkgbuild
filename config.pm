@@ -194,7 +194,7 @@ sub _deref_vars ($$$) {
     foreach my $var (keys %$varref) {
 	next if not defined $var;
 	my $val = $$varref{$var};
-	$str =~ s/\${$var}/$val/g;
+	$str =~ s/\$\{$var}/$val/g;
     }
 
     my $all_keys = $self->{valid_keys};
@@ -209,7 +209,7 @@ sub _deref_vars ($$$) {
 	    $val = $self->{'defvals'}->{$key};
 	}
 
-	$str =~ s/\${$key}/$val/g;
+	$str =~ s/\$\{$key}/$val/g;
     }
  
    return $str;
@@ -225,16 +225,16 @@ sub _deref_keys ($$) {
 	return undef;
     }
 
-    while ($str =~ /%{([a-zA-Z]+)}/) {
+    while ($str =~ /%\{([a-zA-Z]+)}/) {
 	my $var = $1;
 	if (defined ($self->{valid_keys}->{$var})) {
 	    my $val = $self->get ($var);
-	    $str =~ s/%{$var}/$val/g;
+	    $str =~ s/%\{$var}/$val/g;
 	} elsif (defined ($self->{defines}->{$var})) {
 	    my $val = $self->{defines}->{$var};
-	    $str =~ s/%{$var}/$val/g;
+	    $str =~ s/%\{$var}/$val/g;
 	} else {
-	    $str =~ s/%{$var}/%PeRcEnT{$var}/g;
+	    $str =~ s/%\{$var}/%PeRcEnT{$var}/g;
 	}
     }
     $str =~ s/%PeRcEnT/%/g;
