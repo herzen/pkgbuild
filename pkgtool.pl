@@ -2716,7 +2716,7 @@ sub build_spec ($$$) {
 sub run_build ($;$) {
     my $spec_id = shift;
     my $build_mode = shift;
-    $build_mode = "-ba" unless defined $build_mode;
+    $build_mode = "-bb" unless defined $build_mode;
     my $spec = $specs_to_build[$spec_id];
     my $spec_file = $spec->get_file_name ();
     my $base_name = $spec->get_base_file_name ();
