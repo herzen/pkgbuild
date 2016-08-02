@@ -1297,10 +1297,8 @@ sub is_provided ($) {
 	    $pkginfo{$capability} = $result;
 	    my $version = $pkg_out;
 	    ## FIXME: The following test is SFE-specific
-	    ##	      What we should really be testing for is whether $capability
-	    ##        is a member of @specs_to_build
-#	    unless ($result or $capability eq "$specs_to_build[0]") {
 	    unless ($result or $capability =~ /^SFE/) {
+		# Check whether this package is available in an IPS repository
 		`/usr/bin/pkg list -n $capability 2>&1`;
 		if ($?) {
 		    push @pkgs_unavailable, $capability;
@@ -1788,7 +1786,7 @@ sub warn_always ($$$) {
 
     if ($reason eq "DEP_FAILED") {
 	msg_warning (0, "skipping package $spec_name: required package $dep failed");
-    } elsif ($reason eq "NOT_FOUND" and not grep $dep, @pkgs_to_install) {
+    } elsif ($reason eq "NOT_FOUND" and not grep /^$dep$/, @pkgs_to_install) {
 	msg_warning (0, "skipping package $spec_name: required package $dep not installed");
 	msg_warning (0, "and no spec file specified on the command line provides it");
     }
@@ -1974,7 +1972,7 @@ sub check_dependency ($$&&@) {
 		}
 	    } else {
 		if (&$warning_callback ($spec_name, $capability, "NOT_FOUND") and
-		    not grep $capability, @pkgs_to_install) {
+		    not grep /^$capability$/, @pkgs_to_install) {
 		    msg_info (0, "No spec file for $capability found.");
 		    msg_info (0, "Try specifying additional spec file directories");
 		    msg_info (0, "using the --specdirs option");
@@ -2670,7 +2668,8 @@ sub build_spec ($$$) {
 		    }
 		}
 	    } else {
-		msg_error "The packages @pkgs_unavailable are unavailable. (@pkgs_to_install are available but were not installed.)";
+		msg_error "The packages @pkgs_unavailable are unavailable.";
+	        msg_info (0, "@pkgs_to_install are available but were not installed.") if (@pkgs_to_install);
 	    $build_status[$spec_id]="DEP_FAILED";
 	    $status_details[$spec_id]="Dependency check failed";
 	    return 0;
