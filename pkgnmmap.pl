@@ -34,7 +34,8 @@ sub read_yaml_file {
     my @defines = %$defines;
     for (my $i=0; $i < scalar @defines; $i+=2) {
 	$distro_defines[$i] = $defines[$i];
-	$distro_defines[$i+1] = $defines[$i+1][$distro_num];
+	my $value = $defines[$i+1];
+	$distro_defines[$i+1] = ref $value ? $value->[$distro_num] : $value;
     }
 }
 
