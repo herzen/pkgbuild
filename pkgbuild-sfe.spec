@@ -28,7 +28,7 @@ Most features and some extensions of the spec format are implemented.
 %prep
 %setup -c -T -q -n pkgbuild-%branch_name
 cd %(pwd)
-git archive HEAD | (cd %_builddir/pkgbuild-%branch_name; tar xf -)
+git archive HEAD | (cd %_builddir/pkgbuild-%branch_name; gtar xf -)
 
 %build
 ./autogen.sh

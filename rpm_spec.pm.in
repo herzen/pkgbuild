@@ -2490,7 +2490,7 @@ sub _process_block ($$$;$$) {
 	    } else {
 		print "WARNING: undefined macro $line\n";
 	    }
-	} elsif (not $line =~ /^%($\{all_keywords}|%\{?)/) {
+	} elsif (not $line =~ /^%(${all_keywords}|%\{?)/) {
 	    if ($block_name =~ /(prep|build|install|check|clean|changelog)/) {
 		$self->_append_to_block ($block_name, $eline);
 	    } else {
