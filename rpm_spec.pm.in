@@ -224,6 +224,11 @@ sub new ($;$$) {
 	$self->{_defines} = {%default_macros};
     }
 
+    # Process macros defined in the yaml file
+    for (my $i=0; $i < scalar @distro_defines; $i+=2) {
+	$self->{_defines}->{$distro_defines[$i]} = $distro_defines[$i + 1]
+    }
+
     # process predefined macros (those defined on the command line
     # with --define or --with-foo, etc...)
     if (defined ($predef_ref)) {
@@ -237,11 +242,6 @@ sub new ($;$$) {
 	}
     }
     
-    # Process macros defined in the yaml file
-    for (my $i=0; $i < scalar @distro_defines; $i+=2) {
-	$self->{_defines}->{$distro_defines[$i]} = $distro_defines[$i + 1]
-    }
-
     bless ($self, $class);
     my $main_package = rpm_package->new (\$self);
     
